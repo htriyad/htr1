@@ -1,0 +1,349 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --font-sans: var(--app-font-sans);
+}
+
+:root {
+  --background: 0 0% 7%;
+  --foreground: 0 0% 95%;
+  --primary: 142 69% 41%;
+  --app-font-sans: 'Inter', sans-serif;
+  --radius: 0.5rem;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── YouTube Player Shell ─────────────────────────────────── */
+.ytp-shell {
+  position: relative;
+  width: 100%;
+  height: 100svh;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The actual YouTube iframe */
+.ytp-shell iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* ── Thumbnail shown before play ──────────────────────────── */
+.ytp-thumbnail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
+  transition: opacity 400ms;
+}
+.ytp-thumbnail.hidden { opacity: 0; pointer-events: none; }
+
+/* ── Top bar: covers YouTube logo & title ─────────────────── */
+.ytp-top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 72px;
+  background: #000;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  transition: opacity 250ms ease;
+}
+/* Keep it visible (just fade-out the text label, but keep block black) */
+.ytp-top-bar.hidden { background: #000; }
+.ytp-top-bar.hidden .ytp-video-title { opacity: 0; }
+.ytp-video-title {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ── Full-size transparent overlay ────────────────────────── */
+/* This sits above the iframe, capturing all pointer events
+   so the user can never click YouTube branding / title links */
+.ytp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: all;
+  display: flex;
+}
+
+/* Tap zones */
+.ytp-tap-left,
+.ytp-tap-center,
+.ytp-tap-right {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ytp-tap-left, .ytp-tap-right { width: 28%; }
+.ytp-tap-center { flex: 1; }
+
+/* Seek-ripple animations */
+.ytp-tap-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4FA621;
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+.ytp-tap-icon.flash { opacity: 1; }
+
+/* Center play/pause icon flash */
+.ytp-center-icon {
+  position: absolute;
+  width: 70px; height: 70px;
+  border-radius: 50%;
+  border: 4px solid #4FA621;
+  color: #4FA621;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 250ms ease;
+  pointer-events: none;
+  z-index: 6;
+}
+.ytp-center-icon.flash { opacity: 1; }
+
+/* ── Loading spinner ──────────────────────────────────────── */
+.ytp-spinner {
+  position: absolute;
+  z-index: 8;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.ytp-spinner.visible { opacity: 1; }
+
+/* ── Controls bar ─────────────────────────────────────────── */
+.ytp-controls {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+  z-index: 10;
+  padding: 0 8px 6px;
+  transition: opacity 200ms ease;
+}
+.ytp-controls.hidden { opacity: 0; pointer-events: none; }
+
+/* Progress / seekbar */
+.ytp-progress-wrap {
+  position: relative;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.ytp-progress-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ytp-progress-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: #4FA621;
+  border-radius: 2px;
+  transition: width 250ms linear;
+}
+.ytp-progress-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  height: 100%;
+  margin: 0;
+}
+
+/* Buttons row */
+.ytp-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+}
+.ytp-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  transition: opacity 120ms;
+}
+.ytp-btn:hover { opacity: 1; }
+.ytp-btn svg { display: block; }
+
+/* Time display */
+.ytp-time {
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin: 0 4px;
+  flex: 1;
+  white-space: nowrap;
+}
+
+/* Volume */
+.ytp-vol-wrap {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.ytp-vol-slider {
+  width: 0;
+  height: 4px;
+  transform: scaleX(0);
+  transition: width 160ms ease, transform 160ms ease;
+  accent-color: #4FA621;
+  cursor: pointer;
+}
+.ytp-vol-wrap:hover .ytp-vol-slider {
+  width: 70px;
+  transform: scaleX(1);
+}
+
+/* Speed button */
+.ytp-speed { min-width: 38px; font-size: 12px; font-weight: 600; }
+
+/* Speed popup */
+.ytp-speed-popup {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: rgba(40,40,40,0.95);
+  border-radius: 8px;
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  min-width: 70px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.ytp-speed-popup.open { display: flex; }
+.ytp-speed-item {
+  background: none;
+  border: none;
+  color: #fff;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+  transition: background 120ms;
+}
+.ytp-speed-item:hover { background: #4FA621; }
+.ytp-speed-item.active { color: #4FA621; font-weight: 700; }
+
+/* Seek ripple text */
+.ytp-seek-label {
+  position: absolute;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.45);
+  padding: 2px 8px;
+  border-radius: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms;
+  bottom: 10px;
+}
+.ytp-seek-label.flash { opacity: 1; }
+.ytp-seek-label-left { left: 16%; }
+.ytp-seek-label-right { right: 16%; }
+
+/* ── Pre-play dark veil (hides YouTube's red play button) ─── */
+.ytp-veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 400ms;
+}
+.ytp-veil.hidden { opacity: 0; }
+
+/* ── Pre-play big play button ─────────────────────────────── */
+.ytp-big-play {
+  position: absolute;
+  z-index: 6;
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: 4px solid #4FA621;
+  background: rgba(0,0,0,0.7);
+  color: #4FA621;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 250ms, transform 200ms;
+}
+.ytp-big-play.hidden { opacity: 0; pointer-events: none; transform: scale(0.9); }
+
+/* ── Bottom bar: covers YouTube bottom-right branding ──────── */
+.ytp-bottom-cover {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 52px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* ── Top-right cover: hides YT logo ────────────────────────── */
+.ytp-corner-cover {
+  position: absolute;
+  top: 0; right: 0;
+  width: 120px; height: 56px;
+  z-index: 9;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Scrollbar */
+.ytp-speed-popup::-webkit-scrollbar { width: 4px; }
+.ytp-speed-popup::-webkit-scrollbar-thumb { background: #4FA621; border-radius: 2px; }

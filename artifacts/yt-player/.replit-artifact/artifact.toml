@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "YouTube Player"
+version = "1.0.0"
+id = "artifacts/yt-player"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21849
+
+[services.development]
+run = "pnpm --filter @workspace/yt-player run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/yt-player", "run", "build" ]
+publicDir = "artifacts/yt-player/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21849"
+BASE_PATH = "/"
