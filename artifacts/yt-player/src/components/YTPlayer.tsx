@@ -275,7 +275,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
 
   return (
     <div
-      className="ytp-shell"
+      className="ytp-aspect-wrap"
       onClick={speedOpen ? () => setSpeedOpen(false) : undefined}
     >
       {/* ── YouTube iframe ── */}
@@ -290,24 +290,12 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
       />
 
       {/* ── TOP BAR — ALWAYS BLACK to cover YT title + channel ── */}
-      {/* Never removed from DOM — always solid black block */}
-      <div className={`ytp-top-bar${showTopBar ? "" : " hidden"}`}>
+      <div className={`ytp-top-bar${showTopBar ? "" : " label-hidden"}`}>
         <span className="ytp-video-title">{title}</span>
       </div>
 
       {/* ── BOTTOM FULL-WIDTH COVER — always-on, covers YT logo + share btn ── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: "52px",
-          background: "#000",
-          zIndex: 9,
-          pointerEvents: "none",
-        }}
-      />
+      <div className="ytp-bottom-cover" />
 
       {/* ── FULL TRANSPARENT OVERLAY — blocks all YT pointer events ── */}
       <div className="ytp-overlay">
@@ -339,21 +327,13 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
       {/* Sits above the iframe but below the overlay. Once play begins it disappears. */}
       {!playing && (
         <img
+          className="ytp-thumb"
           src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).src =
               `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
           }}
           alt=""
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            zIndex: 3,
-            pointerEvents: "none",
-          }}
         />
       )}
 
@@ -482,7 +462,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           <button
             className="ytp-btn"
             onClick={() => {
-              const el = document.querySelector(".ytp-shell") as HTMLElement;
+              const el = document.querySelector(".ytp-aspect-wrap") as HTMLElement;
               if (!document.fullscreenElement) {
                 el?.requestFullscreen?.();
               } else {
