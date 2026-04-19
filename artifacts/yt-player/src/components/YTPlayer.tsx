@@ -52,7 +52,10 @@ interface Props {
 }
 
 const SEEK_SECS = 10;
-const HIDE_DELAY = 3500;
+const HIDE_DELAY = 3500;        // hide controls after inactivity
+const TOP_BAR_HIDE_DELAY = 2000; // Udvash: hide top bar 2s after playing
+const FIRST_PLAY_SHOW = 4000;   // Udvash: show top bar 4s on first play
+
 const fmt = (t: number) => {
   const s = Math.floor(t % 60);
   const m = Math.floor(t / 60) % 60;
@@ -62,32 +65,65 @@ const fmt = (t: number) => {
 };
 
 export default function YTPlayer({ videoId, title = "" }: Props) {
-  const playerRef = useRef<YT.Player | null>(null);
+  const playerRef    = useRef<YT.Player | null>(null);
   const playerDivRef = useRef<HTMLDivElement>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const [ready, setReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
+  // Timers (Udvash-style)
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const topBarTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstPlayRef       = useRef(true);
+
+  const [ready,        setReady]        = useState(false);
+  const [playing,      setPlaying]      = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [showTopBar, setShowTopBar] = useState(true);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(100);
-  const [muted, setMuted] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [speedOpen, setSpeedOpen] = useState(false);
-  const [speeds, setSpeeds] = useState<number[]>([0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]);
-  const [buffering, setBuffering] = useState(false);
-  const [started, setStarted] = useState(false);
-
-  const [leftFlash, setLeftFlash] = useState(false);
-  const [rightFlash, setRightFlash] = useState(false);
+  const [showTopBar,   setShowTopBar]   = useState(true);   // matches Udvash showTopOverlay
+  const [progress,     setProgress]     = useState(0);
+  const [duration,     setDuration]     = useState(0);
+  const [currentTime,  setCurrentTime]  = useState(0);
+  const [volume,       setVolume]       = useState(100);
+  const [muted,        setMuted]        = useState(false);
+  const [speed,        setSpeed]        = useState(1);
+  const [speedOpen,    setSpeedOpen]    = useState(false);
+  const [speeds,       setSpeeds]       = useState<number[]>([0.25,0.5,0.75,1,1.25,1.5,1.75,2]);
+  const [buffering,    setBuffering]    = useState(false);
+  const [started,      setStarted]      = useState(false);
+  const [leftFlash,    setLeftFlash]    = useState(false);
+  const [rightFlash,   setRightFlash]   = useState(false);
 
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Udvash fullscreen guard ─────────────────────────────────────────────
+  // If the YouTube iframe itself goes native-fullscreen (iOS/Android), exit
+  // it immediately and prevent YouTube native UI from appearing.
+  useEffect(() => {
+    const ytIframeId = "yt-player-iframe";
+
+    function onFullscreenChange() {
+      const el = document.fullscreenElement as HTMLElement | null;
+      // If the element that went fullscreen IS the YouTube iframe, exit immediately
+      if (el && el.id === ytIframeId) {
+        document.exitFullscreen?.().catch(() => {});
+        return;
+      }
+      // If exiting fullscreen from our container
+      if (!document.fullscreenElement) {
+        containerRef.current?.classList.remove("yt-fullscreen");
+      }
+    }
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange as EventListener);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange as EventListener);
+    };
+  }, []);
+
   // ── Load YouTube IFrame API ────────────────────────────────────────────
   useEffect(() => {
+    isFirstPlayRef.current = true;
+
     if (window.YT && window.YT.Player) {
       initPlayer();
       return;
@@ -104,12 +140,17 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
 
     return () => {
       window.onYouTubeIframeAPIReady = () => {};
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+      stopTick();
     };
   }, [videoId]);
 
   function initPlayer() {
     if (!playerDivRef.current) return;
-    if (playerRef.current) { playerRef.current.destroy(); }
+    if (playerRef.current) { try { playerRef.current.destroy(); } catch {} }
 
     playerRef.current = new window.YT.Player(playerDivRef.current, {
       videoId,
@@ -120,13 +161,17 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
         modestbranding: 0,
         rel: 0,
         showinfo: 0,
-        fs: 0,
+        fs: 0,              // disable native YT fullscreen button
         iv_load_policy: 3,
         disablekb: 1,
       },
       events: {
         onReady: (e) => {
           const p = e.target;
+          // Stamp iframe id so fullscreen guard can identify it
+          const iframe = playerDivRef.current?.querySelector("iframe");
+          if (iframe) iframe.id = "yt-player-iframe";
+
           setDuration(p.getDuration());
           setVolume(p.getVolume());
           setMuted(p.isMuted());
@@ -138,29 +183,72 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     });
   }
 
+  // ── Udvash onPlayerStateChange ────────────────────────────────────────
   function onState(state: number) {
     if (state === 1) {
+      // PLAYING
       setPlaying(true);
       setBuffering(false);
       setStarted(true);
       startTick();
-      scheduleHide();
+
+      if (isFirstPlayRef.current) {
+        // Udvash: show top bar and controls for 4s on first play, then hide
+        showTopBarNow();
+        setShowControls(true);
+        clearTimers();
+        topBarTimerRef.current = setTimeout(() => {
+          hideTopBarNow();
+          setShowControls(false);
+          isFirstPlayRef.current = false;
+        }, FIRST_PLAY_SHOW);
+      } else {
+        // Udvash: hide top bar after 2s when playing resumes
+        hideTopBarDelayed();
+        scheduleHideControls();
+      }
     } else if (state === 2) {
+      // PAUSED
       setPlaying(false);
       stopTick();
-      revealControls();
+      showTopBarNow();       // Udvash: always show top bar when paused
+      setShowControls(true);
+      clearTimers();
     } else if (state === 3) {
+      // BUFFERING
       setBuffering(true);
       setPlaying(false);
       stopTick();
-      revealControls();
+      showTopBarNow();
+      setShowControls(true);
     } else if (state === 0) {
+      // ENDED
       setPlaying(false);
       setProgress(0);
       setCurrentTime(0);
       stopTick();
-      revealControls();
+      showTopBarNow();
+      setShowControls(true);
+      clearTimers();
     }
+  }
+
+  // ── Top-bar timer helpers (Udvash showTopOverlay / hideTopOverlay) ──────
+  function showTopBarNow() {
+    if (topBarTimerRef.current) clearTimeout(topBarTimerRef.current);
+    setShowTopBar(true);
+  }
+
+  function hideTopBarDelayed() {
+    if (topBarTimerRef.current) clearTimeout(topBarTimerRef.current);
+    topBarTimerRef.current = setTimeout(() => {
+      setShowTopBar(false);
+    }, TOP_BAR_HIDE_DELAY);
+  }
+
+  function clearTimers() {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    if (topBarTimerRef.current) clearTimeout(topBarTimerRef.current);
   }
 
   // ── Progress tick ──────────────────────────────────────────────────────
@@ -180,25 +268,24 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     if (tickRef.current) clearInterval(tickRef.current);
   }
 
-  // ── Controls visibility ────────────────────────────────────────────────
-  const revealControls = useCallback(() => {
-    setShowControls(true);
-    setShowTopBar(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-  }, []);
-
-  const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => {
+  // ── Controls visibility (Udvash showControls / hideControls) ──────────
+  function scheduleHideControls() {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => {
       setShowControls(false);
-      setShowTopBar(false);
     }, HIDE_DELAY);
-  }, []);
+  }
 
+  // Called on any user interaction while playing
   const handleInteraction = useCallback(() => {
-    revealControls();
-    if (playing) scheduleHide();
-  }, [playing, revealControls, scheduleHide]);
+    showTopBarNow();
+    setShowControls(true);
+    // Only schedule hide if currently playing
+    if (playerRef.current?.getPlayerState?.() === 1) {
+      hideTopBarDelayed();
+      scheduleHideControls();
+    }
+  }, []);
 
   // ── Playback controls ──────────────────────────────────────────────────
   function togglePlay() {
@@ -216,6 +303,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     const p = playerRef.current;
     if (!p) return;
     p.seekTo(Math.max(0, p.getCurrentTime() + delta), true);
+    p.playVideo();
     handleInteraction();
   }
 
@@ -223,6 +311,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     const p = playerRef.current;
     if (!p) return;
     p.seekTo(ratio * p.getDuration(), true);
+    handleInteraction();
   }
 
   function changeVolume(val: number) {
@@ -249,22 +338,66 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     setSpeedOpen(false);
   }
 
-  // ── Tap zones ──────────────────────────────────────────────────────────
-  function handleLeftTap() {
-    seek(-SEEK_SECS);
-    setLeftFlash(true);
-    setTimeout(() => setLeftFlash(false), 600);
-  }
-  function handleRightTap() {
-    seek(SEEK_SECS);
-    setRightFlash(true);
-    setTimeout(() => setRightFlash(false), 600);
-  }
-  function handleCenterTap() {
-    if (!ready) return;
-    togglePlay();
+  // ── Fullscreen toggle (uses our container, not the YT iframe) ──────────
+  function toggleFullScreen() {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
     handleInteraction();
   }
+
+  // ── Mobile double-tap detection (Udvash technique: touchend + timestamp) ─
+  const leftLastTap  = useRef(0);
+  const rightLastTap = useRef(0);
+  const centerLastTap = useRef(0);
+  const TAP_GAP = 400; // ms
+
+  function handleLeftTouchEnd(e: React.TouchEvent) {
+    const now = Date.now();
+    if (now - leftLastTap.current < TAP_GAP) {
+      e.preventDefault();
+      seek(-SEEK_SECS);
+      setLeftFlash(true);
+      setTimeout(() => setLeftFlash(false), 700);
+    } else {
+      handleInteraction();
+    }
+    leftLastTap.current = now;
+  }
+
+  function handleRightTouchEnd(e: React.TouchEvent) {
+    const now = Date.now();
+    if (now - rightLastTap.current < TAP_GAP) {
+      e.preventDefault();
+      seek(SEEK_SECS);
+      setRightFlash(true);
+      setTimeout(() => setRightFlash(false), 700);
+    } else {
+      handleInteraction();
+    }
+    rightLastTap.current = now;
+  }
+
+  function handleCenterTouchEnd(e: React.TouchEvent) {
+    const now = Date.now();
+    if (now - centerLastTap.current < TAP_GAP) {
+      e.preventDefault();
+      toggleFullScreen();
+    } else {
+      togglePlay();
+      handleInteraction();
+    }
+    centerLastTap.current = now;
+  }
+
+  // Desktop: keep onDoubleClick for left/right, onClick for center
+  function handleLeftClick()  { seek(-SEEK_SECS); setLeftFlash(true); setTimeout(() => setLeftFlash(false), 700); }
+  function handleRightClick() { seek(SEEK_SECS);  setRightFlash(true); setTimeout(() => setRightFlash(false), 700); }
+  function handleCenterClick() { togglePlay(); handleInteraction(); }
 
   // ── Volume icon ────────────────────────────────────────────────────────
   const volIcon = muted || volume === 0
@@ -275,32 +408,60 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
 
   return (
     <div
+      ref={containerRef}
       className="ytp-aspect-wrap"
       onClick={speedOpen ? () => setSpeedOpen(false) : undefined}
     >
-      {/* ── YouTube iframe ── */}
+      {/* ── YouTube iframe placeholder ── */}
       <div
         ref={playerDivRef}
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-        }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
       />
 
-      {/* ── TOP BAR — ALWAYS BLACK to cover YT title + channel ── */}
-      <div className={`ytp-top-bar${showTopBar ? "" : " label-hidden"}`}>
+      {/* ══════════════════════════════════════════════════════════════════
+          TOP BAR — always solid black — covers YouTube title + channel
+          Opacity controlled by showTopBar (Udvash showTopOverlay system)
+          ══════════════════════════════════════════════════════════════════ */}
+      <div
+        className="ytp-top-bar"
+        style={{ opacity: showTopBar ? 1 : 0, transition: "opacity 300ms ease-out" }}
+      >
         <span className="ytp-video-title">{title}</span>
       </div>
 
-      {/* ── BOTTOM FULL-WIDTH COVER — always-on, covers YT logo + share btn ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          BOTTOM COVER — always solid black — covers YT logo + share btns
+          ══════════════════════════════════════════════════════════════════ */}
       <div className="ytp-bottom-cover" />
 
-      {/* ── FULL TRANSPARENT OVERLAY — blocks all YT pointer events ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          MAIN OVERLAY — always present, always z-index 999 (Udvash: .yt-overlay)
+          pointer-events: all — intercepts EVERY click/tap to the iframe
+          Contains thumbnail + tap zones
+          ══════════════════════════════════════════════════════════════════ */}
       <div className="ytp-overlay">
-        {/* Left tap zone: seek backward */}
-        <div className="ytp-tap-left" onDoubleClick={handleLeftTap} onClick={handleInteraction}>
+
+        {/* Thumbnail cover — hides YouTube red play button / end screens
+            Shown when not yet started (before first play).
+            Udvash shows thumbnail only for pre-play state. */}
+        {!started && (
+          <img
+            className="ytp-thumb"
+            src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            }}
+            alt=""
+          />
+        )}
+
+        {/* Tap zones — Udvash: yt-tapOverlayContainer */}
+        <div className="ytp-tap-left"
+          onDoubleClick={handleLeftClick}
+          onTouchEnd={handleLeftTouchEnd}
+          onClick={handleInteraction}
+        >
           <div className={`ytp-tap-icon${leftFlash ? " flash" : ""}`}>
             <svg width="34" height="34" viewBox="0 0 55 55" stroke="#4FA621" strokeWidth="3" fill="none">
               <path strokeLinecap="round" d="M9.57 15.41l2.6 8.64 8.64-2.61M26.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" />
@@ -309,10 +470,17 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
             </svg>
           </div>
         </div>
-        {/* Center tap zone: play/pause */}
-        <div className="ytp-tap-center" onClick={handleCenterTap} />
-        {/* Right tap zone: seek forward */}
-        <div className="ytp-tap-right" onDoubleClick={handleRightTap} onClick={handleInteraction}>
+
+        <div className="ytp-tap-center"
+          onClick={handleCenterClick}
+          onTouchEnd={handleCenterTouchEnd}
+        />
+
+        <div className="ytp-tap-right"
+          onDoubleClick={handleRightClick}
+          onTouchEnd={handleRightTouchEnd}
+          onClick={handleInteraction}
+        >
           <div className={`ytp-tap-icon${rightFlash ? " flash" : ""}`}>
             <svg width="34" height="34" viewBox="0 0 55 55" stroke="#4FA621" strokeWidth="3" fill="none">
               <path d="M23.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" strokeLinecap="round" />
@@ -323,21 +491,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
         </div>
       </div>
 
-      {/* ── Thumbnail cover: hides ALL YouTube UI before play starts ── */}
-      {/* Sits above the iframe but below the overlay. Once play begins it disappears. */}
-      {!playing && (
-        <img
-          className="ytp-thumb"
-          src={`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src =
-              `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-          }}
-          alt=""
-        />
-      )}
-
-      {/* ── Big play button (shown until first play) ── */}
+      {/* ── Big play button (pre-first-play only) ── */}
       {!started && (
         <button
           className={`ytp-big-play${ready ? "" : " hidden"}`}
@@ -359,17 +513,17 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
         </svg>
       </div>
 
-      {/* ── CONTROLS BAR ── */}
+      {/* ══════════════════════════════════════════════════════════════════
+          CONTROLS BAR — shown/hidden by showControls state
+          ══════════════════════════════════════════════════════════════════ */}
       <div className={`ytp-controls${showControls ? "" : " hidden"}`}>
         {/* Seekbar */}
         <div
           className="ytp-progress-wrap"
-          style={{ marginBottom: 2 }}
           onClick={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
             const ratio = (e.clientX - rect.left) / rect.width;
             seekTo(Math.max(0, Math.min(1, ratio)));
-            handleInteraction();
           }}
         >
           <div className="ytp-progress-track">
@@ -377,18 +531,13 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           </div>
           <input
             className="ytp-progress-input"
-            type="range"
-            min={0}
-            max={10000}
+            type="range" min={0} max={10000}
             value={Math.round(progress * 10000)}
-            onChange={(e) => {
-              seekTo(Number(e.target.value) / 10000);
-              handleInteraction();
-            }}
+            onChange={(e) => seekTo(Number(e.target.value) / 10000)}
           />
         </div>
 
-        {/* Buttons */}
+        {/* Buttons row */}
         <div className="ytp-btn-row">
           {/* Play / Pause */}
           <button className="ytp-btn" onClick={() => { togglePlay(); handleInteraction(); }} aria-label={playing ? "Pause" : "Play"}>
@@ -399,7 +548,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           </button>
 
           {/* Backward 10s */}
-          <button className="ytp-btn" onClick={handleLeftTap} aria-label="Rewind 10s">
+          <button className="ytp-btn" onClick={() => { handleLeftClick(); }} aria-label="Rewind 10s">
             <svg width="24" height="24" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
               <path strokeLinecap="round" d="M9.57 15.41l2.6 8.64 8.64-2.61M26.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" />
               <rect x="32.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
@@ -408,7 +557,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           </button>
 
           {/* Forward 10s */}
-          <button className="ytp-btn" onClick={handleRightTap} aria-label="Forward 10s">
+          <button className="ytp-btn" onClick={() => { handleRightClick(); }} aria-label="Forward 10s">
             <svg width="24" height="24" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
               <path d="M23.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" strokeLinecap="round" />
               <rect x="29.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
@@ -423,9 +572,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
             </button>
             <input
               className="ytp-vol-slider"
-              type="range"
-              min={0}
-              max={100}
+              type="range" min={0} max={100}
               value={muted ? 0 : volume}
               onChange={(e) => { changeVolume(Number(e.target.value)); handleInteraction(); }}
             />
@@ -459,19 +606,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           </div>
 
           {/* Fullscreen */}
-          <button
-            className="ytp-btn"
-            onClick={() => {
-              const el = document.querySelector(".ytp-aspect-wrap") as HTMLElement;
-              if (!document.fullscreenElement) {
-                el?.requestFullscreen?.();
-              } else {
-                document.exitFullscreen?.();
-              }
-              handleInteraction();
-            }}
-            aria-label="Fullscreen"
-          >
+          <button className="ytp-btn" onClick={toggleFullScreen} aria-label="Fullscreen">
             <svg width="22" height="22" viewBox="0 0 24 24">
               <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
             </svg>
