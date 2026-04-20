@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { X } from "lucide-react";
 import Header from "../components/Header";
 
 const MENU = [
@@ -52,11 +53,12 @@ export default function Dashboard() {
               <X size={22} />
             </button>
             <div className="uu-logo-text">
-              <span style={{ color: "#c0392b" }}>উদ্ভাস</span>
-              <span>-উন্মেষ</span>
+              <span style={{ color: "#e53935" }}>Red</span>
+              <span style={{ color: "#c0392b" }}>Rose</span>
+              <span style={{ marginLeft: 2 }}>🥀</span>
               <div className="uu-logo-sub">Online Care</div>
             </div>
-            <div className="uu-avatar" style={{ marginLeft: "auto" }}>U</div>
+            <div className="uu-avatar" style={{ marginLeft: "auto" }}>R</div>
           </div>
           {SIDEBAR_ITEMS.map((item) => (
             <button

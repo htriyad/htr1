@@ -1,0 +1,731 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import MathText from "../components/MathText";
+
+/* ── helpers ──────────────────────────────────────────────── */
+const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
+const api = (path: string, opts: RequestInit = {}) =>
+  fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
+
+type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market";
+const TABS: { id:Tab; icon:string; label:string }[] = [
+  { id:"overview",  icon:"📊", label:"Overview"      },
+  { id:"users",     icon:"👤", label:"Users"         },
+  { id:"ips",       icon:"🌐", label:"IP Access"     },
+  { id:"inbox",     icon:"📨", label:"Inbox"         },
+  { id:"videos",    icon:"🎬", label:"Videos"        },
+  { id:"quizzes",   icon:"📝", label:"Quizzes"       },
+  { id:"notifs",    icon:"🔔", label:"Notify"        },
+  { id:"doubts",    icon:"❓", label:"Doubts"        },
+  { id:"micro",     icon:"⚡", label:"Micro Feed"    },
+  { id:"market",    icon:"🏪", label:"Marketplace"   },
+];
+
+/* ── entry point ──────────────────────────────────────────── */
+export default function Admin() {
+  const [token, setToken] = useState(TOKEN);
+  if (!token) return <LoginScreen onLogin={t => { sessionStorage.setItem("rr_admin_token",t); setToken(t); }} />;
+  return <AdminPanel onLogout={() => { sessionStorage.removeItem("rr_admin_token"); setToken(""); }} />;
+}
+
+/* ══════════════════════════════════════════════════════════
+   LOGIN SCREEN
+══════════════════════════════════════════════════════════ */
+function LoginScreen({ onLogin }: { onLogin:(t:string)=>void }) {
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(""); const [loading,setLoad]=useState(false);
+  async function submit(e:React.FormEvent){ e.preventDefault(); setLoad(true); setErr("");
+    const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json(); setLoad(false);
+    if(d.token) onLogin(d.token); else setErr(d.error||"Login failed");
+  }
+  return (
+    <div style={{minHeight:"100svh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"var(--surface)",borderRadius:20,padding:36,width:"100%",maxWidth:380,boxShadow:"0 8px 40px rgba(0,0,0,0.12)"}}>
+        <div style={{textAlign:"center",marginBottom:28}}><div style={{fontSize:44}}>🥀</div>
+          <h1 style={{fontSize:24,fontWeight:900,color:"var(--purple)",fontFamily:"Lato,sans-serif",marginTop:8}}>RedRose Admin</h1>
+          <p style={{fontSize:13,color:"var(--sub)",marginTop:4}}>Super Admin Dashboard</p></div>
+        <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:14}}>
+          <input value={u} onChange={e=>setU(e.target.value)} placeholder="Username" style={inp} autoComplete="username"/>
+          <input type="password" value={p} onChange={e=>setP(e.target.value)} placeholder="Password" style={inp} autoComplete="current-password"/>
+          {err&&<div style={{background:"#fff0f0",border:"1px solid #fcc",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#c00"}}>{err}</div>}
+          <button type="submit" disabled={loading} style={{...btnStyle("var(--purple)"),fontSize:16,padding:14}}>
+            {loading?"Logging in...":"Login →"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   MAIN ADMIN PANEL
+══════════════════════════════════════════════════════════ */
+function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
+  const [tab,setTab]=useState<Tab>("overview");
+  const [sideOpen,setSideOpen]=useState(false);
+  return (
+    <div style={{minHeight:"100svh",background:"var(--bg)",display:"flex",flexDirection:"column"}}>
+      {/* Top bar */}
+      <div style={{background:"var(--navy)",color:"#fff",padding:"0 16px",height:52,display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:200}}>
+        <button onClick={()=>setSideOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontSize:20,cursor:"pointer",padding:4}}>☰</button>
+        <span style={{fontSize:18}}>🥀</span>
+        <span style={{fontWeight:800,fontSize:15,flex:1,fontFamily:"Lato,sans-serif"}}>RedRose Admin</span>
+        <button onClick={onLogout} style={{background:"var(--orange)",border:"none",color:"#fff",padding:"5px 14px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>Logout</button>
+      </div>
+
+      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+        {/* Sidebar */}
+        <nav style={{width:sideOpen?200:56,background:"var(--navy)",flexShrink:0,transition:"width 250ms",overflowX:"hidden",display:"flex",flexDirection:"column",paddingTop:8}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>{setTab(t.id);setSideOpen(false);}}
+              style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:tab===t.id?"rgba(255,255,255,0.15)":"transparent",border:"none",color:"#fff",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap",borderLeft:tab===t.id?"3px solid var(--orange)":"3px solid transparent",transition:"background 150ms"}}>
+              <span style={{fontSize:18,flexShrink:0}}>{t.icon}</span>
+              <span style={{fontSize:13,fontWeight:600,opacity:sideOpen?1:0,transition:"opacity 200ms"}}>{t.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Content */}
+        <main style={{flex:1,overflowY:"auto",padding:"20px 16px 60px"}}>
+          {tab==="overview"  && <OverviewTab />}
+          {tab==="users"     && <UsersTab />}
+          {tab==="ips"       && <IPsTab />}
+          {tab==="inbox"     && <InboxTab />}
+          {tab==="videos"    && <VideosTab />}
+          {tab==="quizzes"   && <QuizzesTab />}
+          {tab==="notifs"    && <NotifsTab />}
+          {tab==="doubts"    && <DoubtsTab />}
+          {tab==="micro"     && <MicroFeedTab />}
+          {tab==="market"    && <MarketplaceTab />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/* ══ OVERVIEW ══════════════════════════════════════════════ */
+function OverviewTab() {
+  const [stats,setStats]=useState<any>(null);
+  useEffect(()=>{
+    Promise.all([
+      api("/api/admin/msgs").then(r=>r.json()),
+      api("/api/admin/users").then(r=>r.json()),
+      api("/api/admin/ips").then(r=>r.json()),
+      api("/api/admin/videos").then(r=>r.json()),
+      api("/api/admin/quizzes").then(r=>r.json()),
+      fetch("/api/gamification/leaderboard").then(r=>r.json()),
+    ]).then(([msgs,users,ips,vids,quizzes,board])=>{
+      setStats({
+        pending:Array.isArray(msgs)?msgs.filter((m:any)=>m.status==="pending").length:0,
+        users:Array.isArray(users)?users.length:0,
+        ips:Array.isArray(ips)?ips.length:0,
+        videos:Array.isArray(vids)?vids.length:0,
+        quizzes:Array.isArray(quizzes)?quizzes.length:0,
+        published:Array.isArray(quizzes)?quizzes.filter((q:any)=>q.published).length:0,
+        topStudents:Array.isArray(board)?board.slice(0,5):[],
+      });
+    });
+  },[]);
+
+  if(!stats) return <Loading />;
+  const cards=[
+    {label:"Pending Messages",value:stats.pending,icon:"📨",color:"var(--orange)"},
+    {label:"Universal Users",value:stats.users,icon:"👤",color:"var(--purple)"},
+    {label:"Approved IPs",value:stats.ips,icon:"🌐",color:"var(--navy)"},
+    {label:"Videos",value:stats.videos,icon:"🎬",color:"#e53935"},
+    {label:"Total Quizzes",value:stats.quizzes,icon:"📝",color:"var(--purple)"},
+    {label:"Published Exams",value:stats.published,icon:"✅",color:"var(--green)"},
+  ];
+  return (
+    <div>
+      <SectionTitle>📊 Platform Overview</SectionTitle>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:28}}>
+        {cards.map(c=>(
+          <div key={c.label} style={{background:"var(--surface)",borderRadius:14,padding:16,boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:`4px solid ${c.color}`}}>
+            <div style={{fontSize:28}}>{c.icon}</div>
+            <div style={{fontSize:28,fontWeight:900,color:c.color,fontFamily:"Lato,sans-serif",marginTop:6}}>{c.value}</div>
+            <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+      <SectionTitle>🏆 Top Students (by XP)</SectionTitle>
+      <Card>
+        {stats.topStudents.length===0&&<p style={{color:"var(--sub)",fontSize:13}}>No exam data yet.</p>}
+        {stats.topStudents.map((s:any,i:number)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
+            <span style={{fontWeight:900,fontSize:18,color:"var(--purple)",width:28}}>#{s.rank}</span>
+            <span style={{flex:1,fontWeight:600}}>{s.displayName}</span>
+            <span style={{fontSize:12,background:"var(--purple)",color:"#fff",borderRadius:20,padding:"2px 10px",fontWeight:700}}>Lv{s.level}</span>
+            <span style={{fontSize:13,fontWeight:700,color:"var(--gold)"}}>{s.xp} XP</span>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+/* ══ USERS ══════════════════════════════════════════════════ */
+function UsersTab() {
+  const [users,setUsers]=useState<any[]>([]); const [form,setForm]=useState({username:"",password:"",note:""}); const [saving,setSaving]=useState(false); const [msg,setMsg]=useState("");
+  const load=()=>api("/api/admin/users").then(r=>r.json()).then(d=>{if(Array.isArray(d))setUsers(d);});
+  useEffect(()=>{load();},[]);
+  async function create(){
+    if(!form.username||!form.password){setMsg("Username and password required");return;}
+    setSaving(true);
+    const r=await api("/api/admin/users",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json(); setSaving(false);
+    if(d.error) setMsg(d.error); else {setMsg("✅ User created! They can login from ANY device/IP.");setForm({username:"",password:"",note:""});load();}
+  }
+  async function del(id:string){if(!confirm("Delete user?"))return; await api(`/api/admin/users/${id}`,{method:"DELETE"}); load();}
+  return (
+    <div>
+      <SectionTitle>👤 Universal Users</SectionTitle>
+      <InfoBox>Universal users can log in from <b>any IP address</b> — no IP restriction. Create accounts for your students here.</InfoBox>
+      <Card title="➕ Create New Student Account">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="Username (student will use this to login)"><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="e.g. student01" style={inp}/></Field>
+          <Field label="Password"><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Set a password" style={inp}/></Field>
+          <Field label="Note (optional)"><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="e.g. Batch 2025 - Dhaka" style={inp}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={create} disabled={saving} style={btnStyle("var(--purple)")}>{saving?"Creating...":"Create Universal Account +"}</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>All Users ({users.length})</SectionTitle>
+      {users.length===0&&<Empty icon="👤" text="No universal users yet"/>}
+      {users.map(u=>(
+        <div key={u.id} style={{...listItem,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:38,height:38,borderRadius:50,background:"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:16,flexShrink:0}}>{u.username[0]?.toUpperCase()}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,color:"var(--text)"}}>{u.username}</div>
+            <div style={{fontSize:11,color:"var(--sub)"}}>{u.note||"No note"} · Created {new Date(u.createdAt).toLocaleDateString()}</div>
+          </div>
+          <button onClick={()=>del(u.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ IPs ════════════════════════════════════════════════════ */
+function IPsTab() {
+  const [ips,setIps]=useState<any[]>([]); const [newIp,setNewIp]=useState(""); const [msg,setMsg]=useState("");
+  const load=()=>api("/api/admin/ips").then(r=>r.json()).then(d=>{if(Array.isArray(d))setIps(d);});
+  useEffect(()=>{load();},[]);
+  async function add(){if(!newIp.trim())return; await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip:newIp.trim()})}); setNewIp(""); setMsg("✅ IP approved!"); load();}
+  async function del(ip:string){await api(`/api/admin/ips/${encodeURIComponent(ip)}`,{method:"DELETE"}); load();}
+  return (
+    <div>
+      <SectionTitle>🌐 IP Access Control</SectionTitle>
+      <InfoBox>Only approved IPs can access content. Add an IP to grant access without a login account.</InfoBox>
+      <Card title="➕ Approve New IP">
+        <div style={{display:"flex",gap:8}}>
+          <input value={newIp} onChange={e=>setNewIp(e.target.value)} placeholder="e.g. 103.123.45.67" style={{...inp,flex:1}}/>
+          <button onClick={add} style={btnStyle("var(--navy)")}>Add IP</button>
+        </div>
+        {msg&&<Feedback msg={msg} style={{marginTop:8}}/>}
+      </Card>
+      <SectionTitle style={{marginTop:24}}>Approved IPs ({ips.length})</SectionTitle>
+      {ips.length===0&&<Empty icon="🌐" text="No approved IPs yet"/>}
+      {ips.map(i=>(
+        <div key={i.ip} style={{...listItem,display:"flex",alignItems:"center",gap:12}}>
+          <code style={{flex:1,fontSize:14,fontWeight:700,color:"var(--purple)"}}>{i.ip}</code>
+          <div style={{fontSize:11,color:"var(--sub)"}}>Since {new Date(i.approvedAt).toLocaleDateString()}</div>
+          <button onClick={()=>del(i.ip)} style={smBtn("var(--orange)")}>✕ Remove</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ INBOX ══════════════════════════════════════════════════ */
+function InboxTab() {
+  const [msgs,setMsgs]=useState<any[]>([]);
+  const load=()=>api("/api/admin/msgs").then(r=>r.json()).then(d=>{if(Array.isArray(d))setMsgs(d);});
+  useEffect(()=>{load();},[]);
+  async function approveIp(ip:string){await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip})}); alert(`✅ IP ${ip} approved!`);}
+  async function dismiss(id:string){await api(`/api/admin/msgs/${id}`,{method:"PATCH"}); load();}
+  async function del(id:string){await api(`/api/admin/msgs/${id}`,{method:"DELETE"}); load();}
+  const pending=msgs.filter(m=>m.status==="pending");
+  return (
+    <div>
+      <SectionTitle>📨 Student Inbox {pending.length>0&&<span style={{background:"var(--orange)",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,marginLeft:8}}>{pending.length} new</span>}</SectionTitle>
+      {msgs.length===0&&<Empty icon="📭" text="Inbox is empty"/>}
+      {msgs.map(m=>(
+        <div key={m.id} style={{...listItem,opacity:m.status==="noted"?0.6:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <code style={{background:"var(--bg)",padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:700,color:"var(--purple)"}}>{m.ip}</code>
+            {m.status==="pending"&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>NEW</span>}
+            <span style={{fontSize:11,color:"var(--sub)",marginLeft:"auto"}}>{new Date(m.timestamp).toLocaleString()}</span>
+          </div>
+          <p style={{fontSize:14,color:"var(--text)",margin:"0 0 12px",lineHeight:1.6}}>{m.message}</p>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button onClick={()=>approveIp(m.ip)} style={smBtn("var(--green)")}>✔ Approve This IP</button>
+            <button onClick={()=>dismiss(m.id)} style={smBtn("#888")}>✓ Mark Read</button>
+            <button onClick={()=>del(m.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ VIDEOS ════════════════════════════════════════════════ */
+function VideosTab() {
+  const [vids,setVids]=useState<any[]>([]); const [f,setF]=useState({videoId:"",title:"",subjectId:"",desc:"",date:"",course:"",online:true}); const [msg,setMsg]=useState("");
+  const load=()=>api("/api/admin/videos").then(r=>r.json()).then(d=>{if(Array.isArray(d))setVids(d);});
+  useEffect(()=>{load();},[]);
+  async function add(){if(!f.videoId||!f.title)return; await api("/api/admin/videos",{method:"POST",body:JSON.stringify(f)}); setF({videoId:"",title:"",subjectId:"",desc:"",date:"",course:"",online:true}); setMsg("✅ Video added!"); load();}
+  async function del(id:string){if(!confirm("Delete video?"))return; await api(`/api/admin/videos/${id}`,{method:"DELETE"}); load();}
+  return (
+    <div>
+      <SectionTitle>🎬 Video Library</SectionTitle>
+      <Card title="➕ Add Class Recording">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="YouTube Video ID"><input value={f.videoId} onChange={e=>setF({...f,videoId:e.target.value})} placeholder="e.g. dQw4w9WgXcW (from URL)" style={inp}/></Field>
+          <Field label="Class Title (Bangla/English supported)"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="পদার্থবিজ্ঞান - নিউটনের সূত্র" style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Subject ID"><input value={f.subjectId} onChange={e=>setF({...f,subjectId:e.target.value})} placeholder="e.g. Phy-01" style={inp}/></Field>
+            <Field label="Course"><input value={f.course} onChange={e=>setF({...f,course:e.target.value})} placeholder="e.g. HSC Science" style={inp}/></Field>
+          </div>
+          <Field label="Date & Time"><input value={f.date} onChange={e=>setF({...f,date:e.target.value})} placeholder="19 Nov, 2025 08:00 PM" style={inp}/></Field>
+          <Field label="Description / Chapter (Bangla supported)"><textarea value={f.desc} onChange={e=>setF({...f,desc:e.target.value})} rows={3} placeholder="১ম অধ্যায়: নিউটনের সূত্র..." style={{...inp,resize:"vertical"}}/></Field>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer"}}>
+            <input type="checkbox" checked={f.online} onChange={e=>setF({...f,online:e.target.checked})} style={{width:16,height:16}}/> Online class badge
+          </label>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} disabled={!f.videoId||!f.title} style={btnStyle("var(--purple)")}>Add Video to Library →</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>All Videos ({vids.length})</SectionTitle>
+      {vids.length===0&&<Empty icon="🎬" text="No videos yet"/>}
+      {vids.map(v=>(
+        <div key={v.id} style={{...listItem,display:"flex",alignItems:"flex-start",gap:12}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,color:"var(--text)",marginBottom:2}}>{v.title}</div>
+            <div style={{fontSize:11,color:"var(--purple)",fontWeight:700}}>{v.subjectId} · {v.course}</div>
+            <code style={{fontSize:11,color:"var(--sub)"}}>YT: {v.videoId}</code>
+          </div>
+          {v.online&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"2px 8px",fontWeight:700,flexShrink:0}}>Online</span>}
+          <button onClick={()=>del(v.id)} style={smBtn("var(--orange)")}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ QUIZZES ════════════════════════════════════════════════ */
+function QuizzesTab() {
+  const [quizzes,setQuizzes]=useState<any[]>([]);
+  const [view,setView]=useState<"list"|"create"|"edit">("list");
+  const [editQuiz,setEditQuiz]=useState<any>(null);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiForm,setAiForm]=useState({topic:"",count:"5",level:"HSC",type:"Science"});
+  const [msg,setMsg]=useState("");
+
+  const load=()=>api("/api/admin/quizzes").then(r=>r.json()).then(d=>{if(Array.isArray(d))setQuizzes(d);});
+  useEffect(()=>{load();},[]);
+
+  async function togglePublish(q:any){
+    await api(`/api/admin/quizzes/${q.id}/publish`,{method:"PATCH"}); load();
+  }
+  async function del(id:string){if(!confirm("Delete quiz?"))return; await api(`/api/admin/quizzes/${id}`,{method:"DELETE"}); load();}
+
+  async function aiGenerate(){
+    if(!aiForm.topic) return;
+    setAiLoading(true); setMsg("");
+    try {
+      const r=await fetch("/api/ai/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:aiForm.topic,count:parseInt(aiForm.count),level:aiForm.level,type:aiForm.type})});
+      const d=await r.json();
+      if(d.questions) { setEditQuiz({title:aiForm.topic,desc:`${aiForm.level} ${aiForm.type}`,timeMinutes:parseInt(aiForm.count)*2,questions:d.questions.map((q:any,i:number)=>({...q,id:`q${i+1}`}))}); setView("create"); setMsg("✅ AI generated questions! Review and save."); }
+      else setMsg("❌ AI failed: "+d.error);
+    } catch(e:any){setMsg("❌ "+e.message);}
+    finally{setAiLoading(false);}
+  }
+
+  if(view==="create"||view==="edit") return (
+    <QuizBuilder
+      initial={view==="edit"?editQuiz:null}
+      aiPrefill={view==="create"?editQuiz:null}
+      onSave={async(data)=>{
+        const isEdit=view==="edit"&&editQuiz?.id;
+        if(isEdit) await api(`/api/admin/quizzes/${editQuiz.id}`,{method:"PUT",body:JSON.stringify(data)});
+        else await api("/api/admin/quizzes",{method:"POST",body:JSON.stringify(data)});
+        setView("list"); setEditQuiz(null); load();
+      }}
+      onCancel={()=>{setView("list");setEditQuiz(null);}}
+    />
+  );
+
+  return (
+    <div>
+      <SectionTitle>📝 Quizzes & Exams</SectionTitle>
+
+      {/* AI Generator */}
+      <Card title="🤖 AI Question Generator (Auto-create quiz with AI)">
+        <InfoBox>Type a topic, click Generate — AI will write questions in Bangla/English with math support automatically!</InfoBox>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+          <Field label="Topic (Bangla/English)"><input value={aiForm.topic} onChange={e=>setAiForm({...aiForm,topic:e.target.value})} placeholder="নিউটনের গতিসূত্র / Newton's Laws" style={inp}/></Field>
+          <Field label="No. of Questions"><input type="number" value={aiForm.count} onChange={e=>setAiForm({...aiForm,count:e.target.value})} min="3" max="20" style={inp}/></Field>
+          <Field label="Level"><select value={aiForm.level} onChange={e=>setAiForm({...aiForm,level:e.target.value})} style={inp}><option>SSC</option><option>HSC</option><option>Admission</option><option>BCS</option></select></Field>
+          <Field label="Subject Type"><select value={aiForm.type} onChange={e=>setAiForm({...aiForm,type:e.target.value})} style={inp}><option>Science</option><option>Arts</option><option>Commerce</option><option>General</option></select></Field>
+        </div>
+        {msg&&<Feedback msg={msg} style={{marginTop:8}}/>}
+        <button onClick={aiGenerate} disabled={aiLoading||!aiForm.topic} style={{...btnStyle("var(--purple)"),marginTop:12}}>
+          {aiLoading?"🤖 AI is writing questions...":"🤖 Generate with AI →"}
+        </button>
+      </Card>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"24px 0 12px"}}>
+        <SectionTitle style={{margin:0}}>All Quizzes ({quizzes.length})</SectionTitle>
+        <button onClick={()=>{setEditQuiz(null);setView("create");}} style={btnStyle("var(--green)")}>+ Create Manually</button>
+      </div>
+      {quizzes.length===0&&<Empty icon="📝" text="No quizzes yet. Create one or use AI generator!"/>}
+      {quizzes.map(q=>(
+        <div key={q.id} style={{...listItem,marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,color:"var(--text)",fontFamily:"Lato,sans-serif",marginBottom:4}}>{q.title}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,background:"var(--bg)",color:"var(--sub)",borderRadius:20,padding:"2px 10px"}}>{q.questions?.length||0} Qs</span>
+                <span style={{fontSize:11,background:"var(--bg)",color:"var(--sub)",borderRadius:20,padding:"2px 10px"}}>{q.timeMinutes}min</span>
+                <span style={{fontSize:11,background:q.published?"#d4edda":"#fff3e0",color:q.published?"#155724":"#856404",borderRadius:20,padding:"2px 10px",fontWeight:700}}>{q.published?"✅ Published":"⏸ Draft"}</span>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button onClick={()=>togglePublish(q)} style={smBtn(q.published?"#888":"var(--green)")}>{q.published?"Unpublish":"Publish"}</button>
+              <button onClick={()=>{setEditQuiz(q);setView("edit");}} style={smBtn("var(--navy)")}>Edit</button>
+              <button onClick={()=>del(q.id)} style={smBtn("var(--orange)")}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── QUIZ BUILDER ───────────────────────────────────────── */
+function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiPrefill:any; onSave:(d:any)=>Promise<void>; onCancel:()=>void }) {
+  const src = initial || aiPrefill || {};
+  const [title,setTitle]=useState(src.title||"");
+  const [desc,setDesc]=useState(src.desc||"");
+  const [time,setTime]=useState(src.timeMinutes||30);
+  const [negMark,setNegMark]=useState(src.negativeMarking||false);
+  const [negRatio,setNegRatio]=useState(src.negativeRatio||0.25);
+  const [questions,setQuestions]=useState<any[]>(src.questions||[]);
+  const [saving,setSaving]=useState(false);
+  const [activeQ,setActiveQ]=useState<number|null>(null);
+  const [bulkText,setBulkText]=useState("");
+  const [bulkMode,setBulkMode]=useState(false);
+  const [importMsg,setImportMsg]=useState("");
+  const [previewQ,setPreviewQ]=useState<number|null>(null);
+
+  const emptyQ=()=>({id:`q${Date.now()}`,text:"",options:[{id:"A",text:""},{id:"B",text:""},{id:"C",text:""},{id:"D",text:""}],correct:"A",solution:""});
+
+  function addQuestion(){ const q=emptyQ(); setQuestions(qs=>[...qs,q]); setActiveQ(questions.length); }
+  function removeQuestion(i:number){ setQuestions(qs=>qs.filter((_,j)=>j!==i)); if(activeQ===i)setActiveQ(null); }
+  function updateQ(i:number,field:string,val:string){ setQuestions(qs=>qs.map((q,j)=>j===i?{...q,[field]:val}:q)); }
+  function updateOpt(qi:number,oi:number,val:string){ setQuestions(qs=>qs.map((q,j)=>j===qi?{...q,options:q.options.map((o:any,k:number)=>k===oi?{...o,text:val}:o)}:q)); }
+
+  function parseBulk(){
+    const lines=bulkText.trim().split(/\n\n+/);
+    const parsed:any[]=[];
+    for(const block of lines){
+      const ls=block.split("\n").map(l=>l.trim()).filter(Boolean);
+      if(ls.length<5) continue;
+      const text=ls[0].replace(/^Q[\d.:)\s]+/i,"").trim();
+      const opts:any[]=[]; let correct="A"; let solution="";
+      for(const l of ls.slice(1)){
+        const m=l.match(/^([ABCD])[.):\s](.+)/i);
+        if(m) opts.push({id:m[1].toUpperCase(),text:m[2].trim()});
+        const am=l.match(/^(?:Ans|Answer|Correct)[.:)\s]+([ABCD])/i);
+        if(am) correct=am[1].toUpperCase();
+        const sm=l.match(/^(?:Sol|Solution|Explanation)[.:)\s]+(.+)/i);
+        if(sm) solution=sm[1].trim();
+      }
+      if(text&&opts.length===4) parsed.push({id:`q${Date.now()}_${parsed.length}`,text,options:opts,correct,solution});
+    }
+    if(parsed.length===0){setImportMsg("❌ No valid questions found. Check the format.");return;}
+    setQuestions(qs=>[...qs,...parsed]); setBulkText(""); setBulkMode(false); setImportMsg(`✅ ${parsed.length} questions imported!`);
+  }
+
+  async function save(){
+    if(!title||questions.length===0) return;
+    setSaving(true);
+    await onSave({title,desc,timeMinutes:time,questions,negativeMarking:negMark,negativeRatio:negRatio});
+    setSaving(false);
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <button onClick={onCancel} style={{background:"none",border:"1.5px solid var(--border)",borderRadius:8,padding:"6px 14px",cursor:"pointer",color:"var(--sub)",fontSize:13}}>← Back</button>
+        <h2 style={{fontSize:18,fontWeight:800,color:"var(--purple)",fontFamily:"Lato,sans-serif",flex:1,margin:0}}>{initial?"Edit Quiz":"Create New Quiz"}</h2>
+        <button onClick={save} disabled={saving||!title||questions.length===0} style={btnStyle("var(--green)")}>{saving?"Saving...":"💾 Save Quiz"}</button>
+      </div>
+
+      <Card title="📋 Quiz Details">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="Quiz Title (Bangla/English supported)"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="পদার্থবিজ্ঞান MCQ — অধ্যায় ১" style={inp}/></Field>
+          <Field label="Description"><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="Covers Newton's laws, kinematics..." style={{...inp,resize:"vertical"}}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Time Limit (minutes)"><input type="number" value={time} onChange={e=>setTime(parseInt(e.target.value)||30)} min="5" max="180" style={inp}/></Field>
+            <Field label="Negative Marking">
+              <label style={{display:"flex",alignItems:"center",gap:8,height:40,cursor:"pointer"}}>
+                <input type="checkbox" checked={negMark} onChange={e=>setNegMark(e.target.checked)} style={{width:16,height:16}}/> Enable
+                {negMark&&<input type="number" value={negRatio} onChange={e=>setNegRatio(parseFloat(e.target.value))} step="0.25" min="0.25" max="1" style={{...inp,width:80,marginLeft:8}} title="Deduct ratio"/>}
+              </label>
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      {/* Questions */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"20px 0 12px"}}>
+        <h3 style={{fontSize:15,fontWeight:700,color:"var(--text)",margin:0}}>Questions ({questions.length})</h3>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setBulkMode(b=>!b)} style={smBtn("var(--navy)")}>{bulkMode?"Hide":"📋 Bulk Import"}</button>
+          <button onClick={addQuestion} style={smBtn("var(--green)")}>+ Add Question</button>
+        </div>
+      </div>
+
+      {/* Bulk import panel */}
+      {bulkMode&&(
+        <Card title="📋 Bulk Import Questions">
+          <InfoBox>Paste multiple questions below. Format each question as:
+<br/><code style={{fontSize:11,display:"block",marginTop:6,background:"var(--bg)",padding:8,borderRadius:6,whiteSpace:"pre-line"}}{`Q. What is Newton's first law?
+A. F = ma
+B. An object at rest stays at rest...
+C. For every action...
+D. Energy cannot be...
+Ans: B
+Sol: Newton's first law states...
+
+Q. Next question here...
+A. Option A...`}</code>
+          </InfoBox>
+          <textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={10} placeholder="Paste your questions here..." style={{...inp,resize:"vertical",marginTop:10,fontFamily:"monospace",fontSize:12}}/>
+          {importMsg&&<Feedback msg={importMsg} style={{marginTop:8}}/>}
+          <button onClick={parseBulk} disabled={!bulkText.trim()} style={{...btnStyle("var(--purple)"),marginTop:10}}>Import Questions →</button>
+        </Card>
+      )}
+
+      {questions.length===0&&<Empty icon="📝" text="No questions yet. Add manually or use Bulk Import."/>}
+
+      {questions.map((q,qi)=>(
+        <div key={q.id} style={{...listItem,marginBottom:12,border:activeQ===qi?"2px solid var(--purple)":"2px solid var(--border)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{background:"var(--purple)",color:"#fff",borderRadius:50,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>Q{qi+1}</span>
+            <div style={{flex:1,fontWeight:600,fontSize:13,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.text||<span style={{color:"var(--sub)"}}>Question text...</span>}</div>
+            <button onClick={()=>setActiveQ(activeQ===qi?null:qi)} style={smBtn("var(--navy)")}>{activeQ===qi?"▲ Close":"▼ Edit"}</button>
+            <button onClick={()=>setPreviewQ(previewQ===qi?null:qi)} style={smBtn("#888")}>{previewQ===qi?"Hide":"👁 Preview"}</button>
+            <button onClick={()=>removeQuestion(qi)} style={smBtn("var(--orange)")}>✕</button>
+          </div>
+
+          {/* Preview */}
+          {previewQ===qi&&(
+            <div style={{background:"var(--bg)",borderRadius:10,padding:14,marginBottom:10}}>
+              <div style={{fontWeight:700,marginBottom:8,lineHeight:1.7}}><MathText text={q.text||"Question text"}/></div>
+              {q.options.map((o:any)=>(
+                <div key={o.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:6,padding:"6px 10px",borderRadius:8,background:o.id===q.correct?"#d4edda":"var(--surface)",border:o.id===q.correct?"1.5px solid #28a745":"1.5px solid var(--border)"}}>
+                  <span style={{fontWeight:700,color:o.id===q.correct?"#28a745":"var(--sub)",flexShrink:0}}>{o.id}.</span>
+                  <MathText text={o.text||"Option text"}/>
+                </div>
+              ))}
+              {q.solution&&<div style={{marginTop:8,padding:"8px 12px",background:"#fff9e6",borderRadius:8,fontSize:13}}><b>Solution:</b> <MathText text={q.solution}/></div>}
+            </div>
+          )}
+
+          {/* Editor */}
+          {activeQ===qi&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <Field label="Question Text (Bangla/English, use $math$ for equations, \\ce{H2O} for chemistry)">
+                <textarea value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)} rows={3} placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`} style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace"}}/>
+                <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>💡 Math: <code>$x^2$</code> | Display: <code>$$\frac{{a}}{{b}}$$</code> | Chemistry: <code>\ce{{'{H_2O}'}}</code></div>
+              </Field>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {q.options.map((o:any,oi:number)=>(
+                  <Field key={o.id} label={`Option ${o.id}`}>
+                    <input value={o.text} onChange={e=>updateOpt(qi,oi,e.target.value)} placeholder={`Option ${o.id} (math ok)`} style={inp}/>
+                  </Field>
+                ))}
+              </div>
+              <Field label="Correct Answer">
+                <div style={{display:"flex",gap:8}}>
+                  {["A","B","C","D"].map(id=>(
+                    <label key={id} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"6px 14px",borderRadius:8,background:q.correct===id?"var(--green)":"var(--bg)",color:q.correct===id?"#fff":"var(--text)",fontWeight:700,fontSize:14,border:`2px solid ${q.correct===id?"var(--green)":"var(--border)"}`}}>
+                      <input type="radio" name={`correct_${qi}`} value={id} checked={q.correct===id} onChange={()=>updateQ(qi,"correct",id)} style={{display:"none"}}/> {id}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Solution / Explanation (optional, shown after submission)">
+                <textarea value={q.solution} onChange={e=>updateQ(qi,"solution",e.target.value)} rows={2} placeholder="Step-by-step solution here... (math supported)" style={{...inp,resize:"vertical"}}/>
+              </Field>
+            </div>
+          )}
+        </div>
+      ))}
+
+      <button onClick={addQuestion} style={{...btnStyle("var(--purple)"),width:"100%",marginTop:8}}>+ Add Another Question</button>
+      <button onClick={save} disabled={saving||!title||questions.length===0} style={{...btnStyle("var(--green)"),width:"100%",marginTop:10,fontSize:16}}>
+        {saving?"Saving...":"💾 Save Quiz"}
+      </button>
+    </div>
+  );
+}
+
+/* ══ NOTIFICATIONS ══════════════════════════════════════════ */
+function NotifsTab() {
+  const [notifs,setNotifs]=useState<any[]>([]); const [f,setF]=useState({title:"",body:""}); const [msg,setMsg]=useState("");
+  const load=()=>api("/api/admin/notifications").then(r=>r.json()).then(d=>{if(Array.isArray(d))setNotifs(d);});
+  useEffect(()=>{load();},[]);
+  async function send(){if(!f.title||!f.body)return; await api("/api/admin/notifications",{method:"POST",body:JSON.stringify(f)}); setF({title:"",body:""}); setMsg("✅ Notification sent to all students!"); load();}
+  async function del(id:string){await api(`/api/admin/notifications/${id}`,{method:"DELETE"}); load();}
+  return (
+    <div>
+      <SectionTitle>🔔 Broadcast Notifications</SectionTitle>
+      <InfoBox>Notifications are shown to all approved/logged-in students instantly.</InfoBox>
+      <Card title="📢 Send New Notification">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="Title"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="📅 Exam Tomorrow — Physics Chapter 3" style={inp}/></Field>
+          <Field label="Message Body (Bangla/English)"><textarea value={f.body} onChange={e=>setF({...f,body:e.target.value})} rows={3} placeholder="আগামীকাল পরীক্ষা আছে। সবাই প্রস্তুত থাকো!" style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',sans-serif"}}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={send} disabled={!f.title||!f.body} style={btnStyle("var(--purple)")}>📢 Broadcast Now →</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>Sent Notifications ({notifs.length})</SectionTitle>
+      {notifs.length===0&&<Empty icon="🔔" text="No notifications sent yet"/>}
+      {notifs.map(n=>(
+        <div key={n.id} style={{...listItem,display:"flex",alignItems:"flex-start",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,color:"var(--text)",marginBottom:4}}>{n.title}</div>
+            <div style={{fontSize:13,color:"var(--sub)",lineHeight:1.6}}>{n.body}</div>
+            <div style={{fontSize:11,color:"var(--sub)",marginTop:6}}>{new Date(n.createdAt).toLocaleString()}</div>
+          </div>
+          <button onClick={()=>del(n.id)} style={smBtn("var(--orange)")}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ DOUBTS MODERATION ══════════════════════════════════════ */
+function DoubtsTab() {
+  const [doubts,setDoubts]=useState<any[]>([]);
+  useEffect(()=>{ fetch("/api/doubts").then(r=>r.json()).then(d=>{if(Array.isArray(d))setDoubts(d);}); },[]);
+  return (
+    <div>
+      <SectionTitle>❓ Student Doubts & Q&A</SectionTitle>
+      {doubts.length===0&&<Empty icon="❓" text="No doubts posted yet"/>}
+      {doubts.map(d=>(
+        <div key={d.id} style={{...listItem,marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,color:"var(--text)",marginBottom:4}}>{d.title}</div>
+              <div style={{fontSize:13,color:"var(--sub)",marginBottom:6}}>{d.text.substring(0,150)}{d.text.length>150?"...":""}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:"var(--sub)"}}>{d.answers?.length||0} answers · {d.views} views</span>
+                {d.resolved&&<span style={{fontSize:11,background:"#d4edda",color:"#155724",borderRadius:20,padding:"1px 8px",fontWeight:700}}>✅ Resolved</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ MICRO FEED ════════════════════════════════════════════ */
+function MicroFeedTab() {
+  const [feed,setFeed]=useState<any[]>([]); const [f,setF]=useState({videoId:"",title:"",subject:"",description:"",duration:"",tags:""}); const [msg,setMsg]=useState("");
+  const load=()=>fetch("/api/microfeed").then(r=>r.json()).then(d=>{if(Array.isArray(d))setFeed(d);});
+  useEffect(()=>{load();},[]);
+  async function add(){if(!f.videoId||!f.title)return;await fetch("/api/microfeed",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...f,tags:f.tags.split(",").map(t=>t.trim()).filter(Boolean)})});setF({videoId:"",title:"",subject:"",description:"",duration:"",tags:""});setMsg("✅ Added!");load();}
+  return (
+    <div>
+      <SectionTitle>⚡ Micro-Learning Feed</SectionTitle>
+      <Card title="➕ Add Short Lesson">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="YouTube ID"><input value={f.videoId} onChange={e=>setF({...f,videoId:e.target.value})} placeholder="Video ID" style={inp}/></Field>
+          <Field label="Title"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="60-second concept video title" style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Subject"><input value={f.subject} onChange={e=>setF({...f,subject:e.target.value})} placeholder="Physics" style={inp}/></Field>
+            <Field label="Duration"><input value={f.duration} onChange={e=>setF({...f,duration:e.target.value})} placeholder="0:45" style={inp}/></Field>
+          </div>
+          <Field label="Tags (comma separated)"><input value={f.tags} onChange={e=>setF({...f,tags:e.target.value})} placeholder="newton, force, motion" style={inp}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} disabled={!f.videoId||!f.title} style={btnStyle("var(--purple)")}>Add to Feed →</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:20}}>Feed ({feed.length} clips)</SectionTitle>
+      {feed.map(v=>(
+        <div key={v.id} style={{...listItem,display:"flex",gap:10,alignItems:"center"}}>
+          <div style={{width:48,height:36,background:"#000",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:16,flexShrink:0}}>▶</div>
+          <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13}}>{v.title}</div><div style={{fontSize:11,color:"var(--sub)"}}>{v.subject} · {v.duration} · {v.views} views</div></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ MARKETPLACE ════════════════════════════════════════════ */
+function MarketplaceTab() {
+  const [items,setItems]=useState<any[]>([]); const [f,setF]=useState({teacherName:"",title:"",desc:"",subject:"",price:"0"});
+  const load=()=>fetch("/api/marketplace").then(r=>r.json()).then(d=>{if(Array.isArray(d))setItems(d);});
+  useEffect(()=>{load();},[]);
+  async function add(){if(!f.title||!f.teacherName)return;await fetch("/api/marketplace",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...f,price:parseFloat(f.price)||0})});setF({teacherName:"",title:"",desc:"",subject:"",price:"0"});load();}
+  return (
+    <div>
+      <SectionTitle>🏪 Teacher Marketplace</SectionTitle>
+      <Card title="➕ Add Course/Test Pack">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="Teacher Name"><input value={f.teacherName} onChange={e=>setF({...f,teacherName:e.target.value})} placeholder="Teacher full name" style={inp}/></Field>
+          <Field label="Course Title"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="Complete Physics for HSC" style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Subject"><input value={f.subject} onChange={e=>setF({...f,subject:e.target.value})} style={inp}/></Field>
+            <Field label="Price (৳)"><input type="number" value={f.price} onChange={e=>setF({...f,price:e.target.value})} style={inp}/></Field>
+          </div>
+          <Field label="Description"><textarea value={f.desc} onChange={e=>setF({...f,desc:e.target.value})} rows={2} style={{...inp,resize:"vertical"}}/></Field>
+          <button onClick={add} disabled={!f.title||!f.teacherName} style={btnStyle("var(--purple)")}>Add Course →</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:20}}>Courses ({items.length})</SectionTitle>
+      {items.map(i=>(
+        <div key={i.id} style={{...listItem,display:"flex",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700}}>{i.title}</div>
+            <div style={{fontSize:12,color:"var(--sub)"}}>by {i.teacherName} · {i.subject}</div>
+          </div>
+          <div style={{fontWeight:900,color:"var(--purple)",fontSize:16}}>৳{i.price}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ REUSABLE UI ════════════════════════════════════════════ */
+function SectionTitle({children,style}:{children:React.ReactNode;style?:React.CSSProperties}){
+  return <h2 style={{fontSize:16,fontWeight:800,color:"var(--purple)",fontFamily:"Lato,sans-serif",marginBottom:14,...style}}>{children}</h2>;
+}
+function Card({title,children}:{title?:string;children:React.ReactNode}){
+  return <div style={{background:"var(--surface)",borderRadius:14,padding:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)",marginBottom:16}}>{title&&<div style={{fontSize:14,fontWeight:700,color:"var(--text)",marginBottom:14,paddingBottom:10,borderBottom:"1px solid var(--border)"}}>{title}</div>}{children}</div>;
+}
+function InfoBox({children}:{children:React.ReactNode}){
+  return <div style={{background:"#e8f4fd",border:"1px solid #bee3f8",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#1a6397",marginBottom:14,lineHeight:1.6}}>{children}</div>;
+}
+function Field({label,children}:{label:string;children:React.ReactNode}){
+  return <div><div style={{fontSize:12,fontWeight:600,color:"var(--sub)",marginBottom:5}}>{label}</div>{children}</div>;
+}
+function Feedback({msg,style}:{msg:string;style?:React.CSSProperties}){
+  const ok=msg.startsWith("✅");
+  return <div style={{padding:"8px 12px",borderRadius:8,background:ok?"#d4edda":"#fff3cd",border:`1px solid ${ok?"#c3e6cb":"#ffc107"}`,fontSize:13,color:ok?"#155724":"#856404",...style}}>{msg}</div>;
+}
+function Empty({icon,text}:{icon:string;text:string}){
+  return <div style={{textAlign:"center",padding:"36px 0",color:"var(--sub)"}}><div style={{fontSize:36}}>{icon}</div><p style={{marginTop:10,fontSize:14}}>{text}</p></div>;
+}
+function Loading(){return <div style={{textAlign:"center",padding:40}}><div style={{fontSize:36}}>⏳</div><p style={{color:"var(--sub)",marginTop:10}}>Loading...</p></div>;}
+
+/* ── style atoms ─────────────────────────────────────────── */
+const inp: React.CSSProperties = { padding:"10px 12px", borderRadius:9, border:"1.5px solid var(--border)", background:"var(--bg)", color:"var(--text)", fontSize:13, width:"100%", boxSizing:"border-box", outline:"none", fontFamily:"Roboto,'Noto Sans Bengali',sans-serif" };
+const listItem: React.CSSProperties = { background:"var(--surface)", borderRadius:12, padding:14, boxShadow:"0 1px 5px rgba(0,0,0,0.06)", marginBottom:8 };
+function btnStyle(bg:string): React.CSSProperties { return { padding:"10px 18px", borderRadius:10, border:"none", background:bg, color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", fontFamily:"Roboto,sans-serif", transition:"opacity 150ms" }; }
+function smBtn(bg:string): React.CSSProperties { return { padding:"5px 12px", borderRadius:7, border:"none", background:bg, color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer", flexShrink:0 }; }

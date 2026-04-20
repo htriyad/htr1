@@ -19,14 +19,53 @@
   --red-txt:   #c0392b;
 }
 
+/* ═══════════════════════════════════════════
+   EYE-PROTECTION THEME (warm, low blue-light)
+═══════════════════════════════════════════ */
+.eye-theme {
+  --bg:        #1e1c14;
+  --surface:   #272519;
+  --purple:    #89a84a;
+  --purple-dk: #6b8a38;
+  --navy:      #4a6030;
+  --orange:    #c47830;
+  --green:     #89a84a;
+  --text:      #d4cc99;
+  --sub:       #9a9270;
+  --border:    #3a3820;
+  --gold:      #c4923e;
+  --red-txt:   #c08840;
+}
+.eye-theme .uu-header { background: #222018; border-bottom: 1px solid #3a3820; }
+.eye-theme .uu-logo-text span:first-child { color: #c47830 !important; }
+.eye-theme .dash-menu-item { background: #272519; }
+.eye-theme .pc-card { background: #272519; }
+.eye-theme .vp-info-card { background: #272519; }
+.eye-theme .vp-source-tab { background: #1e1c14; color: #9a9270; }
+.eye-theme .vp-source-tab.active { background: #4a6030; }
+.eye-theme .pc-select { background: #272519; border-color: #3a3820; color: #d4cc99; }
+.eye-theme .sidebar { background: #222018; }
+.eye-theme .sidebar-item { border-color: #3a3820; }
+.eye-theme .sidebar-item:hover { background: #2e2c1e; }
+.eye-theme .dash-banner { background: linear-gradient(135deg, #3a5020 0%, #4a6030 60%, #5a7038 100%); }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Udvash exact font stack: Roboto (body) + Lato (headings) + Noto Sans Bengali */
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-family: 'Roboto', 'Noto Sans Bengali', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100%;
+  transition: background 300ms ease, color 300ms ease;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Lato', 'Noto Sans Bengali', sans-serif;
+}
+input, button, select, textarea, label {
+  font-family: 'Roboto', 'Noto Sans Bengali', sans-serif;
 }
 
 /* ═══════════════════════════════════════════

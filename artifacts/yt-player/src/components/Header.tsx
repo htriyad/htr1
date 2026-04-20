@@ -1,16 +1,21 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
-import { Menu, X, Bell, ArrowLeft } from "lucide-react";
+import { Menu, X, Bell, ArrowLeft, Sun, Moon } from "lucide-react";
 
 interface HeaderProps {
   showBack?: boolean;
   backTo?: string;
-  title?: string;
   onMenuClick?: () => void;
 }
 
-export default function Header({ showBack, backTo = "/", title, onMenuClick }: HeaderProps) {
+function toggleTheme() {
+  const el = document.documentElement;
+  const isEye = el.classList.toggle("eye-theme");
+  localStorage.setItem("rr_theme", isEye ? "eye" : "default");
+}
+
+export default function Header({ showBack, backTo = "/", onMenuClick }: HeaderProps) {
   const [, navigate] = useLocation();
+  const isEye = document.documentElement.classList.contains("eye-theme");
 
   return (
     <header className="uu-header">
@@ -24,18 +29,34 @@ export default function Header({ showBack, backTo = "/", title, onMenuClick }: H
         </button>
       )}
 
-      <div className="uu-logo-text" style={{ cursor: "pointer" }} onClick={() => navigate("/")}>
-        <span style={{ color: "#c0392b" }}>উদ্ভাস</span>
-        <span>-উন্মেষ</span>
+      {/* RedRose Logo */}
+      <div
+        className="uu-logo-text"
+        style={{ cursor: "pointer" }}
+        onClick={() => navigate("/")}
+      >
+        <span style={{ color: "#e53935" }}>Red</span>
+        <span style={{ color: "#c0392b" }}>Rose</span>
+        <span style={{ marginLeft: 2 }}>🥀</span>
         <div className="uu-logo-sub">Online Care</div>
       </div>
 
       <div className="uu-header-right">
+        {/* Eye-protection toggle */}
+        <button
+          className="uu-header-icon-btn"
+          onClick={toggleTheme}
+          title={isEye ? "Switch to default theme" : "Eye-protection theme"}
+          aria-label="Toggle eye-protection theme"
+        >
+          {isEye ? <Sun size={20} color="#89a84a" /> : <Moon size={20} color="#555" />}
+        </button>
+
         <button className="uu-bell" aria-label="Notifications">
           <Bell size={22} color="#555" />
           <span className="uu-bell-badge">7</span>
         </button>
-        <div className="uu-avatar">U</div>
+        <div className="uu-avatar">R</div>
       </div>
     </header>
   );
