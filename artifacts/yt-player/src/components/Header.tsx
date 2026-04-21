@@ -5,6 +5,7 @@ interface HeaderProps {
   showBack?: boolean;
   backTo?: string;
   onMenuClick?: () => void;
+  title?: string;
 }
 
 function toggleTheme() {
@@ -13,7 +14,8 @@ function toggleTheme() {
   localStorage.setItem("rr_theme", isEye ? "eye" : "default");
 }
 
-export default function Header({ showBack, backTo = "/", onMenuClick }: HeaderProps) {
+export default function Header({ showBack, backTo = "/", onMenuClick, title }: HeaderProps) {
+  void title; /* reserved for future use; consumed to satisfy callers */
   const [, navigate] = useLocation();
   const isEye = document.documentElement.classList.contains("eye-theme");
 

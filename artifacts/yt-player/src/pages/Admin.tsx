@@ -6,7 +6,7 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market";
+type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"db";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",  icon:"📊", label:"Overview"      },
   { id:"users",     icon:"👤", label:"Users"         },
@@ -18,6 +18,7 @@ const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"doubts",    icon:"❓", label:"Doubts"        },
   { id:"micro",     icon:"⚡", label:"Micro Feed"    },
   { id:"market",    icon:"🏪", label:"Marketplace"   },
+  { id:"db",        icon:"🗄️", label:"Database"      },
 ];
 
 /* ── entry point ──────────────────────────────────────────── */
@@ -96,6 +97,7 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="doubts"    && <DoubtsTab />}
           {tab==="micro"     && <MicroFeedTab />}
           {tab==="market"    && <MarketplaceTab />}
+          {tab==="db"        && <DatabaseTab />}
         </main>
       </div>
     </div>
@@ -416,7 +418,6 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
   const [bulkText,setBulkText]=useState("");
   const [bulkMode,setBulkMode]=useState(false);
   const [importMsg,setImportMsg]=useState("");
-  const [previewQ,setPreviewQ]=useState<number|null>(null);
 
   const emptyQ=()=>({id:`q${Date.now()}`,text:"",options:[{id:"A",text:""},{id:"B",text:""},{id:"C",text:""},{id:"D",text:""}],correct:"A",solution:""});
 
@@ -514,52 +515,62 @@ A. Option A...`}</code>
         <div key={q.id} style={{...listItem,marginBottom:12,border:activeQ===qi?"2px solid var(--purple)":"2px solid var(--border)"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
             <span style={{background:"var(--purple)",color:"#fff",borderRadius:50,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>Q{qi+1}</span>
-            <div style={{flex:1,fontWeight:600,fontSize:13,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{q.text||<span style={{color:"var(--sub)"}}>Question text...</span>}</div>
+            <div style={{flex:1,fontWeight:600,fontSize:13,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><MathText text={q.text||"Question text..."}/></div>
             <button onClick={()=>setActiveQ(activeQ===qi?null:qi)} style={smBtn("var(--navy)")}>{activeQ===qi?"▲ Close":"▼ Edit"}</button>
-            <button onClick={()=>setPreviewQ(previewQ===qi?null:qi)} style={smBtn("#888")}>{previewQ===qi?"Hide":"👁 Preview"}</button>
             <button onClick={()=>removeQuestion(qi)} style={smBtn("var(--orange)")}>✕</button>
           </div>
 
-          {/* Preview */}
-          {previewQ===qi&&(
-            <div style={{background:"var(--bg)",borderRadius:10,padding:14,marginBottom:10}}>
-              <div style={{fontWeight:700,marginBottom:8,lineHeight:1.7}}><MathText text={q.text||"Question text"}/></div>
-              {q.options.map((o:any)=>(
-                <div key={o.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:6,padding:"6px 10px",borderRadius:8,background:o.id===q.correct?"#d4edda":"var(--surface)",border:o.id===q.correct?"1.5px solid #28a745":"1.5px solid var(--border)"}}>
-                  <span style={{fontWeight:700,color:o.id===q.correct?"#28a745":"var(--sub)",flexShrink:0}}>{o.id}.</span>
-                  <MathText text={o.text||"Option text"}/>
-                </div>
-              ))}
-              {q.solution&&<div style={{marginTop:8,padding:"8px 12px",background:"#fff9e6",borderRadius:8,fontSize:13}}><b>Solution:</b> <MathText text={q.solution}/></div>}
-            </div>
-          )}
-
-          {/* Editor */}
+          {/* Editor + always-on live preview side-by-side */}
           {activeQ===qi&&(
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <Field label="Question Text (Bangla/English, use $math$ for equations, \\ce{H2O} for chemistry)">
-                <textarea value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)} rows={3} placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`} style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace"}}/>
-                <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>💡 Math: <code>{"$x^2$"}</code> | Display: <code>{"$$\\frac{a}{b}$$"}</code> | Chemistry: <code>{"\\ce{H_2O}"}</code></div>
-              </Field>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:14}}>
+              {/* LEFT: editor */}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <Field label="Question Text (Bangla/English, $math$, \\ce{H2O})">
+                  <textarea value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)} rows={3} placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`} style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace",fontSize:13}}/>
+                  <div style={{fontSize:10,color:"var(--sub)",marginTop:4}}>💡 <code>{"$x^2$"}</code> · <code>{"$$\\frac{a}{b}$$"}</code> · <code>{"\\ce{H_2O}"}</code></div>
+                </Field>
                 {q.options.map((o:any,oi:number)=>(
                   <Field key={o.id} label={`Option ${o.id}`}>
-                    <input value={o.text} onChange={e=>updateOpt(qi,oi,e.target.value)} placeholder={`Option ${o.id} (math ok)`} style={inp}/>
+                    <input value={o.text} onChange={e=>updateOpt(qi,oi,e.target.value)} placeholder={`Option ${o.id}`} style={inp}/>
                   </Field>
                 ))}
+                <Field label="Correct Answer">
+                  <div style={{display:"flex",gap:6}}>
+                    {["A","B","C","D"].map(id=>(
+                      <label key={id} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"6px 14px",borderRadius:8,background:q.correct===id?"var(--green)":"var(--bg)",color:q.correct===id?"#fff":"var(--text)",fontWeight:700,fontSize:14,border:`2px solid ${q.correct===id?"var(--green)":"var(--border)"}`}}>
+                        <input type="radio" name={`correct_${qi}`} value={id} checked={q.correct===id} onChange={()=>updateQ(qi,"correct",id)} style={{display:"none"}}/> {id}
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Solution (optional)">
+                  <textarea value={q.solution} onChange={e=>updateQ(qi,"solution",e.target.value)} rows={2} placeholder="Step-by-step solution... (math supported)" style={{...inp,resize:"vertical",fontSize:13}}/>
+                </Field>
               </div>
-              <Field label="Correct Answer">
-                <div style={{display:"flex",gap:8}}>
-                  {["A","B","C","D"].map(id=>(
-                    <label key={id} style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",padding:"6px 14px",borderRadius:8,background:q.correct===id?"var(--green)":"var(--bg)",color:q.correct===id?"#fff":"var(--text)",fontWeight:700,fontSize:14,border:`2px solid ${q.correct===id?"var(--green)":"var(--border)"}`}}>
-                      <input type="radio" name={`correct_${qi}`} value={id} checked={q.correct===id} onChange={()=>updateQ(qi,"correct",id)} style={{display:"none"}}/> {id}
-                    </label>
-                  ))}
+
+              {/* RIGHT: live preview */}
+              <div style={{
+                background:"var(--bg)",borderRadius:10,padding:14,
+                border:"1.5px dashed var(--border)",position:"sticky",top:0,
+                alignSelf:"flex-start",maxHeight:"75vh",overflowY:"auto",
+              }}>
+                <div style={{fontSize:10,fontWeight:700,color:"var(--sub)",letterSpacing:1,marginBottom:8}}>👁 LIVE PREVIEW</div>
+                <div style={{fontWeight:700,marginBottom:10,lineHeight:1.7,fontSize:14,color:"var(--text)"}}>
+                  <MathText text={q.text||"(question text appears here)"}/>
                 </div>
-              </Field>
-              <Field label="Solution / Explanation (optional, shown after submission)">
-                <textarea value={q.solution} onChange={e=>updateQ(qi,"solution",e.target.value)} rows={2} placeholder="Step-by-step solution here... (math supported)" style={{...inp,resize:"vertical"}}/>
-              </Field>
+                {q.options.map((o:any)=>(
+                  <div key={o.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:6,padding:"7px 10px",borderRadius:8,background:o.id===q.correct?"#d4edda":"var(--surface)",border:o.id===q.correct?"1.5px solid #28a745":"1.5px solid var(--border)"}}>
+                    <span style={{fontWeight:700,color:o.id===q.correct?"#28a745":"var(--sub)",flexShrink:0}}>{o.id}.</span>
+                    <div style={{flex:1,fontSize:13}}><MathText text={o.text||`(option ${o.id})`}/></div>
+                    {o.id===q.correct && <span style={{color:"#28a745",fontSize:14}}>✓</span>}
+                  </div>
+                ))}
+                {q.solution && (
+                  <div style={{marginTop:10,padding:"10px 12px",background:"#fff9e6",borderRadius:8,fontSize:13,border:"1px solid #fde68a"}}>
+                    <b style={{color:"#92400e"}}>💡 Solution:</b> <MathText text={q.solution}/>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -703,6 +714,141 @@ function MarketplaceTab() {
 }
 
 /* ══ REUSABLE UI ════════════════════════════════════════════ */
+/* ══ DATABASE EDITOR ════════════════════════════════════════ */
+function DatabaseTab() {
+  const [files,setFiles]=useState<{name:string;size:number;mtime:string}[]>([]);
+  const [active,setActive]=useState<string|null>(null);
+  const [content,setContent]=useState("");
+  const [original,setOriginal]=useState("");
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [newName,setNewName]=useState("");
+
+  const loadList=()=>api("/api/admin/db/files").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setFiles(d); });
+  useEffect(()=>{ loadList(); },[]);
+
+  function open(name:string){
+    setActive(name); setMsg(""); setLoading(true);
+    api(`/api/admin/db/file/${encodeURIComponent(name)}`)
+      .then(r=>r.text())
+      .then(t=>{ setContent(t); setOriginal(t); })
+      .catch(e=>setMsg("❌ "+e.message))
+      .finally(()=>setLoading(false));
+  }
+  async function save(){
+    if(!active) return;
+    setLoading(true); setMsg("");
+    try {
+      const r=await api(`/api/admin/db/file/${encodeURIComponent(active)}`,{ method:"PUT", body:JSON.stringify({content}) });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||"Save failed");
+      setOriginal(content); setMsg(`✅ Saved (${d.bytes} bytes). Backup created.`); loadList();
+    } catch(e:any){ setMsg("❌ "+e.message); }
+    finally { setLoading(false); }
+  }
+  function format(){
+    try { setContent(JSON.stringify(JSON.parse(content),null,2)); setMsg("✅ Formatted"); }
+    catch(e:any){ setMsg("❌ Invalid JSON: "+e.message); }
+  }
+  async function createFile(){
+    const name=newName.trim();
+    if(!/^[a-zA-Z0-9_\-]+$/.test(name)){ setMsg("❌ Name must be letters/digits/underscore/hyphen"); return; }
+    const fname=name+".json";
+    try {
+      const r=await api(`/api/admin/db/file/${encodeURIComponent(fname)}`,{ method:"POST", body:JSON.stringify({content:"[]"}) });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||"Create failed");
+      setNewName(""); setMsg("✅ Created "+fname); loadList(); open(fname);
+    } catch(e:any){ setMsg("❌ "+e.message); }
+  }
+  async function deleteFile(name:string){
+    if(!confirm(`Delete ${name}? (A backup will be kept.)`)) return;
+    try {
+      const r=await api(`/api/admin/db/file/${encodeURIComponent(name)}`,{ method:"DELETE" });
+      if(!r.ok){ const d=await r.json(); throw new Error(d.error); }
+      setMsg("✅ Deleted (backup kept)");
+      if(active===name){ setActive(null); setContent(""); setOriginal(""); }
+      loadList();
+    } catch(e:any){ setMsg("❌ "+e.message); }
+  }
+
+  const dirty = content !== original;
+  let parsed:any=null; let parseErr=""; try { parsed=JSON.parse(content); } catch(e:any){ parseErr=e.message; }
+
+  return (
+    <div>
+      <SectionTitle>🗄️ Manual Database Editor</SectionTitle>
+      <InfoBox>
+        ⚠ Direct edits to JSON files. Backups are automatically saved to <code>data/.backups/</code> on every save and delete.
+      </InfoBox>
+
+      <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:14,marginTop:14}}>
+        {/* File list */}
+        <div style={{background:"var(--card)",borderRadius:10,padding:10,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--sub)",marginBottom:8}}>FILES ({files.length})</div>
+          <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:380,overflowY:"auto"}}>
+            {files.map(f=>(
+              <div key={f.name} style={{display:"flex",alignItems:"center",gap:4}}>
+                <button onClick={()=>open(f.name)} style={{
+                  flex:1,textAlign:"left",padding:"7px 9px",borderRadius:7,border:"none",
+                  background:active===f.name?"var(--purple)":"transparent",
+                  color:active===f.name?"#fff":"var(--text)",cursor:"pointer",
+                  fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+                }} title={`${f.size} bytes`}>{f.name}</button>
+                <button onClick={()=>deleteFile(f.name)} title="Delete" style={{
+                  background:"transparent",border:"none",color:"var(--orange)",cursor:"pointer",fontSize:14,padding:"0 4px",
+                }}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div style={{borderTop:"1px solid var(--border)",marginTop:10,paddingTop:10}}>
+            <div style={{fontSize:11,color:"var(--sub)",marginBottom:4}}>NEW FILE</div>
+            <div style={{display:"flex",gap:4}}>
+              <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="filename" style={{...inp,padding:"6px 8px",fontSize:12}}/>
+              <button onClick={createFile} disabled={!newName.trim()} style={{...smBtn("var(--green)"),padding:"6px 10px"}}>+</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Editor */}
+        <div style={{background:"var(--card)",borderRadius:10,padding:12,border:"1px solid var(--border)",minHeight:420}}>
+          {!active ? (
+            <div style={{textAlign:"center",color:"var(--sub)",padding:60}}>👈 Pick a file to edit</div>
+          ) : (
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <code style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>{active}</code>
+                {dirty && <span style={{fontSize:10,background:"var(--orange)",color:"#fff",padding:"2px 6px",borderRadius:6}}>UNSAVED</span>}
+                {parseErr && <span style={{fontSize:10,background:"#dc2626",color:"#fff",padding:"2px 6px",borderRadius:6}}>JSON ERROR</span>}
+                {!parseErr && parsed!==null && (
+                  <span style={{fontSize:10,color:"var(--sub)"}}>
+                    {Array.isArray(parsed) ? `array · ${parsed.length} items`
+                     : typeof parsed==="object" ? `object · ${Object.keys(parsed).length} keys`
+                     : typeof parsed}
+                  </span>
+                )}
+                <div style={{flex:1}}/>
+                <button onClick={format} disabled={loading} style={smBtn("var(--navy)")}>Format</button>
+                <button onClick={()=>setContent(original)} disabled={!dirty||loading} style={smBtn("#888")}>Revert</button>
+                <button onClick={save} disabled={!dirty||loading||!!parseErr} style={smBtn("var(--green)")}>{loading?"…":"💾 Save"}</button>
+              </div>
+              <textarea value={content} onChange={e=>setContent(e.target.value)} spellCheck={false} style={{
+                width:"100%",minHeight:380,padding:10,borderRadius:8,
+                border:`1px solid ${parseErr?"#dc2626":"var(--border)"}`,
+                background:"var(--bg)",color:"var(--text)",
+                fontFamily:"'SF Mono','Menlo','Consolas',monospace",fontSize:12,lineHeight:1.5,
+                resize:"vertical",outline:"none",
+              }}/>
+              {parseErr && <div style={{fontSize:11,color:"#dc2626",marginTop:6}}>⚠ {parseErr}</div>}
+            </>
+          )}
+          {msg && <Feedback msg={msg} style={{marginTop:10}}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({children,style}:{children:React.ReactNode;style?:React.CSSProperties}){
   return <h2 style={{fontSize:16,fontWeight:800,color:"var(--purple)",fontFamily:"Lato,sans-serif",marginBottom:14,...style}}>{children}</h2>;
 }

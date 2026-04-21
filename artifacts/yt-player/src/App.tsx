@@ -7,7 +7,9 @@ import Admin from "./pages/Admin";
 import IpGate from "./pages/IpGate";
 import ExamList from "./pages/ExamList";
 import ExamTake from "./pages/ExamTake";
-import SkillMap from "./pages/SkillMap";
+import AiTutor from "./pages/AiTutor";
+import Profile from "./pages/Profile";
+import Leaderboard from "./pages/Leaderboard";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -84,7 +86,9 @@ export default function App() {
       <Route path="/video/:videoId"  component={VideoPage} />
       <Route path="/exams"           component={ExamList} />
       <Route path="/exam/:examId"    component={ExamTake} />
-      <Route path="/skills"          component={SkillMap} />
+      <Route path="/ai-tutor"        component={AiTutor} />
+      <Route path="/profile"         component={Profile} />
+      <Route path="/leaderboard"     component={Leaderboard} />
       <Route path="/admin"           component={Admin} />
       <Route><Dashboard /></Route>
     </Switch>

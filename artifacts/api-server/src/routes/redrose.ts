@@ -352,4 +352,100 @@ router.delete("/admin/notifications/:id", adminAuth, (req, res) => {
   wr("notifs.json", rd<Notification[]>("notifs.json",[]).filter(n=>n.id!==req.params.id)); res.json({ok:true});
 });
 
+/* ══════════════════════════════════════════════════════════
+   ADMIN — MANUAL DATABASE EDITOR
+   Allows raw read/write of any JSON file in DATA_DIR.
+══════════════════════════════════════════════════════════ */
+function safeName(name: string): string | null {
+  if (!/^[a-zA-Z0-9_\-]+\.json$/.test(name)) return null;
+  return name;
+}
+
+router.get("/admin/db/files", adminAuth, (_r, res) => {
+  try {
+    const files = fs.readdirSync(DATA_DIR)
+      .filter(f => f.endsWith(".json"))
+      .map(f => {
+        const p = path.join(DATA_DIR, f);
+        const st = fs.statSync(p);
+        return { name: f, size: st.size, mtime: st.mtime.toISOString() };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json(files);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/admin/db/file/:name", adminAuth, (req, res) => {
+  const name = safeName(req.params.name);
+  if (!name) return res.status(400).json({ error: "Invalid filename" });
+  const p = path.join(DATA_DIR, name);
+  if (!fs.existsSync(p)) return res.status(404).json({ error: "File not found" });
+  try {
+    const raw = fs.readFileSync(p, "utf-8");
+    res.type("application/json").send(raw);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/admin/db/file/:name", adminAuth, (req, res) => {
+  const name = safeName(req.params.name);
+  if (!name) return res.status(400).json({ error: "Invalid filename" });
+  const { content } = req.body as { content: string };
+  if (typeof content !== "string") return res.status(400).json({ error: "content (string) required" });
+  // Validate JSON before writing
+  let parsed: any;
+  try { parsed = JSON.parse(content); }
+  catch (e: any) { return res.status(422).json({ error: "Invalid JSON: " + e.message }); }
+  // Pretty-write
+  try {
+    // Backup first
+    const p = path.join(DATA_DIR, name);
+    if (fs.existsSync(p)) {
+      const bakDir = path.join(DATA_DIR, ".backups");
+      if (!fs.existsSync(bakDir)) fs.mkdirSync(bakDir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      fs.copyFileSync(p, path.join(bakDir, `${name}.${stamp}.bak`));
+    }
+    fs.writeFileSync(p, JSON.stringify(parsed, null, 2));
+    res.json({ ok: true, bytes: fs.statSync(p).size });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/admin/db/file/:name", adminAuth, (req, res) => {
+  // Create new file with empty content
+  const name = safeName(req.params.name);
+  if (!name) return res.status(400).json({ error: "Invalid filename" });
+  const p = path.join(DATA_DIR, name);
+  if (fs.existsSync(p)) return res.status(409).json({ error: "File already exists" });
+  try {
+    const init = req.body?.content ?? "[]";
+    JSON.parse(init); // validate
+    fs.writeFileSync(p, init);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(422).json({ error: "Invalid JSON: " + err.message });
+  }
+});
+
+router.delete("/admin/db/file/:name", adminAuth, (req, res) => {
+  const name = safeName(req.params.name);
+  if (!name) return res.status(400).json({ error: "Invalid filename" });
+  const p = path.join(DATA_DIR, name);
+  if (!fs.existsSync(p)) return res.status(404).json({ error: "Not found" });
+  try {
+    const bakDir = path.join(DATA_DIR, ".backups");
+    if (!fs.existsSync(bakDir)) fs.mkdirSync(bakDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    fs.renameSync(p, path.join(bakDir, `${name}.${stamp}.deleted`));
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

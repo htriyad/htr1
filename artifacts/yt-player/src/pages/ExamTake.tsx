@@ -62,8 +62,24 @@ export default function ExamTake() {
       const d = await r.json();
       setScore(d.score); setTotal(d.total); setResults(d.results || []);
       setSubmitted(true);
+
+      // Award XP / update streak / check badges
+      const username = localStorage.getItem("rr_username") || "";
+      const timeUsed = quiz ? (quiz.timeMinutes * 60) - secsLeft : 0;
+      try {
+        await fetch("/api/gamification/exam-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(username ? { "x-username": username } : {}) },
+          body: JSON.stringify({
+            quizId: examId,
+            quizTitle: quiz?.title || "Quiz",
+            score: d.score, total: d.total,
+            timeSecs: timeUsed,
+          }),
+        });
+      } catch {}
     } finally { setSubmitting(false); }
-  }, [examId, answers, submitting, submitted]);
+  }, [examId, answers, submitting, submitted, quiz, secsLeft]);
 
   const fmt = (s: number) => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
   const answered = Object.keys(answers).length;

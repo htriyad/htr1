@@ -4,14 +4,17 @@ import { X } from "lucide-react";
 import Header from "../components/Header";
 
 const MENU = [
-  { label: "Skill Map",        icon: "🌳", bg: "#ede9fe", chevron: "#7c3aed", path: "/skills" },
+  { label: "AI Tutor",         icon: "🤖", bg: "#ede9fe", chevron: "#7c3aed", path: "/ai-tutor" },
+  { label: "Past Classes",     icon: "🎬", bg: "#fff3e0", chevron: "#e65100", path: "/past-classes" },
+  { label: "Live Exam",        icon: "📝", bg: "#e3f2fd", chevron: "#2e7d32", path: "/exams" },
+  { label: "Practice Exam",    icon: "💻", bg: "#fff3e0", chevron: "#2e7d32", path: "/exams" },
+  { label: "My Progress",      icon: "🏆", bg: "#fef3c7", chevron: "#d97706", path: "/profile" },
+  { label: "Leaderboard",      icon: "🥇", bg: "#fee2e2", chevron: "#dc2626", path: "/leaderboard" },
   { label: "Live Class",       icon: "👨‍🏫", bg: "#e8f5e9", chevron: "#e53935" },
-  { label: "Live Exam",        icon: "📝", bg: "#e3f2fd", chevron: "#2e7d32" },
-  { label: "Practice Exam",   icon: "💻", bg: "#fff3e0", chevron: "#2e7d32" },
-  { label: "Solve Sheet",     icon: "📋", bg: "#f3e5f5", chevron: "#7b2fa5" },
-  { label: "Q&A Service",     icon: "💬", bg: "#e0f7fa", chevron: "#2e7d32" },
-  { label: "Course & Content",icon: "📚", bg: "#fce4ec", chevron: "#e65100" },
-  { label: "Discussion Group",icon: "👥", bg: "#e8f5e9", chevron: "#2e7d32" },
+  { label: "Solve Sheet",      icon: "📋", bg: "#f3e5f5", chevron: "#7b2fa5" },
+  { label: "Q&A Service",      icon: "💬", bg: "#e0f7fa", chevron: "#2e7d32" },
+  { label: "Course & Content", icon: "📚", bg: "#fce4ec", chevron: "#e65100" },
+  { label: "Discussion Group", icon: "👥", bg: "#e8f5e9", chevron: "#2e7d32" },
 ];
 
 const SIDEBAR_ITEMS = [
