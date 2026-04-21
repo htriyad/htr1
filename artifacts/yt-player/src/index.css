@@ -516,7 +516,7 @@ input, button, select, textarea, label {
 .ytp-speed-item.active { color: var(--green); font-weight: 700; }
 
 /* Skip buttons: hide in portrait, show in landscape/fullscreen */
-.ytp-skip-btn { display: none !important; }
+.ytp-skip-btn { display: flex !important; }
 @media (orientation: landscape) {
   .ytp-skip-btn { display: flex !important; }
 }
