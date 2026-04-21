@@ -5,7 +5,17 @@ const router = Router();
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey:  process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "placeholder",
+  // Resolve the API key tolerantly: prefer the canonical name, but if a
+  // mangled env var key exists (e.g. trailing whitespace / accidental suffix),
+  // fall back to the first env var that *starts with* the canonical prefix.
+  apiKey: (() => {
+    const exact = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    if (exact && exact !== "placeholder") return exact;
+    const fuzzy = Object.entries(process.env).find(
+      ([k, v]) => k.startsWith("AI_INTEGRATIONS_OPENAI_API_KEY") && v && v !== "placeholder"
+    );
+    return fuzzy?.[1] || "placeholder";
+  })(),
 });
 
 const SYS_TUTOR = `You are RedRose AI Tutor 🥀, a friendly and intelligent study assistant for Bangladeshi students preparing for SSC, HSC, and university admission exams. You:

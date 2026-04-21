@@ -28,29 +28,43 @@ export default function MathText({ text, block, className }: Props) {
 }
 
 function renderMixed(raw: string): string {
-  // Split on $$...$$ first (display), then $...$ (inline)
+  // First pass: extract [img:URL] markers (case-insensitive) and replace with placeholders
+  const imgs: string[] = [];
+  const withImgs = raw.replace(/\[img:([^\]]+)\]/gi, (_m, url) => {
+    imgs.push(url.trim());
+    return `\u0000IMG${imgs.length - 1}\u0000`;
+  });
+
   const parts: string[] = [];
   let i = 0;
-  while (i < raw.length) {
-    if (raw.startsWith("$$", i)) {
-      const end = raw.indexOf("$$", i + 2);
-      if (end === -1) { parts.push(escape(raw.slice(i))); break; }
-      parts.push(renderKatex(raw.slice(i + 2, end), true));
+  while (i < withImgs.length) {
+    if (withImgs.startsWith("$$", i)) {
+      const end = withImgs.indexOf("$$", i + 2);
+      if (end === -1) { parts.push(plainSegment(withImgs.slice(i), imgs)); break; }
+      parts.push(renderKatex(withImgs.slice(i + 2, end), true));
       i = end + 2;
-    } else if (raw[i] === "$") {
-      const end = raw.indexOf("$", i + 1);
-      if (end === -1) { parts.push(escape(raw.slice(i))); break; }
-      parts.push(renderKatex(raw.slice(i + 1, end), false));
+    } else if (withImgs[i] === "$") {
+      const end = withImgs.indexOf("$", i + 1);
+      if (end === -1) { parts.push(plainSegment(withImgs.slice(i), imgs)); break; }
+      parts.push(renderKatex(withImgs.slice(i + 1, end), false));
       i = end + 1;
     } else {
-      // collect normal text until next $ or $$
       let j = i;
-      while (j < raw.length && raw[j] !== "$") j++;
-      parts.push(nl2br(escape(raw.slice(i, j))));
+      while (j < withImgs.length && withImgs[j] !== "$") j++;
+      parts.push(plainSegment(withImgs.slice(i, j), imgs));
       i = j;
     }
   }
   return parts.join("");
+}
+
+function plainSegment(s: string, imgs: string[]): string {
+  // Escape, then replace placeholders with <img>
+  return nl2br(escape(s)).replace(/\u0000IMG(\d+)\u0000/g, (_m, idx) => {
+    const url = imgs[Number(idx)] || "";
+    const safe = url.replace(/"/g, "&quot;");
+    return `<img src="${safe}" alt="" style="max-width:100%;height:auto;display:block;margin:8px 0;border-radius:6px;" />`;
+  });
 }
 
 function renderKatex(latex: string, display: boolean): string {

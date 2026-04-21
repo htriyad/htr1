@@ -418,6 +418,8 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
   const [bulkText,setBulkText]=useState("");
   const [bulkMode,setBulkMode]=useState(false);
   const [importMsg,setImportMsg]=useState("");
+  const [htmlMode,setHtmlMode]=useState(false);
+  const [htmlBusy,setHtmlBusy]=useState(false);
 
   const emptyQ=()=>({id:`q${Date.now()}`,text:"",options:[{id:"A",text:""},{id:"B",text:""},{id:"C",text:""},{id:"D",text:""}],correct:"A",solution:""});
 
@@ -446,6 +448,91 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
     }
     if(parsed.length===0){setImportMsg("❌ No valid questions found. Check the format.");return;}
     setQuestions(qs=>[...qs,...parsed]); setBulkText(""); setBulkMode(false); setImportMsg(`✅ ${parsed.length} questions imported!`);
+  }
+
+  /* ── HTML upload (Utkorsho/Udvash exam HTML) ──
+     Normalises Bangla (ক/খ/গ/ঘ) or English (A-D) option labels to A-D, picks
+     correct answer from .fas.fa-check, embeds images via [img:URL] so they
+     render in MathText, keeps math/chemistry. */
+  function normaliseOptId(rawId: string, idx: number): string {
+    const s = (rawId || "").trim().replace(/[.):।]/g, "").toUpperCase();
+    if (/^[A-D]$/.test(s)) return s;
+    const map: Record<string,string> = {
+      "ক":"A","খ":"B","গ":"C","ঘ":"D",
+      "১":"A","২":"B","৩":"C","৪":"D",
+      "1":"A","2":"B","3":"C","4":"D",
+      "I":"A","II":"B","III":"C","IV":"D",
+    };
+    return map[s] || ["A","B","C","D"][idx] || "A";
+  }
+  function cleanHtmlText(el: Element | null): string {
+    if (!el) return "";
+    const c = el.cloneNode(true) as Element;
+    c.querySelectorAll("style,script").forEach(t => t.remove());
+    c.querySelectorAll("br").forEach(b => b.replaceWith(document.createTextNode("\n")));
+    c.querySelectorAll("img").forEach(img => {
+      const src = img.getAttribute("src") || "";
+      img.replaceWith(document.createTextNode(src ? ` [img:${src}] ` : ""));
+    });
+    return (c.textContent || "").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+  }
+  async function importHtmlFile(file: File) {
+    if (!file) return;
+    setHtmlBusy(true); setImportMsg("");
+    try {
+      const content = await file.text();
+      const doc = new DOMParser().parseFromString(content, "text/html");
+
+      const titleEl =
+        doc.querySelector(".TakeExamHeader h3:last-child") ||
+        doc.querySelector(".TakeExamHeader h3") ||
+        doc.querySelector("title");
+      const fileTitle = titleEl?.textContent?.trim() || "";
+      if (fileTitle && !title) setTitle(fileTitle);
+
+      const blocks = doc.querySelectorAll(".questionBlock");
+      const parsed: any[] = [];
+      blocks.forEach((block, i) => {
+        const qText = cleanHtmlText(block.querySelector(".questionText"));
+        const optEls = block.querySelectorAll(".questionOption");
+        const opts: any[] = [];
+        let correct = "A";
+        optEls.forEach((oe, oi) => {
+          const rawId = oe.querySelector(".input-group-text")?.textContent?.trim() || "";
+          const id = normaliseOptId(rawId, oi);
+          const text = cleanHtmlText(oe.querySelector(".questionTable label") || oe);
+          const isCorrect = !!oe.querySelector(".fas.fa-check, .fa-check, .correct");
+          if (isCorrect) correct = id;
+          if (text) opts.push({ id, text });
+        });
+        while (opts.length < 4) {
+          const id = ["A","B","C","D"][opts.length];
+          opts.push({ id, text: "" });
+        }
+        const sol = cleanHtmlText(block.querySelector(".solveText"));
+        if (qText && opts.length >= 2) {
+          parsed.push({
+            id: `q${Date.now()}_${i}`,
+            text: qText,
+            options: opts.slice(0, 4),
+            correct,
+            solution: sol || "",
+          });
+        }
+      });
+
+      if (parsed.length === 0) {
+        setImportMsg("❌ No questions found in this file. Make sure it's an Utkorsho/Udvash exam HTML.");
+      } else {
+        setQuestions(qs => [...qs, ...parsed]);
+        setHtmlMode(false);
+        setImportMsg(`✅ ${parsed.length} questions imported from "${file.name}"`);
+      }
+    } catch (err: any) {
+      setImportMsg(`❌ Failed to parse: ${err?.message || "invalid HTML"}`);
+    } finally {
+      setHtmlBusy(false);
+    }
   }
 
   async function save(){
@@ -483,7 +570,8 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"20px 0 12px"}}>
         <h3 style={{fontSize:15,fontWeight:700,color:"var(--text)",margin:0}}>Questions ({questions.length})</h3>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setBulkMode(b=>!b)} style={smBtn("var(--navy)")}>{bulkMode?"Hide":"📋 Bulk Import"}</button>
+          <button onClick={()=>{setBulkMode(b=>!b);setHtmlMode(false);}} style={smBtn("var(--navy)")}>{bulkMode?"Hide":"📋 Bulk Import"}</button>
+          <button onClick={()=>{setHtmlMode(h=>!h);setBulkMode(false);}} style={smBtn("var(--orange)")}>{htmlMode?"Hide":"📄 Upload HTML"}</button>
           <button onClick={addQuestion} style={smBtn("var(--green)")}>+ Add Question</button>
         </div>
       </div>
@@ -509,7 +597,26 @@ A. Option A...`}</code>
         </Card>
       )}
 
-      {questions.length===0&&<Empty icon="📝" text="No questions yet. Add manually or use Bulk Import."/>}
+      {/* HTML upload panel */}
+      {htmlMode&&(
+        <Card title="📄 Upload Exam HTML File">
+          <InfoBox>
+            Upload an exported <b>.html</b> exam file (Utkorsho / Udvash / Utkorsho Online format).
+            Bangla (ক/খ/গ/ঘ) and English (A/B/C/D) options are auto-mapped. Math, chemistry, and images are kept.
+          </InfoBox>
+          <label style={{display:"block",marginTop:12,padding:"24px 16px",border:"2px dashed var(--border)",borderRadius:10,textAlign:"center",cursor:htmlBusy?"wait":"pointer",background:"var(--bg)"}}>
+            <div style={{fontSize:32,marginBottom:6}}>📂</div>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{htmlBusy?"Parsing...":"Click to choose .html file"}</div>
+            <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>Supports Bangla & English exam HTML</div>
+            <input type="file" accept=".html,text/html" disabled={htmlBusy}
+              onChange={e=>{const f=e.target.files?.[0]; if(f) importHtmlFile(f); e.currentTarget.value="";}}
+              style={{display:"none"}}/>
+          </label>
+          {importMsg&&<Feedback msg={importMsg} style={{marginTop:8}}/>}
+        </Card>
+      )}
+
+      {questions.length===0&&<Empty icon="📝" text="No questions yet. Add manually, paste in bulk, or upload an HTML file."/>}
 
       {questions.map((q,qi)=>(
         <div key={q.id} style={{...listItem,marginBottom:12,border:activeQ===qi?"2px solid var(--purple)":"2px solid var(--border)"}}>
