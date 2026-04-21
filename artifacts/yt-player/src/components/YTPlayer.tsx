@@ -91,6 +91,13 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   const [qualities,    setQualities]    = useState<string[]>([]);
   const [qualityOpen,  setQualityOpen]  = useState(false);
   const [ccOn,         setCcOn]         = useState(false);
+  const [ccTracks,     setCcTracks]     = useState<Array<{languageCode:string; languageName?:string; displayName?:string}>>([]);
+  const [ccLang,       setCcLang]       = useState<string>("");
+  const [ccOpen,       setCcOpen]       = useState(false);
+  const [scrubT,       setScrubT]       = useState<number | null>(null);
+  const [scrubX,       setScrubX]       = useState(0);
+  const dragging                        = useRef(false);
+  const progRowRef                      = useRef<HTMLDivElement | null>(null);
   const [buffering,    setBuffering]    = useState(false);
   const [started,      setStarted]      = useState(false);
   const [leftFlash,    setLeftFlash]    = useState(false);
@@ -208,7 +215,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           } catch {}
           setReady(true);
         },
-        onStateChange: (e) => onState(e.data),
+        onStateChange: (e) => { onState(e.data); refreshTracksAndQualities(); },
       },
     });
   }
@@ -264,6 +271,37 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   }
   function stopTick() { if (tickRef.current) clearInterval(tickRef.current); }
 
+  /* ── Refresh CC tracklist + quality list (only populated after playback starts) ── */
+  function refreshTracksAndQualities() {
+    const p = playerRef.current; if (!p) return;
+    try {
+      const qs = p.getAvailableQualityLevels?.() || [];
+      if (qs.length) setQualities(["auto", ...qs.filter(q => q !== "auto")]);
+    } catch {}
+    try {
+      // Force-load the captions module so tracklist is available
+      try { p.loadModule("captions"); } catch {}
+      try { p.loadModule("cc"); } catch {}
+      const tracks: any[] =
+        p.getOption("captions", "tracklist") ||
+        p.getOption("cc", "tracklist") || [];
+      if (Array.isArray(tracks) && tracks.length) {
+        setCcTracks(
+          tracks.map((t) => ({
+            languageCode: t.languageCode || t.lang || "en",
+            languageName: t.languageName || t.name || t.displayName,
+            displayName:  t.displayName  || t.languageName || t.name || t.languageCode,
+          }))
+        );
+      }
+      // Disable captions by default unless user enabled them
+      if (!ccOn) {
+        try { p.unloadModule("captions"); } catch {}
+        try { p.unloadModule("cc"); } catch {}
+      }
+    } catch {}
+  }
+
   const handleInteraction = useCallback(() => {
     showTopNow(); setShowCtrl(true);
     if (playerRef.current?.getPlayerState?.() === 1) {
@@ -303,40 +341,24 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     try { playerRef.current?.setPlaybackQuality(q); } catch {}
     setQuality(q); setQualityOpen(false);
   }
-  function toggleCC() {
+  function pickCc(languageCode: string | "") {
     const p = playerRef.current; if (!p) return;
-    const next = !ccOn;
-    setCcOn(next);
-    try {
-      if (next) {
-        // Load both module names YouTube has used historically
-        p.loadModule("captions");
-        p.loadModule("cc");
-        // Pick first available track (or fall back to English) once tracklist is ready
-        const applyTrack = (attempt = 0) => {
-          try {
-            const tracks: any[] =
-              p.getOption("captions", "tracklist") ||
-              p.getOption("cc", "tracklist") ||
-              [];
-            const t = tracks[0] || { languageCode: "en" };
-            p.setOption("captions", "track", t);
-            p.setOption("cc", "track", t);
-            try { p.setOption("captions", "reload", true); } catch {}
-            try { p.setOption("captions", "fontSize", 1); } catch {}
-            if (!tracks.length && attempt < 4) setTimeout(() => applyTrack(attempt + 1), 400);
-          } catch {
-            if (attempt < 4) setTimeout(() => applyTrack(attempt + 1), 400);
-          }
-        };
-        setTimeout(() => applyTrack(0), 250);
-      } else {
-        try { p.setOption("captions", "track", {}); } catch {}
-        try { p.setOption("cc", "track", {}); } catch {}
-        try { p.unloadModule("captions"); } catch {}
-        try { p.unloadModule("cc"); } catch {}
-      }
-    } catch {}
+    if (!languageCode) {
+      setCcOn(false); setCcLang("");
+      try { p.setOption("captions", "track", {}); } catch {}
+      try { p.setOption("cc", "track", {}); } catch {}
+      try { p.unloadModule("captions"); } catch {}
+      try { p.unloadModule("cc"); } catch {}
+    } else {
+      try { p.loadModule("captions"); } catch {}
+      try { p.loadModule("cc"); } catch {}
+      const t = ccTracks.find(x => x.languageCode === languageCode) || { languageCode };
+      try { p.setOption("captions", "track", t); } catch {}
+      try { p.setOption("cc",       "track", t); } catch {}
+      try { p.setOption("captions", "fontSize", 1); } catch {}
+      setCcOn(true); setCcLang(languageCode);
+    }
+    setCcOpen(false);
     handleInteraction();
   }
   function toggleFS() {
@@ -388,7 +410,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     <div
       ref={containerRef}
       className="ytp-aspect-wrap"
-      onClick={speedOpen || qualityOpen ? () => { setSpeedOpen(false); setQualityOpen(false); } : undefined}
+      onClick={speedOpen || qualityOpen || ccOpen ? () => { setSpeedOpen(false); setQualityOpen(false); setCcOpen(false); } : undefined}
     >
       {/* YouTube iframe target */}
       <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
@@ -489,23 +511,53 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
       {/* CONTROLS BAR */}
       <div className={`ytp-controls${showCtrl ? "" : " hidden"}`}>
 
-        {/* PROGRESS ROW */}
+        {/* PROGRESS ROW — big touch target, draggable thumb, time tooltip while scrubbing */}
         <div
+          ref={progRowRef}
           className="ytp-prog-row"
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
+          onPointerDown={(e) => {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            dragging.current = true;
+            const r = progRowRef.current!.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+            const dur = playerRef.current?.getDuration() || duration || 0;
+            setScrubT(ratio * dur); setScrubX(e.clientX - r.left);
+            setProgress(ratio);
+            handleInteraction();
           }}
+          onPointerMove={(e) => {
+            const r = progRowRef.current!.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+            const dur = playerRef.current?.getDuration() || duration || 0;
+            if (dragging.current) {
+              setProgress(ratio);
+              setScrubT(ratio * dur); setScrubX(e.clientX - r.left);
+            } else {
+              // hover preview
+              setScrubT(ratio * dur); setScrubX(e.clientX - r.left);
+            }
+          }}
+          onPointerUp={(e) => {
+            if (dragging.current) {
+              const r = progRowRef.current!.getBoundingClientRect();
+              const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+              seekTo(ratio);
+              dragging.current = false;
+            }
+            setScrubT(null);
+          }}
+          onPointerLeave={() => { if (!dragging.current) setScrubT(null); }}
+          onPointerCancel={() => { dragging.current = false; setScrubT(null); }}
         >
           <div className="ytp-prog-track">
             <div className="ytp-prog-fill" style={{ width: `${progress * 100}%` }} />
           </div>
-          <input
-            className="ytp-prog-input"
-            type="range" min={0} max={10000}
-            value={Math.round(progress * 10000)}
-            onChange={(e) => seekTo(Number(e.target.value) / 10000)}
-          />
+          <div className="ytp-prog-thumb" style={{ left: `${progress * 100}%` }} />
+          {scrubT !== null && (
+            <div className="ytp-prog-tooltip" style={{ left: scrubX }}>
+              {fmt(scrubT)}
+            </div>
+          )}
         </div>
 
         {/* BUTTON ROW */}
@@ -555,13 +607,32 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           {/* Time */}
           <span className="ytp-time">{fmt(currentTime)} / {fmt(duration)}</span>
 
-          {/* CC / Subtitles */}
-          <button className="ytp-btn ytp-cc-btn" onClick={(e) => { e.stopPropagation(); toggleCC(); }} aria-label="Captions" style={{position:"relative"}}>
-            <svg width="22" height="22" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M19,4H5A2,2 0 0,0 3,6V18A2,2 0 0,0 5,20H19A2,2 0 0,0 21,18V6A2,2 0 0,0 19,4M11,11H9.5V10.5H7.5V13.5H9.5V13H11V14A1,1 0 0,1 10,15H7A1,1 0 0,1 6,14V10A1,1 0 0,1 7,9H10A1,1 0 0,1 11,10M18,11H16.5V10.5H14.5V13.5H16.5V13H18V14A1,1 0 0,1 17,15H14A1,1 0 0,1 13,14V10A1,1 0 0,1 14,9H17A1,1 0 0,1 18,10V11Z"/>
-            </svg>
-            {ccOn && <span style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:18,height:2,background:"#4FA621",borderRadius:1}}/>}
-          </button>
+          {/* CC / Subtitles — language menu */}
+          <div className="ytp-speed-wrap">
+            <div className={`ytp-speed-popup${ccOpen ? " open" : ""}`} style={{minWidth: 130}}>
+              <button className={`ytp-speed-item${!ccOn ? " active" : ""}`} onClick={() => pickCc("")}>Off</button>
+              {ccTracks.length === 0 && (
+                <div style={{padding: "7px 14px", color: "#9aa", fontSize: 11, textAlign: "center"}}>
+                  No captions
+                </div>
+              )}
+              {ccTracks.map((t) => (
+                <button key={t.languageCode}
+                        className={`ytp-speed-item${ccOn && ccLang === t.languageCode ? " active" : ""}`}
+                        onClick={() => pickCc(t.languageCode)}>
+                  {t.displayName || t.languageName || t.languageCode}
+                </button>
+              ))}
+            </div>
+            <button className="ytp-btn ytp-cc-btn"
+                    onClick={(e) => { e.stopPropagation(); setCcOpen(o => !o); setSpeedOpen(false); setQualityOpen(false); refreshTracksAndQualities(); handleInteraction(); }}
+                    aria-label="Captions" style={{position:"relative"}}>
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M19,4H5A2,2 0 0,0 3,6V18A2,2 0 0,0 5,20H19A2,2 0 0,0 21,18V6A2,2 0 0,0 19,4M11,11H9.5V10.5H7.5V13.5H9.5V13H11V14A1,1 0 0,1 10,15H7A1,1 0 0,1 6,14V10A1,1 0 0,1 7,9H10A1,1 0 0,1 11,10M18,11H16.5V10.5H14.5V13.5H16.5V13H18V14A1,1 0 0,1 17,15H14A1,1 0 0,1 13,14V10A1,1 0 0,1 14,9H17A1,1 0 0,1 18,10V11Z"/>
+              </svg>
+              {ccOn && <span style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:18,height:2,background:"#4FA621",borderRadius:1}}/>}
+            </button>
+          </div>
 
           {/* Quality / Resolution */}
           {qualities.length > 0 && (

@@ -436,24 +436,55 @@ input, button, select, textarea, label {
 }
 .ytp-controls.hidden { opacity: 0; pointer-events: none; }
 
-/* Progress bar row */
+/* Progress bar row — big touch target so finger can grab it easily */
 .ytp-prog-row {
-  display: flex; align-items: center; height: 20px; padding: 0 2px; cursor: pointer;
   position: relative;
+  height: 28px; padding: 0 2px; cursor: pointer;
+  touch-action: none; user-select: none;
 }
+@media (orientation: landscape) { .ytp-prog-row { height: 32px; } }
+
 .ytp-prog-track {
-  position: absolute; left: 2px; right: 2px; height: 3px;
-  background: rgba(255,255,255,0.3); border-radius: 2px; overflow: hidden; pointer-events: none;
+  position: absolute; left: 2px; right: 2px; top: 50%;
+  transform: translateY(-50%);
+  height: 5px;
+  background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden;
+  pointer-events: none;
+  transition: height 120ms ease;
 }
+.ytp-prog-row:hover .ytp-prog-track,
+.ytp-prog-row:active .ytp-prog-track { height: 7px; }
+
 .ytp-prog-fill {
   position: absolute; left: 0; top: 0; bottom: 0;
-  background: var(--green); border-radius: 2px;
+  background: var(--green); border-radius: 3px;
 }
-/* The actual range input sits over the track, transparent */
-.ytp-prog-input {
-  position: absolute; left: 0; right: 0; top: 0; bottom: 0;
-  width: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;
-  height: 100%;
+
+/* Draggable thumb */
+.ytp-prog-thumb {
+  position: absolute; top: 50%;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--green);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.35);
+  transition: width 120ms ease, height 120ms ease;
+}
+.ytp-prog-row:hover .ytp-prog-thumb,
+.ytp-prog-row:active .ytp-prog-thumb { width: 18px; height: 18px; }
+@media (orientation: landscape) {
+  .ytp-prog-thumb { width: 16px; height: 16px; }
+}
+
+/* Time tooltip while scrubbing */
+.ytp-prog-tooltip {
+  position: absolute; bottom: 100%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.85); color: #fff;
+  padding: 3px 7px; border-radius: 4px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; pointer-events: none;
+  margin-bottom: 4px;
 }
 
 /* Buttons row */
