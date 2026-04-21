@@ -491,7 +491,7 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
       {bulkMode&&(
         <Card title="📋 Bulk Import Questions">
           <InfoBox>Paste multiple questions below. Format each question as:
-<br/><code style={{fontSize:11,display:"block",marginTop:6,background:"var(--bg)",padding:8,borderRadius:6,whiteSpace:"pre-line"}}{`Q. What is Newton's first law?
+<br/><code style={{fontSize:11,display:"block",marginTop:6,background:"var(--bg)",padding:8,borderRadius:6,whiteSpace:"pre-line"}}>{`Q. What is Newton's first law?
 A. F = ma
 B. An object at rest stays at rest...
 C. For every action...
@@ -539,7 +539,7 @@ A. Option A...`}</code>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               <Field label="Question Text (Bangla/English, use $math$ for equations, \\ce{H2O} for chemistry)">
                 <textarea value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)} rows={3} placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`} style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace"}}/>
-                <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>💡 Math: <code>$x^2$</code> | Display: <code>$$\frac{{a}}{{b}}$$</code> | Chemistry: <code>\ce{{'{H_2O}'}}</code></div>
+                <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>💡 Math: <code>{"$x^2$"}</code> | Display: <code>{"$$\\frac{a}{b}$$"}</code> | Chemistry: <code>{"\\ce{H_2O}"}</code></div>
               </Field>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {q.options.map((o:any,oi:number)=>(
