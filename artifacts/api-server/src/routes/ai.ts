@@ -1,22 +1,19 @@
 import { Router } from "express";
-import OpenAI from "openai";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FREE AI BACKEND
+   Uses Pollinations.ai's public OpenAI-compatible endpoint.
+   - No API key required
+   - No payment required
+   - Supports streaming (Server-Sent Events)
+   - OpenAI-compatible request/response shape
+   Endpoint: https://text.pollinations.ai/openai
+   ───────────────────────────────────────────────────────────────────────── */
 
 const router = Router();
 
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  // Resolve the API key tolerantly: prefer the canonical name, but if a
-  // mangled env var key exists (e.g. trailing whitespace / accidental suffix),
-  // fall back to the first env var that *starts with* the canonical prefix.
-  apiKey: (() => {
-    const exact = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-    if (exact && exact !== "placeholder") return exact;
-    const fuzzy = Object.entries(process.env).find(
-      ([k, v]) => k.startsWith("AI_INTEGRATIONS_OPENAI_API_KEY") && v && v !== "placeholder"
-    );
-    return fuzzy?.[1] || "placeholder";
-  })(),
-});
+const POLLI_URL = "https://text.pollinations.ai/openai";
+const DEFAULT_MODEL = "openai"; // gpt-4o-mini class, free tier
 
 const SYS_TUTOR = `You are RedRose AI Tutor 🥀, a friendly and intelligent study assistant for Bangladeshi students preparing for SSC, HSC, and university admission exams. You:
 - Explain concepts clearly in both Bengali and English (mix naturally)
@@ -38,34 +35,100 @@ const SYS_CAREER = `You are a career counselor for Bangladeshi students. Based o
 5. Key subjects to focus on
 Be specific, practical, and encouraging. Output in structured format.`;
 
-/* POST /api/ai/chat  (streaming) */
-router.post("/chat", async (req, res) => {
-  const { messages, context } = req.body as { messages: {role:string;content:string}[]; context?: string };
-  res.setHeader("Content-Type","text/event-stream");
-  res.setHeader("Cache-Control","no-cache");
-  res.setHeader("Connection","keep-alive");
-  res.setHeader("Access-Control-Allow-Origin","*");
+type Msg = { role: "system" | "user" | "assistant"; content: string };
 
+/* Non-streaming helper — returns the full assistant message text. */
+async function runChat(messages: Msg[], opts: { temperature?: number } = {}): Promise<string> {
+  const r = await fetch(POLLI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      messages,
+      stream: false,
+      private: true,
+      temperature: opts.temperature ?? 0.7,
+    }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`AI provider returned ${r.status}: ${txt.slice(0, 200)}`);
+  }
+  const data: any = await r.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+/* Streaming helper — pipes the upstream SSE chunks straight to the client. */
+async function streamChat(messages: Msg[], res: any) {
+  const upstream = await fetch(POLLI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      messages,
+      stream: true,
+      private: true,
+    }),
+  });
+
+  if (!upstream.ok || !upstream.body) {
+    const txt = await upstream.text().catch(() => "");
+    res.write(`data: ${JSON.stringify({ error: `AI ${upstream.status}: ${txt.slice(0,200)}` })}\n\n`);
+    res.end();
+    return;
+  }
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    // Parse SSE lines: each "data: {...}" line is one chunk.
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const ln of lines) {
+      const line = ln.trim();
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload) continue;
+      if (payload === "[DONE]") {
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+        res.end();
+        return;
+      }
+      try {
+        const parsed = JSON.parse(payload);
+        const delta = parsed?.choices?.[0]?.delta?.content;
+        if (delta) res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+      } catch {
+        // ignore non-JSON keep-alive lines
+      }
+    }
+  }
+  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+  res.end();
+}
+
+/* POST /api/ai/chat — streaming */
+router.post("/chat", async (req, res) => {
+  const { messages, context } = req.body as { messages: Msg[]; context?: string };
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
   try {
     const systemMsg = context ? `${SYS_TUTOR}\n\nContext: ${context}` : SYS_TUTOR;
-    const stream = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 8192,
-      messages: [
-        { role:"system", content: systemMsg },
-        ...messages.slice(-20).map(m => ({ role: m.role as "user"|"assistant", content: m.content })),
-      ],
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content;
-      if (content) res.write(`data: ${JSON.stringify({content})}\n\n`);
-    }
-    res.write(`data: ${JSON.stringify({done:true})}\n\n`);
-    res.end();
+    const msgs: Msg[] = [
+      { role: "system", content: systemMsg },
+      ...(messages || []).slice(-20).map((m) => ({ role: m.role as Msg["role"], content: m.content })),
+    ];
+    await streamChat(msgs, res);
   } catch (err: any) {
-    res.write(`data: ${JSON.stringify({error: err.message||"AI error"})}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: err?.message || "AI error" })}\n\n`);
     res.end();
   }
 });
@@ -76,21 +139,16 @@ router.post("/routine", async (req, res) => {
   try {
     const prompt = `Create a study routine for a student with these details:
 Goals: ${goals}
-Weak subjects: ${weakSubjects?.join(", ")||"Not specified"}
-Available hours per day: ${availableHours||4}
-Days until exam: ${daysLeft||30}
+Weak subjects: ${weakSubjects?.join(", ") || "Not specified"}
+Available hours per day: ${availableHours || 4}
+Days until exam: ${daysLeft || 30}
 
 Create a detailed weekly schedule.`;
-
-    const r = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 8192,
-      messages: [
-        { role:"system", content: SYS_ROUTINE },
-        { role:"user",   content: prompt },
-      ],
-    });
-    res.json({ routine: r.choices[0]?.message?.content || "Could not generate routine." });
+    const text = await runChat([
+      { role: "system", content: SYS_ROUTINE },
+      { role: "user", content: prompt },
+    ]);
+    res.json({ routine: text || "Could not generate routine." });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -101,71 +159,59 @@ router.post("/career", async (req, res) => {
   const { topicScores, interests, goals } = req.body;
   try {
     const prompt = `Student performance data:
-Topic scores: ${JSON.stringify(topicScores||{})}
-Interests: ${interests||"Not specified"}
-Goals: ${goals||"Not specified"}
+Topic scores: ${JSON.stringify(topicScores || {})}
+Interests: ${interests || "Not specified"}
+Goals: ${goals || "Not specified"}
 
 Provide career recommendations.`;
-
-    const r = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 8192,
-      messages: [
-        { role:"system", content: SYS_CAREER },
-        { role:"user",   content: prompt },
-      ],
-    });
-    res.json({ recommendations: r.choices[0]?.message?.content || "Could not generate recommendations." });
+    const text = await runChat([
+      { role: "system", content: SYS_CAREER },
+      { role: "user", content: prompt },
+    ]);
+    res.json({ recommendations: text || "Could not generate recommendations." });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-/* POST /api/ai/explain  — explain a specific topic/question */
+/* POST /api/ai/explain — streaming */
 router.post("/explain", async (req, res) => {
   const { question, topic, level } = req.body;
-  res.setHeader("Content-Type","text/event-stream");
-  res.setHeader("Cache-Control","no-cache");
-  res.setHeader("Connection","keep-alive");
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
   try {
-    const stream = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 8192,
-      messages: [
-        { role:"system", content: SYS_TUTOR },
-        { role:"user",   content: `Please explain this ${topic||"topic"} at ${level||"HSC"} level:\n\n${question}` },
+    await streamChat(
+      [
+        { role: "system", content: SYS_TUTOR },
+        { role: "user", content: `Please explain this ${topic || "topic"} at ${level || "HSC"} level:\n\n${question}` },
       ],
-      stream: true,
-    });
-    for await (const chunk of stream) {
-      const c = chunk.choices[0]?.delta?.content;
-      if (c) res.write(`data: ${JSON.stringify({content:c})}\n\n`);
-    }
-    res.write(`data: ${JSON.stringify({done:true})}\n\n`);
-    res.end();
+      res,
+    );
   } catch (err: any) {
-    res.write(`data: ${JSON.stringify({error: err.message})}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
     res.end();
   }
 });
 
-/* POST /api/ai/generate-questions  — generate quiz questions on a topic */
+/* POST /api/ai/generate-questions */
 router.post("/generate-questions", async (req, res) => {
   const { topic, count, level, type } = req.body;
   try {
-    const r = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 8192,
-      messages: [
-        { role:"system", content: "You are a question generator for Bangladeshi exam prep. Generate MCQ questions in JSON format only. No extra text." },
-        { role:"user",   content: `Generate ${count||5} MCQ questions on "${topic}" for ${level||"HSC"} ${type||"Science"} students.
+    const text = await runChat(
+      [
+        { role: "system", content: "You are a question generator for Bangladeshi exam prep. Generate MCQ questions in JSON format only. No extra text." },
+        {
+          role: "user",
+          content: `Generate ${count || 5} MCQ questions on "${topic}" for ${level || "HSC"} ${type || "Science"} students.
 Return JSON array: [{"text":"question","options":[{"id":"A","text":"..."},{"id":"B","text":"..."},{"id":"C","text":"..."},{"id":"D","text":"..."}],"correct":"A","solution":"explanation"}]
-Use LaTeX for math: $x^2$. Bengali is allowed.` },
+Use LaTeX for math: $x^2$. Bengali is allowed.`,
+        },
       ],
-    });
-    const raw = r.choices[0]?.message?.content || "[]";
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return res.status(422).json({ error:"Could not parse questions" });
+      { temperature: 0.4 },
+    );
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return res.status(422).json({ error: "Could not parse questions", raw: text.slice(0, 400) });
     res.json({ questions: JSON.parse(match[0]) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
