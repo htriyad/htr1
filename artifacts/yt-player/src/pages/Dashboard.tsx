@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import Header from "../components/Header";
 
 const MENU = [
+  { label: "Skill Map",        icon: "🌳", bg: "#ede9fe", chevron: "#7c3aed", path: "/skills" },
   { label: "Live Class",       icon: "👨‍🏫", bg: "#e8f5e9", chevron: "#e53935" },
   { label: "Live Exam",        icon: "📝", bg: "#e3f2fd", chevron: "#2e7d32" },
   { label: "Practice Exam",   icon: "💻", bg: "#fff3e0", chevron: "#2e7d32" },
@@ -92,7 +93,8 @@ export default function Dashboard() {
               key={item.label}
               className="dash-menu-item"
               onClick={() => {
-                if (item.label === "Past Classes") navigate("/past-classes");
+                if ((item as any).path) navigate((item as any).path);
+                else if (item.label === "Past Classes") navigate("/past-classes");
               }}
             >
               <div className="dash-menu-icon" style={{ background: item.bg }}>

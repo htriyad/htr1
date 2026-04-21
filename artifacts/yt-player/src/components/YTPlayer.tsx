@@ -305,16 +305,36 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   }
   function toggleCC() {
     const p = playerRef.current; if (!p) return;
+    const next = !ccOn;
+    setCcOn(next);
     try {
-      if (ccOn) {
-        p.unloadModule("captions");
-        p.unloadModule("cc");
-        setCcOn(false);
-      } else {
+      if (next) {
+        // Load both module names YouTube has used historically
         p.loadModule("captions");
         p.loadModule("cc");
-        try { p.setOption("captions", "track", { languageCode: "en" }); } catch {}
-        setCcOn(true);
+        // Pick first available track (or fall back to English) once tracklist is ready
+        const applyTrack = (attempt = 0) => {
+          try {
+            const tracks: any[] =
+              p.getOption("captions", "tracklist") ||
+              p.getOption("cc", "tracklist") ||
+              [];
+            const t = tracks[0] || { languageCode: "en" };
+            p.setOption("captions", "track", t);
+            p.setOption("cc", "track", t);
+            try { p.setOption("captions", "reload", true); } catch {}
+            try { p.setOption("captions", "fontSize", 1); } catch {}
+            if (!tracks.length && attempt < 4) setTimeout(() => applyTrack(attempt + 1), 400);
+          } catch {
+            if (attempt < 4) setTimeout(() => applyTrack(attempt + 1), 400);
+          }
+        };
+        setTimeout(() => applyTrack(0), 250);
+      } else {
+        try { p.setOption("captions", "track", {}); } catch {}
+        try { p.setOption("cc", "track", {}); } catch {}
+        try { p.unloadModule("captions"); } catch {}
+        try { p.unloadModule("cc"); } catch {}
       }
     } catch {}
     handleInteraction();
@@ -373,13 +393,21 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
       {/* YouTube iframe target */}
       <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
 
-      {/* TOP BAR — covers YouTube branding at top */}
-      <div className="ytp-top-bar" style={{ opacity: showTop ? 1 : 0 }}>
+      {/* TOP BAR — covers YouTube branding at top.
+          Visible whenever YT might show its own overlay: not started, paused, buffering,
+          or whenever our own controls are visible. */}
+      <div
+        className="ytp-top-bar"
+        style={{ opacity: (showTop || showCtrl || buffering || !started || !playing) ? 1 : 0 }}
+      >
         <span className="ytp-video-title">{title}</span>
       </div>
 
-      {/* BOTTOM COVER — covers YouTube logo + share button */}
-      <div className="ytp-bottom-cover" />
+      {/* BOTTOM COVER — covers YouTube logo + share button. Same visibility rule. */}
+      <div
+        className="ytp-bottom-cover"
+        style={{ opacity: (showCtrl || buffering || !started || !playing) ? 1 : 0 }}
+      />
 
       {/* MAIN OVERLAY — z-index 999, intercepts ALL clicks (Udvash technique) */}
       <div className="ytp-overlay">
