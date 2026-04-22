@@ -13,6 +13,7 @@ interface MenuItem {
 }
 
 const FALLBACK_MENU: MenuItem[] = [
+  { label: "Course & Content", icon: "📚", bg: "#e0e7ff", chevron: "#4338ca", path: "/courses" },
   { label: "AI Tutor",         icon: "🤖", bg: "#ede9fe", chevron: "#7c3aed", path: "/ai-tutor" },
   { label: "Past Classes",     icon: "🎬", bg: "#fff3e0", chevron: "#e65100", path: "/past-classes" },
   { label: "Live Exam",        icon: "📝", bg: "#e3f2fd", chevron: "#2e7d32", path: "/exams" },
@@ -24,7 +25,7 @@ const FALLBACK_MENU: MenuItem[] = [
 const SIDEBAR_ITEMS = [
   { label: "Dashboard",        icon: "⊞",  path: "/" },
   { label: "Add Course",       icon: "➕",  path: "/" },
-  { label: "Course & Content", icon: "📚", path: "/" },
+  { label: "Course & Content", icon: "📚", path: "/courses" },
   { label: "Master Class",     icon: "🖥️", path: "/" },
   { label: "Foundation Class", icon: "🔴", path: "/" },
   { label: "Past Classes",     icon: "👥", path: "/past-classes" },

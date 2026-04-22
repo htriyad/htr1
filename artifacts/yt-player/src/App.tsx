@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import Dashboard from "./pages/Dashboard";
 import PastClasses from "./pages/PastClasses";
+import Courses from "./pages/Courses";
 import VideoPage from "./pages/VideoPage";
 import Admin from "./pages/Admin";
 import IpGate from "./pages/IpGate";
@@ -83,6 +84,7 @@ export default function App() {
     <Switch>
       <Route path="/"                component={Dashboard} />
       <Route path="/past-classes"    component={PastClasses} />
+      <Route path="/courses"         component={Courses} />
       <Route path="/video/:videoId"  component={VideoPage} />
       <Route path="/exams"           component={ExamList} />
       <Route path="/exam/:examId"    component={ExamTake} />
