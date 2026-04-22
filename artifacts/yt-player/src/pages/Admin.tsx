@@ -1580,7 +1580,17 @@ function Field({label,children}:{label:string;children:React.ReactNode}){
 }
 function Feedback({msg,style}:{msg:string;style?:React.CSSProperties}){
   const ok=msg.startsWith("✅");
-  return <div style={{padding:"8px 12px",borderRadius:8,background:ok?"#d4edda":"#fff3cd",border:`1px solid ${ok?"#c3e6cb":"#ffc107"}`,fontSize:13,color:ok?"#155724":"#856404",...style}}>{msg}</div>;
+  // Linkify any http/https URLs so users can click straight through
+  const parts:(string|JSX.Element)[]=[];
+  const re=/(https?:\/\/[^\s)]+)/g;
+  let last=0,m:RegExpExecArray|null,i=0;
+  while((m=re.exec(msg))){
+    if(m.index>last) parts.push(msg.slice(last,m.index));
+    parts.push(<a key={i++} href={m[1]} target="_blank" rel="noopener noreferrer" style={{color:"inherit",textDecoration:"underline",fontWeight:700,wordBreak:"break-all"}}>{m[1]}</a>);
+    last=m.index+m[1].length;
+  }
+  if(last<msg.length) parts.push(msg.slice(last));
+  return <div style={{padding:"8px 12px",borderRadius:8,background:ok?"#d4edda":"#fff3cd",border:`1px solid ${ok?"#c3e6cb":"#ffc107"}`,fontSize:13,color:ok?"#155724":"#856404",whiteSpace:"pre-wrap",wordBreak:"break-word",...style}}>{parts.length?parts:msg}</div>;
 }
 function Empty({icon,text}:{icon:string;text:string}){
   return <div style={{textAlign:"center",padding:"36px 0",color:"var(--sub)"}}><div style={{fontSize:36}}>{icon}</div><p style={{marginTop:10,fontSize:14}}>{text}</p></div>;

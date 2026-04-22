@@ -36,5 +36,13 @@
       }
     ],
     "createdAt": "2026-04-22T03:43:01.949Z"
+  },
+  {
+    "id": "sub-43ba4d44",
+    "name": "Hsc English",
+    "course": "",
+    "color": "#7c3aed",
+    "chapters": [],
+    "createdAt": "2026-04-22T03:55:38.274Z"
   }
 ]

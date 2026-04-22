@@ -9,8 +9,25 @@ import { Router } from "express";
 const router = Router();
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "";
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+/* Primary + fallback chain — fallback kicks in on 429 (quota) or 503 (overloaded).
+   2.5-flash-lite has the largest free-tier daily quota; 2.0-flash is last resort. */
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const FALLBACKS = (process.env.GEMINI_FALLBACKS || "gemini-2.5-flash-lite,gemini-2.0-flash-lite,gemini-2.0-flash")
+  .split(",").map(s => s.trim()).filter(Boolean);
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+function modelChain(): string[] {
+  const all = [MODEL, ...FALLBACKS];
+  return Array.from(new Set(all));
+}
+function friendlyGeminiError(status: number, raw: string): string {
+  const t = (raw || "").slice(0, 400);
+  if (status === 429) return "AI is rate-limited right now (free-tier quota exceeded for all available models). Please wait a minute and try again, or set a different GOOGLE_API_KEY with higher quota.";
+  if (status === 503) return "Gemini is temporarily overloaded. Please try again in a few seconds.";
+  if (status === 401 || status === 403) return "Gemini API key is missing, invalid, or doesn't have access. Check your GOOGLE_API_KEY in Secrets.";
+  if (status === 400 && /API key not valid/i.test(t)) return "Your GOOGLE_API_KEY is not valid. Generate a new one at https://aistudio.google.com/apikey";
+  return `Gemini ${status}: ${t}`;
+}
 
 const BRAND = "Red Rose 🥀 AI";
 
@@ -60,18 +77,24 @@ async function runChat(messages: Msg[], opts: { temperature?: number } = {}): Pr
     ...toGemini(messages),
     generationConfig: { temperature: opts.temperature ?? 0.6, maxOutputTokens: 1500 },
   };
-  const r = await fetch(`${BASE}/models/${MODEL}:generateContent?key=${GOOGLE_API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`Gemini ${r.status}: ${txt.slice(0, 250)}`);
+  let lastStatus = 0, lastTxt = "";
+  for (const model of modelChain()) {
+    const r = await fetch(`${BASE}/models/${model}:generateContent?key=${GOOGLE_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      const data: any = await r.json();
+      const parts = data?.candidates?.[0]?.content?.parts ?? [];
+      return parts.map((p: any) => p?.text || "").join("");
+    }
+    lastStatus = r.status;
+    lastTxt = await r.text().catch(() => "");
+    // only fall through to next model on quota / overload
+    if (r.status !== 429 && r.status !== 503) break;
   }
-  const data: any = await r.json();
-  const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  return parts.map((p: any) => p?.text || "").join("");
+  throw new Error(friendlyGeminiError(lastStatus, lastTxt));
 }
 
 async function streamChat(messages: Msg[], res: any) {
@@ -84,19 +107,25 @@ async function streamChat(messages: Msg[], res: any) {
     ...toGemini(messages),
     generationConfig: { temperature: 0.6, maxOutputTokens: 1500 },
   };
-  // alt=sse gives clean SSE frames with JSON chunks.
-  const upstream = await fetch(
-    `${BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GOOGLE_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(body),
-    },
-  );
-
-  if (!upstream.ok || !upstream.body) {
-    const txt = await upstream.text().catch(() => "");
-    res.write(`data: ${JSON.stringify({ error: `Gemini ${upstream.status}: ${txt.slice(0, 250)}` })}\n\n`);
+  // Try each model in the chain, falling back on 429 (quota) or 503 (overloaded).
+  let upstream: Response | null = null;
+  let lastStatus = 0, lastTxt = "";
+  for (const model of modelChain()) {
+    const r = await fetch(
+      `${BASE}/models/${model}:streamGenerateContent?alt=sse&key=${GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify(body),
+      },
+    );
+    if (r.ok && r.body) { upstream = r; break; }
+    lastStatus = r.status;
+    lastTxt = await r.text().catch(() => "");
+    if (r.status !== 429 && r.status !== 503) break;
+  }
+  if (!upstream || !upstream.body) {
+    res.write(`data: ${JSON.stringify({ error: friendlyGeminiError(lastStatus, lastTxt) })}\n\n`);
     res.end();
     return;
   }

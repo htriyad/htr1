@@ -551,7 +551,22 @@ router.post("/admin/videos/import-playlist", adminAuth, async (req, res) => {
       const r = await fetch(url.toString());
       if (!r.ok) {
         const txt = await r.text().catch(() => "");
-        return res.status(r.status).json({ error: `YouTube API ${r.status}: ${txt.slice(0, 250)}` });
+        let projectId = "";
+        try { const j = JSON.parse(txt); projectId = String(j?.error?.details?.[0]?.metadata?.consumer || "").replace(/^projects\//, ""); } catch {}
+        let friendly = `YouTube API ${r.status}: ${txt.slice(0, 250)}`;
+        if (r.status === 403 && /SERVICE_DISABLED|has not been used|is disabled/i.test(txt)) {
+          const enableUrl = projectId
+            ? `https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=${projectId}`
+            : "https://console.developers.google.com/apis/api/youtube.googleapis.com/overview";
+          friendly = `YouTube Data API v3 is not enabled for the Google Cloud project that owns your GOOGLE_API_KEY. Enable it here (takes ~10 seconds, then wait 1–2 min and retry): ${enableUrl}`;
+        } else if (r.status === 403 && /quota/i.test(txt)) {
+          friendly = "YouTube Data API daily quota exceeded for this key. Wait until tomorrow or use a different GOOGLE_API_KEY.";
+        } else if (r.status === 404) {
+          friendly = "Playlist not found. Make sure the playlist is Public or Unlisted (Private playlists cannot be imported without OAuth).";
+        } else if (r.status === 400 && /API key not valid/i.test(txt)) {
+          friendly = "GOOGLE_API_KEY is invalid. Generate a new one at https://aistudio.google.com/apikey or in Google Cloud Console.";
+        }
+        return res.status(r.status).json({ error: friendly });
       }
       const data: any = await r.json();
       for (const it of data.items || []) {
