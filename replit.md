@@ -10,14 +10,34 @@ pnpm workspace monorepo using TypeScript. Educational platform for Bangladeshi s
 - `artifacts/mockup-sandbox` — Component preview sandbox (preview path: `/__mockup`)
 
 ## Key Features
-- **Sequential Playlist**: VideoPage loads all videos in the same subject/chapter, shows a side playlist panel, auto-advances to next video on end, and shows prev/next navigation
-- **Mobile Data Access**: IpGate detects OS/browser/device type/connection type (mobile data vs WiFi), includes info in admin inbox; admin can approve IP or create a personal login account for mobile data users via "Quick Create Account"
-- **Content Request System**: Students can click "Request" on any subject in Courses to send an access request to admin inbox; admin sees content requests distinctly labeled
-- **Admin Inbox**: Shows device info badges (OS, browser, device type, connection type), "📶 MOBILE DATA" badge, "📚 CONTENT REQUEST" badge, and inline Quick Create Account form per message
-- **IP-based + Universal Access**: WiFi users can be approved by IP; mobile data users get a username/password account that works from any network
-- **YouTube Playlist Import**: Bulk import preserves original playlist order for sequential playback
-- **AI Tutor**: Gemini-powered chatbot with LaTeX/math support, Bangla+English, streaming responses
-- **Gamification**: XP, levels, badges, streaks, leaderboard
+
+### Security
+- **Bot/Flood Auto-Block**: Tracks request rate per IP. >60 requests/min → auto-blocked, logged as security alert in admin inbox
+- **VPN/Proxy Detection**: Uses ip-api.com (proxy+hosting fields). Blocked users see a full-page VPN error. Results cached 24h per IP. Fails open on timeout
+- **Ban System**: Users and IPs can be banned independently. Banned = instant 403 on every request; banned users are instantly logged out
+- **One-Device Restriction**: First login fingerprints the device (hash of userAgent|screen|language|cores|timezone). Different device = "deviceLocked" error. Admin can reset device lock per-user
+- **Rate Limit**: Max 2 access requests per IP per week (7 days sliding window) via POST /message
+- **DevTools Detection**: Client-side, uses window dimension diff (>160px) + Image.id trick. Shows red fullscreen overlay, sends security alert to admin once per session
+- **Security Alert Endpoint**: POST /api/security/alert receives alertType (devtools/extension/view-source), username, details → stored in msgs.json as type "security-alert"
+- **Localhost Bypass**: 127.0.0.1 / ::1 always passes all security checks (dev environment)
+
+### Access Control
+- **IP-based Access**: WiFi users approved by IP. Admin can approve + set a real name. IP ban blocks them permanently
+- **Universal User Accounts**: Students log in from any network with username+password. One account = one device (device-fingerprint locked)
+- **Universal Access Flag**: Admin can toggle universalAccess per user (stored in users.json)
+- **Name Sync**: POST /admin/msgs/:id/approve-ip approves the IP AND syncs the student's full name from the access request
+
+### Content
+- **Sequential Playlist**: VideoPage auto-advances, side playlist panel, prev/next navigation
+- **Playlist Import**: POST /admin/playlist/fetch-import auto-saves all videos to DB in one step. POST /admin/playlist/fetch → POST /admin/videos/bulk for two-step workflow
+- **Subjects & Chapters**: Full CRUD; videos assigned to subjects/chapters
+- **Content Request**: Students request subject access, admin sees in Inbox
+
+### Admin Panel
+- **Inbox**: Filterable by All / Access / Content / 🚨 Security. Security alerts shown in red. fullName prominently displayed per access request
+- **Users Tab**: Ban/Unban toggle, Universal Access toggle, Reset Device button, device-lock badge, banned red borders
+- **IPs Tab**: Name column, Ban IP toggle, banned badge, name field when manually adding IPs
+- **Quick Create Account**: From inbox message, auto-fills note with student's fullName
 
 ## Stack
 
@@ -26,17 +46,21 @@ pnpm workspace monorepo using TypeScript. Educational platform for Bangladeshi s
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Database**: JSON files in `artifacts/api-server/data/` (ips.json, users.json, msgs.json, vids.json, subjects.json, quizzes.json, notifs.json, dashmenu.json)
 
-## Key Commands
+## Admin Credentials
+- Username: `htr`
+- Password: `htr0`
+- URL: `/admin`
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+## Data File Notes
+- `ips.json`: `{ [ip]: { approvedAt, name?, banned? } }`
+- `users.json`: `{ id, username, password, note?, banned?, universalAccess?, firstLoginDevice?, firstLoginAt? }`
+- `msgs.json`: `{ id, ip, fullName?, message, timestamp, status, type (access-request|content-request|security-alert), alertType?, deviceInfo? }`
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## In-Memory Stores (API Server)
+- `ADMIN_SESSIONS` — Set of active admin tokens
+- `USER_SESSIONS` — Map of token → username
+- `RATE_WINDOW` — Map of ip → request timestamps[] (last 60s)
+- `BOT_BLOCKED` — Set of auto-blocked IPs (flood/bot)
+- `VPN_CACHE` — Map of ip → { isVpn, checkedAt } (24h TTL)

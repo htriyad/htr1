@@ -171,7 +171,10 @@ function OverviewTab() {
 
 /* ══ USERS ══════════════════════════════════════════════════ */
 function UsersTab() {
-  const [users,setUsers]=useState<any[]>([]); const [form,setForm]=useState({username:"",password:"",note:""}); const [saving,setSaving]=useState(false); const [msg,setMsg]=useState("");
+  const [users,setUsers]=useState<any[]>([]);
+  const [form,setForm]=useState({username:"",password:"",note:"",universalAccess:false});
+  const [saving,setSaving]=useState(false);
+  const [msg,setMsg]=useState("");
   const load=()=>api("/api/admin/users").then(r=>r.json()).then(d=>{if(Array.isArray(d))setUsers(d);});
   useEffect(()=>{load();},[]);
   async function create(){
@@ -179,32 +182,67 @@ function UsersTab() {
     setSaving(true);
     const r=await api("/api/admin/users",{method:"POST",body:JSON.stringify(form)});
     const d=await r.json(); setSaving(false);
-    if(d.error) setMsg(d.error); else {setMsg("✅ User created! They can login from ANY device/IP.");setForm({username:"",password:"",note:""});load();}
+    if(d.error) setMsg(d.error);
+    else {setMsg("✅ User created! They can login from any device/IP.");setForm({username:"",password:"",note:"",universalAccess:false});load();}
   }
-  async function del(id:string){if(!confirm("Delete user?"))return; await api(`/api/admin/users/${id}`,{method:"DELETE"}); load();}
+  async function del(id:string){if(!confirm("Delete user? They will be logged out and lose access."))return; await api(`/api/admin/users/${id}`,{method:"DELETE"}); load();}
+  async function toggleBan(id:string,banned:boolean){
+    if(!confirm(banned?"Unban this user? They will regain access.":"BAN this user? They will be permanently blocked from accessing the platform."))return;
+    const r=await api(`/api/admin/users/${id}/ban`,{method:"PATCH"});
+    const d=await r.json();
+    if(d.error) alert("❌ "+d.error); else load();
+  }
+  async function toggleUniversal(id:string,current:boolean){
+    const r=await api(`/api/admin/users/${id}/universal-access`,{method:"PATCH"});
+    const d=await r.json();
+    if(d.error) alert("❌ "+d.error);
+    else {alert(d.universalAccess?"✅ Universal Access granted — student can access ALL courses.":"✅ Universal Access revoked.");load();}
+  }
+  async function resetDevice(id:string){
+    if(!confirm("Reset device lock? Student will be able to log in from a new device."))return;
+    const r=await api(`/api/admin/users/${id}/reset-device`,{method:"PATCH"});
+    const d=await r.json();
+    if(d.error) alert("❌ "+d.error); else {alert("✅ Device lock reset.");load();}
+  }
   return (
     <div>
       <SectionTitle>👤 Universal Users</SectionTitle>
-      <InfoBox>Universal users can log in from <b>any IP address</b> — no IP restriction. Create accounts for your students here.</InfoBox>
+      <InfoBox>Universal users log in from <b>any network</b>. One account = one device (first login locks the device). You can reset device locks below. Ban = permanent block. Delete = remove account (user can re-request).</InfoBox>
       <Card title="➕ Create New Student Account">
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Field label="Username (student will use this to login)"><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="e.g. student01" style={inp}/></Field>
+          <Field label="Username"><input value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="e.g. student01" style={inp}/></Field>
           <Field label="Password"><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Set a password" style={inp}/></Field>
           <Field label="Note (optional)"><input value={form.note} onChange={e=>setForm({...form,note:e.target.value})} placeholder="e.g. Batch 2025 - Dhaka" style={inp}/></Field>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer"}}>
+            <input type="checkbox" checked={form.universalAccess} onChange={e=>setForm({...form,universalAccess:e.target.checked})} style={{width:16,height:16,accentColor:"var(--purple)"}}/>
+            Grant Universal Access (access to ALL courses)
+          </label>
           {msg&&<Feedback msg={msg}/>}
-          <button onClick={create} disabled={saving} style={btnStyle("var(--purple)")}>{saving?"Creating...":"Create Universal Account +"}</button>
+          <button onClick={create} disabled={saving} style={btnStyle("var(--purple)")}>{saving?"Creating...":"Create Account +"}</button>
         </div>
       </Card>
       <SectionTitle style={{marginTop:24}}>All Users ({users.length})</SectionTitle>
       {users.length===0&&<Empty icon="👤" text="No universal users yet"/>}
       {users.map(u=>(
-        <div key={u.id} style={{...listItem,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{width:38,height:38,borderRadius:50,background:"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:16,flexShrink:0}}>{u.username[0]?.toUpperCase()}</div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,color:"var(--text)"}}>{u.username}</div>
-            <div style={{fontSize:11,color:"var(--sub)"}}>{u.note||"No note"} · Created {new Date(u.createdAt).toLocaleDateString()}</div>
+        <div key={u.id} style={{...listItem,borderLeft:u.banned?"4px solid #dc2626":"4px solid transparent",opacity:u.banned?0.7:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+            <div style={{width:38,height:38,borderRadius:50,background:u.banned?"#dc2626":"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:16,flexShrink:0}}>{u.username[0]?.toUpperCase()}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontWeight:700,color:"var(--text)"}}>{u.username}</span>
+                {u.banned&&<span style={{fontSize:10,background:"#dc2626",color:"#fff",borderRadius:4,padding:"1px 6px",fontWeight:700}}>🚫 BANNED</span>}
+                {u.universalAccess&&<span style={{fontSize:10,background:"#7c3aed",color:"#fff",borderRadius:4,padding:"1px 6px",fontWeight:700}}>🌐 UNIVERSAL</span>}
+                {u.firstLoginDevice&&<span style={{fontSize:10,background:"#e0f2fe",color:"#0369a1",borderRadius:4,padding:"1px 6px",fontWeight:600}}>📱 Device Locked</span>}
+              </div>
+              <div style={{fontSize:11,color:"var(--sub)",marginTop:2}}>{u.note||"No note"} · Created {new Date(u.createdAt).toLocaleDateString()}{u.firstLoginAt?` · First login ${new Date(u.firstLoginAt).toLocaleDateString()}`:""}</div>
+            </div>
           </div>
-          <button onClick={()=>del(u.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <button onClick={()=>toggleBan(u.id,u.banned)} style={smBtn(u.banned?"var(--green)":"#dc2626")}>{u.banned?"✅ Unban":"🚫 Ban"}</button>
+            <button onClick={()=>toggleUniversal(u.id,u.universalAccess)} style={smBtn(u.universalAccess?"#888":"#7c3aed")}>{u.universalAccess?"Revoke Universal":"🌐 Universal Access"}</button>
+            {u.firstLoginDevice&&<button onClick={()=>resetDevice(u.id)} style={smBtn("var(--navy)")}>🔄 Reset Device</button>}
+            <button onClick={()=>del(u.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
+          </div>
         </div>
       ))}
     </div>
@@ -213,28 +251,45 @@ function UsersTab() {
 
 /* ══ IPs ════════════════════════════════════════════════════ */
 function IPsTab() {
-  const [ips,setIps]=useState<any[]>([]); const [newIp,setNewIp]=useState(""); const [msg,setMsg]=useState("");
+  const [ips,setIps]=useState<any[]>([]); const [newIp,setNewIp]=useState(""); const [newName,setNewName]=useState(""); const [msg,setMsg]=useState("");
   const load=()=>api("/api/admin/ips").then(r=>r.json()).then(d=>{if(Array.isArray(d))setIps(d);});
   useEffect(()=>{load();},[]);
-  async function add(){if(!newIp.trim())return; await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip:newIp.trim()})}); setNewIp(""); setMsg("✅ IP approved!"); load();}
+  async function add(){
+    if(!newIp.trim())return;
+    await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip:newIp.trim(),name:newName.trim()||undefined})});
+    setNewIp(""); setNewName(""); setMsg("✅ IP approved!"); load();
+  }
   async function del(ip:string){await api(`/api/admin/ips/${encodeURIComponent(ip)}`,{method:"DELETE"}); load();}
+  async function toggleBan(ip:string){
+    const r=await api(`/api/admin/ips/${encodeURIComponent(ip)}/ban`,{method:"PATCH"});
+    const d=await r.json();
+    if(d.error) alert("❌ "+d.error); else load();
+  }
   return (
     <div>
       <SectionTitle>🌐 IP Access Control</SectionTitle>
-      <InfoBox>Only approved IPs can access content. Add an IP to grant access without a login account.</InfoBox>
+      <InfoBox>Approved IPs can access content without a login. Names are synced from access requests. Banned IPs are permanently blocked.</InfoBox>
       <Card title="➕ Approve New IP">
-        <div style={{display:"flex",gap:8}}>
-          <input value={newIp} onChange={e=>setNewIp(e.target.value)} placeholder="e.g. 103.123.45.67" style={{...inp,flex:1}}/>
-          <button onClick={add} style={btnStyle("var(--navy)")}>Add IP</button>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"end"}}>
+          <Field label="IP Address"><input value={newIp} onChange={e=>setNewIp(e.target.value)} placeholder="103.123.45.67" style={inp}/></Field>
+          <Field label="Name (optional)"><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Student name" style={inp}/></Field>
+          <button onClick={add} style={{...btnStyle("var(--navy)"),alignSelf:"end"}}>Add IP</button>
         </div>
         {msg&&<Feedback msg={msg} style={{marginTop:8}}/>}
       </Card>
       <SectionTitle style={{marginTop:24}}>Approved IPs ({ips.length})</SectionTitle>
       {ips.length===0&&<Empty icon="🌐" text="No approved IPs yet"/>}
       {ips.map(i=>(
-        <div key={i.ip} style={{...listItem,display:"flex",alignItems:"center",gap:12}}>
-          <code style={{flex:1,fontSize:14,fontWeight:700,color:"var(--purple)"}}>{i.ip}</code>
-          <div style={{fontSize:11,color:"var(--sub)"}}>Since {new Date(i.approvedAt).toLocaleDateString()}</div>
+        <div key={i.ip} style={{...listItem,display:"flex",alignItems:"center",gap:10,borderLeft:i.banned?"4px solid #dc2626":"4px solid transparent",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:140}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <code style={{fontSize:13,fontWeight:700,color:i.banned?"#dc2626":"var(--purple)"}}>{i.ip}</code>
+              {i.banned&&<span style={{fontSize:10,background:"#dc2626",color:"#fff",borderRadius:4,padding:"1px 6px",fontWeight:700}}>🚫 BANNED</span>}
+            </div>
+            {i.name&&<div style={{fontSize:12,fontWeight:600,color:"var(--text)",marginTop:2}}>👤 {i.name}</div>}
+            <div style={{fontSize:11,color:"var(--sub)"}}>Since {new Date(i.approvedAt).toLocaleDateString()}</div>
+          </div>
+          <button onClick={()=>toggleBan(i.ip)} style={smBtn(i.banned?"var(--green)":"#dc2626")}>{i.banned?"✅ Unban":"🚫 Ban IP"}</button>
           <button onClick={()=>del(i.ip)} style={smBtn("var(--orange)")}>✕ Remove</button>
         </div>
       ))}
@@ -248,9 +303,16 @@ function InboxTab() {
   const [expandQuick,setExpandQuick]=useState<Record<string,boolean>>({});
   const [quickForm,setQuickForm]=useState<Record<string,{username:string;password:string;note:string}>>({});
   const [quickMsg,setQuickMsg]=useState<Record<string,string>>({});
+  const [filter,setFilter]=useState<"all"|"access"|"content"|"security">("all");
   const load=()=>api("/api/admin/msgs").then(r=>r.json()).then(d=>{if(Array.isArray(d))setMsgs(d);});
   useEffect(()=>{load();},[]);
-  async function approveIp(ip:string){await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip})}); alert(`✅ IP ${ip} approved!`);}
+
+  async function approveIpFromMsg(id:string){
+    const r=await api(`/api/admin/msgs/${id}/approve-ip`,{method:"POST"});
+    const d=await r.json();
+    if(d.error) alert("❌ "+d.error);
+    else {alert(`✅ IP ${d.ip} approved${d.name?` for ${d.name}`:""}! Name synced.`); load();}
+  }
   async function dismiss(id:string){await api(`/api/admin/msgs/${id}`,{method:"PATCH"}); load();}
   async function del(id:string){await api(`/api/admin/msgs/${id}`,{method:"DELETE"}); load();}
   async function createUserFromMsg(id:string){
@@ -262,48 +324,101 @@ function InboxTab() {
     else{setQuickMsg({...quickMsg,[id]:`✅ Account @${d.username} created! Message marked as noted.`});setExpandQuick({...expandQuick,[id]:false});load();}
   }
   const pending=msgs.filter(m=>m.status==="pending");
+  const securityCount=msgs.filter(m=>m.type==="security-alert"&&m.status==="pending").length;
+  const filtered=msgs.filter(m=>{
+    if(filter==="access") return m.type==="access-request";
+    if(filter==="content") return m.type==="content-request";
+    if(filter==="security") return m.type==="security-alert";
+    return true;
+  });
   return (
     <div>
-      <SectionTitle>📨 Student Inbox {pending.length>0&&<span style={{background:"var(--orange)",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,marginLeft:8}}>{pending.length} new</span>}</SectionTitle>
-      <InfoBox>Access requests from students. For <b>mobile data users</b> (who have changing IPs), use <b>Quick Create Account</b> to give them a permanent login instead.</InfoBox>
-      {msgs.length===0&&<Empty icon="📭" text="Inbox is empty"/>}
-      {msgs.map(m=>{
+      <SectionTitle>📨 Inbox
+        {pending.length>0&&<span style={{background:"var(--orange)",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,marginLeft:8}}>{pending.length} new</span>}
+        {securityCount>0&&<span style={{background:"#dc2626",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,marginLeft:6}}>🚨 {securityCount} security</span>}
+      </SectionTitle>
+      <InfoBox>All student messages, access requests, content requests, and security alerts.</InfoBox>
+
+      {/* Filter tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {(["all","access","content","security"] as const).map(f=>(
+          <button key={f} onClick={()=>setFilter(f)} style={{
+            padding:"5px 14px",borderRadius:20,border:"1.5px solid var(--border)",
+            background:filter===f?(f==="security"?"#dc2626":"var(--purple)"):"transparent",
+            color:filter===f?"#fff":"var(--sub)",fontWeight:600,fontSize:12,cursor:"pointer",
+          }}>
+            {f==="all"?"All":f==="access"?"📨 Access":f==="content"?"📚 Content":"🚨 Security"}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length===0&&<Empty icon="📭" text="No messages in this category"/>}
+      {filtered.map(m=>{
         const di=m.deviceInfo;
         const isMobile=di?.isMobileData;
         const isContent=m.type==="content-request";
+        const isSecAlert=m.type==="security-alert";
         const qf=quickForm[m.id]||{username:"",password:"",note:""};
         const setQf=(v:any)=>setQuickForm({...quickForm,[m.id]:{...qf,...v}});
         return(
-          <div key={m.id} style={{...listItem,opacity:m.status==="noted"?0.65:1,borderLeft:isContent?"4px solid var(--purple)":isMobile?"4px solid var(--orange)":"4px solid transparent"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-              <code style={{background:"var(--bg)",padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:700,color:"var(--purple)"}}>{m.ip}</code>
+          <div key={m.id} style={{
+            ...listItem,
+            opacity:m.status==="noted"?0.65:1,
+            borderLeft:isSecAlert?"4px solid #dc2626":isContent?"4px solid var(--purple)":isMobile?"4px solid var(--orange)":"4px solid transparent",
+            background:isSecAlert?"#fff5f5":undefined,
+          }}>
+            {/* Header row */}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+              <code style={{background:"var(--bg)",padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:700,color:isSecAlert?"#dc2626":"var(--purple)"}}>{m.ip}</code>
               {m.status==="pending"&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>NEW</span>}
+              {isSecAlert&&<span style={{fontSize:10,background:"#dc2626",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>🚨 SECURITY ALERT</span>}
               {isContent&&<span style={{fontSize:10,background:"var(--purple)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>📚 CONTENT REQUEST</span>}
               {isMobile&&<span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>📶 MOBILE DATA</span>}
               <span style={{fontSize:11,color:"var(--sub)",marginLeft:"auto"}}>{new Date(m.timestamp).toLocaleString()}</span>
             </div>
+
+            {/* Full name (if present) */}
+            {m.fullName&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,padding:"6px 10px",background:"#f0fdf4",borderRadius:8,border:"1px solid #86efac"}}>
+                <span style={{fontSize:14}}>👤</span>
+                <div>
+                  <div style={{fontSize:10,color:"#166534",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>Full Name Provided</div>
+                  <div style={{fontSize:14,fontWeight:800,color:"#14532d"}}>{m.fullName}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Device info */}
             {di&&(
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
                 {di.deviceType&&<DeviceBadge icon={di.deviceType==="Mobile"?"📱":"💻"} text={di.deviceType}/>}
                 {di.os&&<DeviceBadge icon="🖥️" text={di.os}/>}
                 {di.browser&&<DeviceBadge icon="🌍" text={di.browser}/>}
                 {di.connectionType&&<DeviceBadge icon={di.isMobileData?"📶":"📡"} text={di.connectionType} highlight={di.isMobileData}/>}
               </div>
             )}
+
             <p style={{fontSize:14,color:"var(--text)",margin:"0 0 12px",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{m.message}</p>
+
+            {/* Actions */}
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {!isContent&&<button onClick={()=>approveIp(m.ip)} style={smBtn("var(--green)")}>✔ Approve IP</button>}
-              <button onClick={()=>setExpandQuick({...expandQuick,[m.id]:!expandQuick[m.id]})} style={smBtn("#7c3aed")}>👤 Quick Create Account</button>
+              {!isContent&&!isSecAlert&&(
+                <button onClick={()=>approveIpFromMsg(m.id)} style={smBtn("var(--green)")}>✔ Approve IP + Sync Name</button>
+              )}
+              {!isSecAlert&&(
+                <button onClick={()=>setExpandQuick({...expandQuick,[m.id]:!expandQuick[m.id]})} style={smBtn("#7c3aed")}>👤 Quick Create Account</button>
+              )}
               <button onClick={()=>dismiss(m.id)} style={smBtn("#888")}>✓ Mark Read</button>
               <button onClick={()=>del(m.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
             </div>
+
             {expandQuick[m.id]&&(
               <div style={{marginTop:14,padding:14,background:"var(--bg)",borderRadius:12,border:"1px solid var(--border)"}}>
-                <div style={{fontSize:13,fontWeight:700,color:"var(--purple)",marginBottom:10}}>👤 Create Login Account for this Student</div>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--purple)",marginBottom:10}}>👤 Create Login Account{m.fullName?` for ${m.fullName}`:""}</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  <input value={qf.username} onChange={e=>setQf({username:e.target.value})} placeholder="Username (student will use this)" style={inp}/>
-                  <input type="password" value={qf.password} onChange={e=>setQf({password:e.target.value})} placeholder="Set a password" style={inp}/>
-                  <input value={qf.note} onChange={e=>setQf({note:e.target.value})} placeholder="Note (e.g. Mobile data user - batch 2025)" style={inp}/>
+                  <input value={qf.username} onChange={e=>setQf({username:e.target.value})} placeholder="Username" style={inp}/>
+                  <input type="password" value={qf.password} onChange={e=>setQf({password:e.target.value})} placeholder="Password" style={inp}/>
+                  <input value={qf.note} onChange={e=>setQf({note:e.target.value})} placeholder={m.fullName?`Note (e.g. ${m.fullName})`:""} style={inp}/>
                   {quickMsg[m.id]&&<div style={{fontSize:12,color:quickMsg[m.id].startsWith("✅")?"var(--green)":"var(--orange)"}}>{quickMsg[m.id]}</div>}
                   <button onClick={()=>createUserFromMsg(m.id)} style={{...btnStyle("var(--purple)"),fontSize:13,padding:"9px 0"}}>✅ Create Account & Mark as Resolved</button>
                 </div>

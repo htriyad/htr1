@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import Dashboard from "./pages/Dashboard";
 import PastClasses from "./pages/PastClasses";
@@ -19,28 +19,95 @@ if (savedTheme === "eye") document.documentElement.classList.add("eye-theme");
 export const USER_TOKEN_KEY  = "rr_user_token";
 export const USER_NAME_KEY   = "rr_username";
 
+/* ── DevTools detection ────────────────────────────────────
+   Uses window dimension diff + debugger timing heuristic.
+   Fires a security alert to the admin when triggered.      */
+let devtoolsAlertSent = false;
+
+function sendSecurityAlert(alertType: string, details?: object) {
+  if (devtoolsAlertSent && alertType === "devtools") return;
+  devtoolsAlertSent = true;
+  const username = localStorage.getItem(USER_NAME_KEY);
+  fetch("/api/security/alert", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ alertType, username, details }),
+  }).catch(() => {});
+}
+
+function useDevToolsDetection(enabled: boolean) {
+  const [devtoolsOpen, setDevtoolsOpen] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    function check() {
+      const threshold = 160;
+      const widthDiff  = window.outerWidth  - window.innerWidth;
+      const heightDiff = window.outerHeight - window.innerHeight;
+      const open = widthDiff > threshold || heightDiff > threshold;
+      if (open) {
+        setDevtoolsOpen(true);
+        sendSecurityAlert("devtools", {
+          outerWidth: window.outerWidth, innerWidth: window.innerWidth,
+          outerHeight: window.outerHeight, innerHeight: window.innerHeight,
+        });
+      }
+    }
+
+    // Also use the console.log image trick
+    const img = new Image();
+    let fired = false;
+    Object.defineProperty(img, "id", {
+      get() {
+        if (!fired) {
+          fired = true;
+          setDevtoolsOpen(true);
+          sendSecurityAlert("devtools", { method: "console-image" });
+        }
+        return "";
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log("%c", img);
+
+    intervalRef.current = setInterval(check, 1500);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [enabled]);
+
+  return devtoolsOpen;
+}
+
 export default function App() {
   const [location] = useLocation();
-  const [status, setStatus] = useState<"loading"|"allowed"|"blocked">("loading");
-  const [myIp, setMyIp]     = useState("...");
+  const [status, setStatus]   = useState<"loading"|"allowed"|"blocked">("loading");
+  const [myIp, setMyIp]       = useState("...");
+  const [vpnDetected, setVpn] = useState(false);
+  const [banned, setBanned]   = useState(false);
 
   const isAdmin = location.startsWith("/admin");
+
+  // DevTools detection — active for all logged-in users
+  const devtoolsOpen = useDevToolsDetection(status === "allowed" && !isAdmin);
 
   useEffect(() => {
     if (isAdmin) { setStatus("allowed"); return; }
 
     const token = localStorage.getItem(USER_TOKEN_KEY);
 
-    // If we have a saved token, validate it first
     if (token) {
       fetch("/api/validate-token", { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
         .then(d => {
-          if (d.valid) {
+          if (d.banned) {
+            localStorage.removeItem(USER_TOKEN_KEY);
+            localStorage.removeItem(USER_NAME_KEY);
+            setBanned(true); setStatus("blocked");
+          } else if (d.valid) {
             if (d.username) localStorage.setItem(USER_NAME_KEY, d.username);
             setStatus("allowed");
           } else {
-            // Token expired — remove and fall back to IP check
             localStorage.removeItem(USER_TOKEN_KEY);
             localStorage.removeItem(USER_NAME_KEY);
             checkIp();
@@ -56,6 +123,8 @@ export default function App() {
         .then(r => r.json())
         .then(d => {
           setMyIp(d.ip || "unknown");
+          if (d.banned || d.userBanned) { setBanned(true); setStatus("blocked"); return; }
+          if (d.vpnDetected) { setVpn(true); setStatus("blocked"); return; }
           if (d.allowed) {
             if (d.username) localStorage.setItem(USER_NAME_KEY, d.username);
             setStatus("allowed");
@@ -63,7 +132,7 @@ export default function App() {
             setStatus("blocked");
           }
         })
-        .catch(() => setStatus("allowed")); // graceful fail-open
+        .catch(() => setStatus("allowed"));
     }
   }, [isAdmin]);
 
@@ -78,21 +147,45 @@ export default function App() {
     );
   }
 
-  if (status === "blocked") return <IpGate ip={myIp} />;
+  if (status === "blocked") return <IpGate ip={myIp} vpnDetected={vpnDetected} banned={banned} />;
 
   return (
-    <Switch>
-      <Route path="/"                component={Dashboard} />
-      <Route path="/past-classes"    component={PastClasses} />
-      <Route path="/courses"         component={Courses} />
-      <Route path="/video/:videoId"  component={VideoPage} />
-      <Route path="/exams"           component={ExamList} />
-      <Route path="/exam/:examId"    component={ExamTake} />
-      <Route path="/ai-tutor"        component={AiTutor} />
-      <Route path="/profile"         component={Profile} />
-      <Route path="/leaderboard"     component={Leaderboard} />
-      <Route path="/admin"           component={Admin} />
-      <Route><Dashboard /></Route>
-    </Switch>
+    <>
+      {/* DevTools Alert Overlay */}
+      {devtoolsOpen && (
+        <div style={{
+          position:"fixed", inset:0, zIndex:99999,
+          background:"rgba(185,28,28,0.97)", display:"flex", flexDirection:"column",
+          alignItems:"center", justifyContent:"center", padding:24, textAlign:"center",
+        }}>
+          <div style={{ fontSize:64, marginBottom:16 }}>🚨</div>
+          <h1 style={{ fontSize:26, fontWeight:900, color:"#fff", fontFamily:"Lato,sans-serif", marginBottom:12 }}>
+            Security Alert!
+          </h1>
+          <p style={{ fontSize:16, color:"#fecaca", lineHeight:1.8, maxWidth:440, marginBottom:24 }}>
+            Developer tools have been detected.<br/>
+            This incident has been <b>automatically reported to the admin</b>.<br/>
+            Unauthorized inspection of this platform is strictly prohibited.
+          </p>
+          <p style={{ fontSize:13, color:"#fca5a5" }}>
+            Please close your browser developer tools to continue.
+          </p>
+        </div>
+      )}
+
+      <Switch>
+        <Route path="/"                component={Dashboard} />
+        <Route path="/past-classes"    component={PastClasses} />
+        <Route path="/courses"         component={Courses} />
+        <Route path="/video/:videoId"  component={VideoPage} />
+        <Route path="/exams"           component={ExamList} />
+        <Route path="/exam/:examId"    component={ExamTake} />
+        <Route path="/ai-tutor"        component={AiTutor} />
+        <Route path="/profile"         component={Profile} />
+        <Route path="/leaderboard"     component={Leaderboard} />
+        <Route path="/admin"           component={Admin} />
+        <Route><Dashboard /></Route>
+      </Switch>
+    </>
   );
 }

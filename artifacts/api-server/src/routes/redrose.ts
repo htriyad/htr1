@@ -21,7 +21,8 @@ function wr(file: string, data: unknown) {
 }
 
 /* ── Types ─────────────────────────────────────────────── */
-interface IpMap    { [ip: string]: { approvedAt: string; note?: string } }
+interface IpEntry   { approvedAt: string; note?: string; name?: string; banned?: boolean }
+interface IpMap     { [ip: string]: IpEntry }
 interface DeviceInfo {
   os?: string;
   browser?: string;
@@ -30,40 +31,43 @@ interface DeviceInfo {
   isMobileData?: boolean;
   userAgent?: string;
 }
-interface Message  {
+interface Message {
   id: string;
   ip: string;
+  fullName?: string;
   message: string;
   timestamp: string;
-  status: "pending"|"noted";
+  status: "pending" | "noted";
   deviceInfo?: DeviceInfo;
-  type?: "access-request" | "content-request";
+  type?: "access-request" | "content-request" | "security-alert";
   subject?: string;
+  alertType?: string;
 }
 interface Video    { id: string; videoId: string; title: string; subjectId: string; chapterId?: string; desc: string; date: string; course: string; online: boolean }
 interface Chapter  { id: string; name: string; order?: number }
 interface Subject  { id: string; name: string; course: string; color?: string; chapters: Chapter[]; createdAt: string }
-interface UniversalUser { id: string; username: string; password: string; note?: string; createdAt: string }
+interface UniversalUser {
+  id: string;
+  username: string;
+  password: string;
+  note?: string;
+  createdAt: string;
+  banned?: boolean;
+  universalAccess?: boolean;
+  firstLoginDevice?: string;
+  firstLoginAt?: string;
+}
 interface QuizOption   { id: string; text: string }
 interface QuizQuestion { id: string; text: string; options: QuizOption[]; correct: string; solution?: string }
 interface Quiz         { id: string; title: string; desc: string; timeMinutes: number; published: boolean; createdAt: string; questions: QuizQuestion[] }
 interface Notification {
-  id: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  recipients?: string[];   // empty / undefined = broadcast to ALL users
-  readBy?: string[];       // usernames who have read it
+  id: string; title: string; body: string; createdAt: string;
+  recipients?: string[];
+  readBy?: string[];
 }
 interface DashMenuItem {
-  id: string;
-  label: string;
-  icon: string;            // emoji
-  bg: string;              // background color
-  chevron: string;         // chevron color
-  path: string;            // navigation path (e.g. "/ai-tutor")
-  order: number;
-  enabled: boolean;
+  id: string; label: string; icon: string; bg: string; chevron: string;
+  path: string; order: number; enabled: boolean;
 }
 
 /* ── Seed default data ──────────────────────────────────── */
@@ -98,7 +102,7 @@ if (!fs.existsSync(path.join(DATA_DIR, "vids.json")))
   ]);
 
 /* ══════════════════════════════════════════════════════════
-   AUTH HELPERS
+   IN-MEMORY SECURITY STORES
 ══════════════════════════════════════════════════════════ */
 const ADMIN_SESSIONS = new Set<string>();
 const ADMIN_USER = "htr";
@@ -107,10 +111,70 @@ const ADMIN_PASS = "htr0";
 // universal user token → username
 const USER_SESSIONS = new Map<string, string>();
 
+// Bot/flood protection: ip → list of request timestamps (last 60s)
+const RATE_WINDOW: Map<string, number[]> = new Map();
+// Auto-blocked IPs (bot activity)
+const BOT_BLOCKED: Set<string> = new Set();
+
+// VPN detection cache: ip → { isVpn, checkedAt }
+const VPN_CACHE: Map<string, { isVpn: boolean; checkedAt: number }> = new Map();
+
+/* ══════════════════════════════════════════════════════════
+   SECURITY HELPERS
+══════════════════════════════════════════════════════════ */
 function clientIp(req: any): string {
   const fwd = req.headers["x-forwarded-for"];
   if (fwd) return (Array.isArray(fwd) ? fwd[0] : fwd.split(",")[0]).trim();
   return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function isLocalhost(ip: string): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
+/** Track request rate per IP; returns true if this IP should be auto-blocked */
+function trackRate(ip: string): boolean {
+  if (isLocalhost(ip)) return false;
+  if (BOT_BLOCKED.has(ip)) return true;
+  const now = Date.now();
+  const times = RATE_WINDOW.get(ip) || [];
+  const recent = times.filter(t => now - t < 60_000);
+  recent.push(now);
+  RATE_WINDOW.set(ip, recent);
+  if (recent.length > 60) {
+    BOT_BLOCKED.add(ip);
+    // Log as security alert
+    const msgs = rd<Message[]>("msgs.json", []);
+    msgs.push({
+      id: crypto.randomUUID(), ip,
+      message: `🤖 Auto-blocked: ${recent.length} requests in 60 seconds (bot/flood detected)`,
+      timestamp: new Date().toISOString(),
+      status: "pending", type: "security-alert", alertType: "bot-flood",
+    });
+    wr("msgs.json", msgs);
+    return true;
+  }
+  return false;
+}
+
+async function checkVpn(ip: string): Promise<boolean> {
+  if (isLocalhost(ip)) return false;
+  const cached = VPN_CACHE.get(ip);
+  if (cached && Date.now() - cached.checkedAt < 24 * 60 * 60 * 1000) return cached.isVpn;
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`http://ip-api.com/json/${ip}?fields=proxy,hosting`, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    if (!r.ok) { VPN_CACHE.set(ip, { isVpn: false, checkedAt: Date.now() }); return false; }
+    const d: any = await r.json();
+    const isVpn = d.proxy === true || d.hosting === true;
+    VPN_CACHE.set(ip, { isVpn, checkedAt: Date.now() });
+    return isVpn;
+  } catch {
+    VPN_CACHE.set(ip, { isVpn: false, checkedAt: Date.now() });
+    return false;
+  }
 }
 
 function getUserToken(req: any): string | null {
@@ -119,17 +183,30 @@ function getUserToken(req: any): string | null {
   return auth.replace("Bearer ", "").trim() || null;
 }
 
-/** Returns true if request comes from an approved IP OR a valid universal-user token */
-function isAllowed(req: any): boolean {
-  // Check universal user token first
+function getLoggedInUser(req: any): UniversalUser | null {
   const token = getUserToken(req);
-  if (token && USER_SESSIONS.has(token)) return true;
-  // Check IP
-  const ip  = clientIp(req);
+  if (!token || !USER_SESSIONS.has(token)) return null;
+  const username = USER_SESSIONS.get(token)!;
+  const users = rd<UniversalUser[]>("users.json", []);
+  return users.find(u => u.username === username) || null;
+}
+
+/** Returns true if request is allowed (approved IP or valid non-banned user token) */
+function isAllowed(req: any): boolean {
+  const ip = clientIp(req);
+  // Check if IP is banned
   const ips = rd<IpMap>("ips.json", {});
+  if (ips[ip]?.banned) return false;
+  // Check user token
+  const token = getUserToken(req);
+  if (token && USER_SESSIONS.has(token)) {
+    const user = getLoggedInUser(req);
+    if (user?.banned) return false;
+    return true;
+  }
+  // Check IP approval
   if (ip in ips) return true;
-  // Localhost always allowed (dev)
-  if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return true;
+  if (isLocalhost(ip)) return true;
   return false;
 }
 
@@ -144,29 +221,93 @@ function userAuth(req: any, res: any, next: any) {
   next();
 }
 
+/* Bot-protection middleware — applied to public endpoints */
+function botGuard(req: any, res: any, next: any) {
+  const ip = clientIp(req);
+  if (trackRate(ip)) return res.status(429).json({ error: "Too many requests. Your IP has been auto-blocked." });
+  next();
+}
+
 /* ══════════════════════════════════════════════════════════
    PUBLIC — IP / ACCESS CHECK
 ══════════════════════════════════════════════════════════ */
-
-router.get("/check-ip", (req, res) => {
-  const token   = getUserToken(req);
-  const isUser  = !!(token && USER_SESSIONS.has(token));
+router.get("/check-ip", async (req, res) => {
   const ip      = clientIp(req);
+  const token   = getUserToken(req);
   const ips     = rd<IpMap>("ips.json", {});
-  const ipOk    = ip in ips || ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  res.json({ allowed: isUser || ipOk, ip, universalUser: isUser, username: isUser ? USER_SESSIONS.get(token!) : null });
+
+  // Check if IP is bot-blocked
+  if (BOT_BLOCKED.has(ip) && !isLocalhost(ip)) {
+    return res.json({ allowed: false, ip, blocked: true, reason: "bot" });
+  }
+
+  // Check if IP is banned
+  if (ips[ip]?.banned) {
+    return res.json({ allowed: false, ip, banned: true });
+  }
+
+  // Check user token
+  const isUser = !!(token && USER_SESSIONS.has(token));
+  if (isUser) {
+    const user = getLoggedInUser(req);
+    if (user?.banned) return res.json({ allowed: false, ip, banned: true, userBanned: true });
+    return res.json({
+      allowed: true, ip, universalUser: true,
+      username: user?.username || null,
+      universalAccess: user?.universalAccess || false,
+      name: user?.note || null,
+    });
+  }
+
+  const ipOk = ip in ips || isLocalhost(ip);
+  if (!ipOk) {
+    // VPN check for blocked users
+    let vpn = false;
+    try { vpn = await checkVpn(ip); } catch {}
+    return res.json({ allowed: false, ip, vpnDetected: vpn });
+  }
+
+  // IP-approved — VPN check
+  let vpn = false;
+  try { vpn = await checkVpn(ip); } catch {}
+  if (vpn) return res.json({ allowed: false, ip, vpnDetected: true });
+
+  res.json({
+    allowed: true, ip,
+    universalUser: false,
+    username: null,
+    name: ips[ip]?.name || null,
+  });
 });
 
-/* POST /api/message  — blocked visitor sends a request */
-router.post("/message", (req, res) => {
-  const ip      = clientIp(req);
-  const { message, deviceInfo } = req.body;
-  if (!message) return res.status(400).json({ error: "message required" });
+/* POST /api/message — blocked visitor sends an access request */
+router.post("/message", botGuard, (req, res) => {
+  const ip = clientIp(req);
+
+  // Check if IP is banned
+  const ips = rd<IpMap>("ips.json", {});
+  if (ips[ip]?.banned) return res.status(403).json({ error: "Your access has been permanently blocked." });
+
+  const { fullName, deviceInfo } = req.body;
+  if (!fullName || !fullName.trim()) return res.status(400).json({ error: "Full name is required" });
+
+  // Rate limit: max 2 requests per IP in 7 days
   const msgs = rd<Message[]>("msgs.json", []);
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentFromIp = msgs.filter(m =>
+    m.ip === ip &&
+    m.type === "access-request" &&
+    new Date(m.timestamp).getTime() > oneWeekAgo
+  );
+  if (recentFromIp.length >= 2) {
+    return res.status(429).json({ error: "You have already sent 2 requests this week. Please wait for admin response or try again next week." });
+  }
+
   msgs.push({
     id: crypto.randomUUID(),
     ip,
-    message,
+    fullName: fullName.trim(),
+    message: `Name: ${fullName.trim()}`,
     timestamp: new Date().toISOString(),
     status: "pending",
     type: "access-request",
@@ -176,14 +317,26 @@ router.post("/message", (req, res) => {
   res.json({ ok: true });
 });
 
-/* POST /api/content-request  — logged-in student requests course access */
+/* POST /api/content-request — logged-in student requests course access */
 router.post("/content-request", userAuth, (req, res) => {
   const ip = clientIp(req);
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) : null;
   const { subject, message, deviceInfo } = req.body;
   if (!subject) return res.status(400).json({ error: "subject required" });
+
+  // Rate limit: max 2 content requests per IP/user per 7 days
   const msgs = rd<Message[]>("msgs.json", []);
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentRequests = msgs.filter(m =>
+    (m.ip === ip || (username && m.message.includes(`@${username}`))) &&
+    m.type === "content-request" &&
+    new Date(m.timestamp).getTime() > oneWeekAgo
+  );
+  if (recentRequests.length >= 2) {
+    return res.status(429).json({ error: "You have already sent 2 content requests this week." });
+  }
+
   const body = `📚 Course Access Request\nSubject: ${subject}\n${username ? `Student: @${username}\n` : ""}${message ? `Message: ${message}` : ""}`;
   msgs.push({
     id: crypto.randomUUID(),
@@ -199,27 +352,88 @@ router.post("/content-request", userAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+/* POST /api/security/alert — client reports security event (DevTools open, etc.) */
+router.post("/security/alert", (req, res) => {
+  const ip = clientIp(req);
+  const { alertType, details, username } = req.body || {};
+  const msgs = rd<Message[]>("msgs.json", []);
+  const label = alertType === "devtools" ? "🛠️ DevTools Opened"
+              : alertType === "extension" ? "🧩 Browser Extension"
+              : alertType === "view-source" ? "📄 View Source Attempt"
+              : "🚨 Security Alert";
+  msgs.push({
+    id: crypto.randomUUID(),
+    ip,
+    message: `${label}\n${username ? `User: @${username}\n` : ""}${details ? `Details: ${JSON.stringify(details)}` : ""}`,
+    timestamp: new Date().toISOString(),
+    status: "pending",
+    type: "security-alert",
+    alertType,
+  });
+  wr("msgs.json", msgs);
+  res.json({ ok: true });
+});
+
 /* ══════════════════════════════════════════════════════════
    UNIVERSAL USER AUTH
 ══════════════════════════════════════════════════════════ */
 
 /* POST /api/user/login */
-router.post("/user/login", (req, res) => {
-  const { username, password } = req.body;
+router.post("/user/login", botGuard, (req, res) => {
+  const { username, password, deviceFingerprint } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password required" });
+
   const users = rd<UniversalUser[]>("users.json", []);
   const user  = users.find(u => u.username === username && u.password === password);
   if (!user) return res.status(401).json({ error: "Invalid username or password" });
+
+  // Check if banned
+  if (user.banned) {
+    return res.status(403).json({ error: "Your account has been permanently banned. Contact admin." });
+  }
+
+  // One-device restriction
+  if (deviceFingerprint) {
+    if (!user.firstLoginDevice) {
+      // First time login — save device fingerprint
+      const i = users.findIndex(u => u.id === user.id);
+      users[i].firstLoginDevice = deviceFingerprint;
+      users[i].firstLoginAt = new Date().toISOString();
+      wr("users.json", users);
+    } else if (user.firstLoginDevice !== deviceFingerprint) {
+      // Different device — reject
+      return res.status(403).json({
+        error: "This account is already bound to another device. Each account can only be used on one device. Contact admin to reset your device.",
+        deviceLocked: true,
+      });
+    }
+  }
+
   const token = crypto.randomUUID();
   USER_SESSIONS.set(token, user.username);
-  res.json({ token, username: user.username });
+  res.json({
+    token,
+    username: user.username,
+    universalAccess: user.universalAccess || false,
+  });
 });
 
 /* GET /api/validate-token */
 router.get("/validate-token", (req, res) => {
   const token = getUserToken(req);
   if (!token || !USER_SESSIONS.has(token)) return res.json({ valid: false });
-  res.json({ valid: true, username: USER_SESSIONS.get(token) });
+  const username = USER_SESSIONS.get(token)!;
+  const users = rd<UniversalUser[]>("users.json", []);
+  const user = users.find(u => u.username === username);
+  if (user?.banned) {
+    USER_SESSIONS.delete(token);
+    return res.json({ valid: false, banned: true });
+  }
+  res.json({
+    valid: true,
+    username,
+    universalAccess: user?.universalAccess || false,
+  });
 });
 
 /* POST /api/user/logout */
@@ -243,14 +457,11 @@ router.get("/notifications", userAuth, (req, res) => {
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) || null : null;
   const all = rd<Notification[]>("notifs.json", []);
-  // Filter: include if broadcast (no recipients), or recipients includes user.
-  // IP-only visitors (no username) only see broadcasts.
   const visible = all.filter(n => {
     const r = n.recipients;
     if (!r || r.length === 0) return true;
     return username ? r.includes(username) : false;
   });
-  // Decorate with `read` flag for the current user
   const decorated = visible.map(n => ({
     ...n,
     read: username ? !!(n.readBy?.includes(username)) : false,
@@ -261,7 +472,7 @@ router.get("/notifications", userAuth, (req, res) => {
 router.post("/notifications/:id/read", userAuth, (req, res) => {
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) : null;
-  if (!username) return res.json({ ok: true }); // IP-only visitors: no-op
+  if (!username) return res.json({ ok: true });
   const all = rd<Notification[]>("notifs.json", []);
   const n = all.find(x => x.id === req.params.id);
   if (!n) return res.status(404).json({ error: "Not found" });
@@ -287,10 +498,15 @@ router.post("/notifications/read-all", userAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-/* ── Dashboard menu (public — anyone with access) ── */
+/* ── Dashboard menu ── */
 router.get("/dashboard-menu", userAuth, (_req, res) => {
   const items = rd<DashMenuItem[]>("dashmenu.json", []);
   res.json(items.filter(i => i.enabled).sort((a, b) => a.order - b.order));
+});
+
+/* Public subject list */
+router.get("/subjects", userAuth, (_req, res) => {
+  res.json(rd<Subject[]>("subjects.json", []));
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -298,7 +514,6 @@ router.get("/dashboard-menu", userAuth, (_req, res) => {
 ══════════════════════════════════════════════════════════ */
 router.get("/quizzes", userAuth, (_req, res) => {
   const all = rd<Quiz[]>("quizzes.json", []);
-  // Return published quizzes WITHOUT exposing correct answers
   const safe = all
     .filter(q => q.published)
     .map(q => ({
@@ -313,20 +528,15 @@ router.get("/quizzes/:id", userAuth, (req, res) => {
   const all  = rd<Quiz[]>("quizzes.json", []);
   const quiz = all.find(q => q.id === req.params.id && q.published);
   if (!quiz) return res.status(404).json({ error: "Not found" });
-  // Return questions WITHOUT correct answer / solution (hidden until submit)
-  const safeQ = quiz.questions.map(q => ({
-    id: q.id, text: q.text, options: q.options,
-  }));
+  const safeQ = quiz.questions.map(q => ({ id: q.id, text: q.text, options: q.options }));
   res.json({ id: quiz.id, title: quiz.title, desc: quiz.desc, timeMinutes: quiz.timeMinutes, questions: safeQ });
 });
 
-/* POST /api/quiz-submit  { quizId, answers: { qId: optId } } */
 router.post("/quiz-submit", userAuth, (req, res) => {
   const { quizId, answers } = req.body as { quizId: string; answers: Record<string, string> };
   const all  = rd<Quiz[]>("quizzes.json", []);
   const quiz = all.find(q => q.id === quizId);
   if (!quiz) return res.status(404).json({ error: "Quiz not found" });
-
   let correct = 0;
   const results = quiz.questions.map(q => {
     const chosen  = answers[q.id] || null;
@@ -334,7 +544,6 @@ router.post("/quiz-submit", userAuth, (req, res) => {
     if (isRight) correct++;
     return { id: q.id, text: q.text, options: q.options, chosen, correct: q.correct, isRight, solution: q.solution };
   });
-
   res.json({ score: correct, total: quiz.questions.length, results });
 });
 
@@ -352,7 +561,7 @@ router.post("/admin/login", (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════
-   ADMIN — MESSAGES
+   ADMIN — MESSAGES / INBOX
 ══════════════════════════════════════════════════════════ */
 router.get("/admin/msgs",          adminAuth, (_r, res) => res.json(rd<Message[]>("msgs.json",[])));
 router.patch("/admin/msgs/:id",    adminAuth, (req, res) => {
@@ -365,6 +574,28 @@ router.delete("/admin/msgs/:id",   adminAuth, (req, res) => {
   wr("msgs.json", rd<Message[]>("msgs.json",[]).filter(m=>m.id!==req.params.id)); res.json({ok:true});
 });
 
+/* POST /admin/msgs/:id/quick-user — Create account from inbox message & auto-mark noted */
+router.post("/admin/msgs/:id/quick-user", adminAuth, (req, res) => {
+  const { username, password, note } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "username and password required" });
+  const users = rd<UniversalUser[]>("users.json", []);
+  if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username already exists" });
+  const user: UniversalUser = {
+    id: crypto.randomUUID(), username: username.trim(), password,
+    note: note || "", createdAt: new Date().toISOString(),
+  };
+  users.push(user);
+  wr("users.json", users);
+  // Also sync name to IP from the message
+  const msgs = rd<Message[]>("msgs.json", []);
+  const i = msgs.findIndex(m => m.id === req.params.id);
+  if (i !== -1) {
+    msgs[i].status = "noted";
+    wr("msgs.json", msgs);
+  }
+  res.json({ id: user.id, username: user.username, createdAt: user.createdAt });
+});
+
 /* ══════════════════════════════════════════════════════════
    ADMIN — IPs
 ══════════════════════════════════════════════════════════ */
@@ -373,11 +604,19 @@ router.get("/admin/ips",           adminAuth, (_r, res) => {
   res.json(Object.entries(ips).map(([ip,v])=>({ip,...v})));
 });
 router.post("/admin/ips",          adminAuth, (req, res) => {
-  const { ip } = req.body;
+  const { ip, name } = req.body;
   if (!ip) return res.status(400).json({error:"ip required"});
   const ips = rd<IpMap>("ips.json",{});
-  ips[ip.trim()] = {approvedAt: new Date().toISOString()};
+  ips[ip.trim()] = { approvedAt: new Date().toISOString(), name: name || undefined };
   wr("ips.json",ips); res.json({ok:true});
+});
+router.patch("/admin/ips/:ip/ban", adminAuth, (req, res) => {
+  const ipKey = decodeURIComponent(req.params.ip);
+  const ips = rd<IpMap>("ips.json", {});
+  if (!ips[ipKey]) ips[ipKey] = { approvedAt: new Date().toISOString() };
+  ips[ipKey].banned = !ips[ipKey].banned;
+  wr("ips.json", ips);
+  res.json({ ok: true, banned: ips[ipKey].banned });
 });
 router.delete("/admin/ips/:ip",    adminAuth, (req, res) => {
   const ips = rd<IpMap>("ips.json",{});
@@ -385,26 +624,52 @@ router.delete("/admin/ips/:ip",    adminAuth, (req, res) => {
   wr("ips.json",ips); res.json({ok:true});
 });
 
+/* Approve IP from a specific inbox message (also syncs the name) */
+router.post("/admin/msgs/:id/approve-ip", adminAuth, (req, res) => {
+  const msgs = rd<Message[]>("msgs.json", []);
+  const msg = msgs.find(m => m.id === req.params.id);
+  if (!msg) return res.status(404).json({ error: "Message not found" });
+  const ips = rd<IpMap>("ips.json", {});
+  ips[msg.ip] = {
+    approvedAt: new Date().toISOString(),
+    name: msg.fullName || undefined,
+  };
+  wr("ips.json", ips);
+  // Mark message as noted
+  const i = msgs.findIndex(m => m.id === req.params.id);
+  if (i !== -1) { msgs[i].status = "noted"; wr("msgs.json", msgs); }
+  res.json({ ok: true, ip: msg.ip, name: msg.fullName });
+});
+
 /* ══════════════════════════════════════════════════════════
    ADMIN — UNIVERSAL USERS
 ══════════════════════════════════════════════════════════ */
 router.get("/admin/users",         adminAuth, (_r, res) => {
   const users = rd<UniversalUser[]>("users.json",[]);
-  res.json(users.map(u=>({id:u.id,username:u.username,note:u.note,createdAt:u.createdAt})));
+  res.json(users.map(u=>({
+    id: u.id, username: u.username, note: u.note, createdAt: u.createdAt,
+    banned: u.banned || false,
+    universalAccess: u.universalAccess || false,
+    firstLoginDevice: u.firstLoginDevice ? "set" : null,
+    firstLoginAt: u.firstLoginAt || null,
+  })));
 });
 router.post("/admin/users",        adminAuth, (req, res) => {
-  const { username, password, note } = req.body;
+  const { username, password, note, universalAccess } = req.body;
   if (!username || !password) return res.status(400).json({error:"username and password required"});
   const users = rd<UniversalUser[]>("users.json",[]);
   if (users.find(u=>u.username===username)) return res.status(400).json({error:"Username already exists"});
-  const user: UniversalUser = { id:crypto.randomUUID(), username:username.trim(), password, note:note||"", createdAt:new Date().toISOString() };
+  const user: UniversalUser = {
+    id: crypto.randomUUID(), username: username.trim(), password,
+    note: note||"", createdAt: new Date().toISOString(),
+    universalAccess: !!universalAccess,
+  };
   users.push(user);
   wr("users.json",users);
   res.json({id:user.id, username:user.username, createdAt:user.createdAt});
 });
 router.delete("/admin/users/:id",  adminAuth, (req, res) => {
   const users = rd<UniversalUser[]>("users.json",[]);
-  // Revoke all sessions for this user
   const target = users.find(u=>u.id===req.params.id);
   if (target) {
     for (const [tok, uname] of USER_SESSIONS.entries()) {
@@ -414,7 +679,6 @@ router.delete("/admin/users/:id",  adminAuth, (req, res) => {
   wr("users.json", users.filter(u=>u.id!==req.params.id));
   res.json({ok:true});
 });
-/* PATCH /admin/users/:id/password */
 router.patch("/admin/users/:id/password", adminAuth, (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({error:"password required"});
@@ -424,21 +688,45 @@ router.patch("/admin/users/:id/password", adminAuth, (req, res) => {
   users[i].password = password;
   wr("users.json",users); res.json({ok:true});
 });
-
-/* POST /admin/msgs/:id/quick-user — Create account from inbox message & auto-mark noted */
-router.post("/admin/msgs/:id/quick-user", adminAuth, (req, res) => {
-  const { username, password, note } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "username and password required" });
-  const users = rd<UniversalUser[]>("users.json", []);
-  if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username already exists" });
-  const user: UniversalUser = { id: crypto.randomUUID(), username: username.trim(), password, note: note || "", createdAt: new Date().toISOString() };
-  users.push(user);
-  wr("users.json", users);
-  // Mark the message as noted
-  const msgs = rd<Message[]>("msgs.json", []);
-  const i = msgs.findIndex(m => m.id === req.params.id);
-  if (i !== -1) { msgs[i].status = "noted"; wr("msgs.json", msgs); }
-  res.json({ id: user.id, username: user.username, createdAt: user.createdAt });
+/* PATCH /admin/users/:id/ban — toggle ban */
+router.patch("/admin/users/:id/ban", adminAuth, (req, res) => {
+  const users = rd<UniversalUser[]>("users.json",[]);
+  const i = users.findIndex(u=>u.id===req.params.id);
+  if (i===-1) return res.status(404).json({error:"Not found"});
+  users[i].banned = !users[i].banned;
+  // Revoke all sessions if banning
+  if (users[i].banned) {
+    for (const [tok, uname] of USER_SESSIONS.entries()) {
+      if (uname===users[i].username) USER_SESSIONS.delete(tok);
+    }
+  }
+  wr("users.json",users); res.json({ok:true, banned:users[i].banned});
+});
+/* PATCH /admin/users/:id/universal-access — toggle universal access */
+router.patch("/admin/users/:id/universal-access", adminAuth, (req, res) => {
+  const users = rd<UniversalUser[]>("users.json",[]);
+  const i = users.findIndex(u=>u.id===req.params.id);
+  if (i===-1) return res.status(404).json({error:"Not found"});
+  users[i].universalAccess = !users[i].universalAccess;
+  wr("users.json",users); res.json({ok:true, universalAccess:users[i].universalAccess});
+});
+/* PATCH /admin/users/:id/reset-device — admin resets device lock so student can log in from a new device */
+router.patch("/admin/users/:id/reset-device", adminAuth, (req, res) => {
+  const users = rd<UniversalUser[]>("users.json",[]);
+  const i = users.findIndex(u=>u.id===req.params.id);
+  if (i===-1) return res.status(404).json({error:"Not found"});
+  delete users[i].firstLoginDevice;
+  delete users[i].firstLoginAt;
+  wr("users.json",users); res.json({ok:true});
+});
+/* PATCH /admin/ips/unblock-bot — admin manually unblocks a bot-blocked IP */
+router.delete("/admin/security/bot-block/:ip", adminAuth, (req, res) => {
+  BOT_BLOCKED.delete(decodeURIComponent(req.params.ip));
+  res.json({ ok: true });
+});
+/* GET /admin/security/bot-blocked — list bot-blocked IPs */
+router.get("/admin/security/bot-blocked", adminAuth, (_req, res) => {
+  res.json(Array.from(BOT_BLOCKED));
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -463,136 +751,90 @@ router.delete("/admin/videos/:id", adminAuth, (req, res) => {
   wr("vids.json", rd<Video[]>("vids.json",[]).filter(v=>v.id!==req.params.id)); res.json({ok:true});
 });
 
-/* Bulk transfer videos to a different subject (and optional chapter) */
+/* Bulk transfer videos to a different subject */
 router.post("/admin/videos/transfer", adminAuth, (req, res) => {
-  const { videoIds, targetSubjectId, targetChapterId } = req.body as {
-    videoIds: string[]; targetSubjectId: string; targetChapterId?: string;
-  };
-  if (!Array.isArray(videoIds) || !targetSubjectId) {
-    return res.status(400).json({ error: "videoIds[] and targetSubjectId required" });
-  }
+  const { videoIds, targetSubjectId, targetChapterId } = req.body as { videoIds: string[]; targetSubjectId: string; targetChapterId?: string };
+  if (!Array.isArray(videoIds) || !targetSubjectId) return res.status(400).json({ error: "videoIds[] and targetSubjectId required" });
   const subjects = rd<Subject[]>("subjects.json", []);
   const subj = subjects.find(s => s.id === targetSubjectId);
   if (!subj) return res.status(404).json({ error: "Target subject not found" });
-  if (targetChapterId && !subj.chapters.find(c => c.id === targetChapterId)) {
-    return res.status(400).json({ error: "Target chapter not in target subject" });
-  }
+  if (targetChapterId && !subj.chapters.find(c => c.id === targetChapterId)) return res.status(400).json({ error: "Target chapter not in target subject" });
   const vids = rd<Video[]>("vids.json", []);
   const ids = new Set(videoIds);
   let moved = 0;
   for (const v of vids) {
-    if (ids.has(v.id)) {
-      v.subjectId = targetSubjectId;
-      v.chapterId = targetChapterId || undefined;
-      moved++;
-    }
+    if (ids.has(v.id)) { v.subjectId = targetSubjectId; v.chapterId = targetChapterId || undefined; moved++; }
   }
   wr("vids.json", vids);
   res.json({ ok: true, moved });
 });
 
-/* ── ADMIN — SUBJECTS & CHAPTERS ───────────────────────── */
-router.get("/admin/subjects", adminAuth, (_r, res) => {
-  res.json(rd<Subject[]>("subjects.json", []));
-});
+/* ── ADMIN — SUBJECTS & CHAPTERS ── */
+router.get("/admin/subjects", adminAuth, (_r, res) => res.json(rd<Subject[]>("subjects.json", [])));
 router.post("/admin/subjects", adminAuth, (req, res) => {
   const { name, course, color } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   const subjects = rd<Subject[]>("subjects.json", []);
-  const subj: Subject = {
-    id: "sub-" + crypto.randomUUID().slice(0, 8),
-    name: String(name).trim(),
-    course: String(course || "").trim(),
-    color: color || "#7c3aed",
-    chapters: [],
-    createdAt: new Date().toISOString(),
-  };
-  subjects.push(subj);
-  wr("subjects.json", subjects);
-  res.json(subj);
+  const subj: Subject = { id:"sub-"+crypto.randomUUID().slice(0,8), name:String(name).trim(), course:String(course||"").trim(), color:color||"#7c3aed", chapters:[], createdAt:new Date().toISOString() };
+  subjects.push(subj); wr("subjects.json", subjects); res.json(subj);
 });
 router.put("/admin/subjects/:id", adminAuth, (req, res) => {
   const subjects = rd<Subject[]>("subjects.json", []);
-  const i = subjects.findIndex(s => s.id === req.params.id);
-  if (i === -1) return res.status(404).json({ error: "Not found" });
-  const b = req.body || {};
-  subjects[i] = {
-    ...subjects[i],
-    ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
-    ...(b.course !== undefined ? { course: String(b.course).trim() } : {}),
-    ...(b.color !== undefined ? { color: String(b.color) } : {}),
-  };
-  wr("subjects.json", subjects);
-  res.json(subjects[i]);
+  const i = subjects.findIndex(s=>s.id===req.params.id);
+  if (i===-1) return res.status(404).json({error:"Not found"});
+  const b = req.body||{};
+  subjects[i]={...subjects[i],...(b.name!==undefined?{name:String(b.name).trim()}:{}),...(b.course!==undefined?{course:String(b.course).trim()}:{}),...(b.color!==undefined?{color:String(b.color)}:{})};
+  wr("subjects.json",subjects); res.json(subjects[i]);
 });
 router.delete("/admin/subjects/:id", adminAuth, (req, res) => {
-  const subjects = rd<Subject[]>("subjects.json", []);
-  const next = subjects.filter(s => s.id !== req.params.id);
-  if (next.length === subjects.length) return res.status(404).json({ error: "Not found" });
-  wr("subjects.json", next);
-  // Detach videos from this subject
-  const vids = rd<Video[]>("vids.json", []);
-  let changed = false;
-  for (const v of vids) if (v.subjectId === req.params.id) { v.subjectId = ""; v.chapterId = undefined; changed = true; }
-  if (changed) wr("vids.json", vids);
-  res.json({ ok: true });
+  const subjects=rd<Subject[]>("subjects.json",[]);
+  const next=subjects.filter(s=>s.id!==req.params.id);
+  if(next.length===subjects.length) return res.status(404).json({error:"Not found"});
+  wr("subjects.json",next);
+  const vids=rd<Video[]>("vids.json",[]);
+  let changed=false;
+  for(const v of vids) if(v.subjectId===req.params.id){v.subjectId="";v.chapterId=undefined;changed=true;}
+  if(changed) wr("vids.json",vids);
+  res.json({ok:true});
 });
 router.post("/admin/subjects/:id/chapters", adminAuth, (req, res) => {
-  const { name } = req.body || {};
-  if (!name) return res.status(400).json({ error: "name required" });
-  const subjects = rd<Subject[]>("subjects.json", []);
-  const subj = subjects.find(s => s.id === req.params.id);
-  if (!subj) return res.status(404).json({ error: "Subject not found" });
-  const ch: Chapter = { id: "ch-" + crypto.randomUUID().slice(0, 8), name: String(name).trim(), order: subj.chapters.length + 1 };
-  subj.chapters.push(ch);
-  wr("subjects.json", subjects);
-  res.json(ch);
+  const {name}=req.body||{};
+  if(!name) return res.status(400).json({error:"name required"});
+  const subjects=rd<Subject[]>("subjects.json",[]);
+  const subj=subjects.find(s=>s.id===req.params.id);
+  if(!subj) return res.status(404).json({error:"Subject not found"});
+  const ch:Chapter={id:"ch-"+crypto.randomUUID().slice(0,8),name:String(name).trim(),order:subj.chapters.length+1};
+  subj.chapters.push(ch); wr("subjects.json",subjects); res.json(ch);
 });
 router.put("/admin/subjects/:sid/chapters/:cid", adminAuth, (req, res) => {
-  const subjects = rd<Subject[]>("subjects.json", []);
-  const subj = subjects.find(s => s.id === req.params.sid);
-  if (!subj) return res.status(404).json({ error: "Subject not found" });
-  const ch = subj.chapters.find(c => c.id === req.params.cid);
-  if (!ch) return res.status(404).json({ error: "Chapter not found" });
-  if (req.body?.name !== undefined) ch.name = String(req.body.name).trim();
-  if (typeof req.body?.order === "number") ch.order = req.body.order;
-  wr("subjects.json", subjects);
-  res.json(ch);
+  const subjects=rd<Subject[]>("subjects.json",[]);
+  const subj=subjects.find(s=>s.id===req.params.sid);
+  if(!subj) return res.status(404).json({error:"Subject not found"});
+  const ch=subj.chapters.find(c=>c.id===req.params.cid);
+  if(!ch) return res.status(404).json({error:"Chapter not found"});
+  if(req.body?.name!==undefined) ch.name=String(req.body.name).trim();
+  if(typeof req.body?.order==="number") ch.order=req.body.order;
+  wr("subjects.json",subjects); res.json(ch);
 });
 router.delete("/admin/subjects/:sid/chapters/:cid", adminAuth, (req, res) => {
-  const subjects = rd<Subject[]>("subjects.json", []);
-  const subj = subjects.find(s => s.id === req.params.sid);
-  if (!subj) return res.status(404).json({ error: "Subject not found" });
-  subj.chapters = subj.chapters.filter(c => c.id !== req.params.cid);
-  wr("subjects.json", subjects);
-  // Detach videos from this chapter
-  const vids = rd<Video[]>("vids.json", []);
-  let changed = false;
-  for (const v of vids) if (v.chapterId === req.params.cid) { v.chapterId = undefined; changed = true; }
-  if (changed) wr("vids.json", vids);
-  res.json({ ok: true });
+  const subjects=rd<Subject[]>("subjects.json",[]);
+  const subj=subjects.find(s=>s.id===req.params.sid);
+  if(!subj) return res.status(404).json({error:"Subject not found"});
+  subj.chapters=subj.chapters.filter(c=>c.id!==req.params.cid);
+  wr("subjects.json",subjects);
+  const vids=rd<Video[]>("vids.json",[]);
+  let changed=false;
+  for(const v of vids) if(v.chapterId===req.params.cid){v.chapterId=undefined;changed=true;}
+  if(changed) wr("vids.json",vids);
+  res.json({ok:true});
 });
 
-/* Public subject list (for student-side filters / future use) */
-router.get("/subjects", userAuth, (_req, res) => {
-  res.json(rd<Subject[]>("subjects.json", []));
-});
-
-/* ── ADMIN — YOUTUBE PLAYLIST IMPORT (no API key required!) ──
-   Uses YouTube's internal `youtubei/v1/browse` endpoint. Works for any
-   public or unlisted playlist with no Google Cloud setup, no quota, no key. */
+/* ── YOUTUBE PLAYLIST IMPORT ── */
 function extractPlaylistId(input: string): string | null {
-  const s = (input || "").trim();
+  const s = (input||"").trim();
   if (!s) return null;
-  // Try URL first
-  try {
-    const u = new URL(s);
-    const list = u.searchParams.get("list");
-    if (list) return list;
-  } catch { /* not a URL */ }
-  // Bare ID
+  try { const u=new URL(s); const list=u.searchParams.get("list"); if(list) return list; } catch {}
   if (/^[A-Za-z0-9_-]{10,}$/.test(s) && !s.includes("/")) return s;
-  // Last-ditch regex
   const m = s.match(/[?&]list=([A-Za-z0-9_-]+)/);
   return m ? m[1] : null;
 }
@@ -607,126 +849,115 @@ const YT_HEADERS = {
 };
 
 async function fetchYtPlaylistPage(playlistId: string, continuation?: string): Promise<any> {
-  const body: any = {
-    context: { client: { clientName: "WEB", clientVersion: "2.20240101.00.00", hl: "en", gl: "US" } },
-  };
-  if (continuation) body.continuation = continuation;
-  else body.browseId = `VL${playlistId}`;
-  const r = await fetch(YT_BROWSE_URL, { method: "POST", headers: YT_HEADERS, body: JSON.stringify(body) });
+  const body: any = { context: { client: { clientName:"WEB", clientVersion:"2.20240101.00.00", hl:"en", gl:"US" } } };
+  if (continuation) body.continuation = continuation; else body.browseId = `VL${playlistId}`;
+  const r = await fetch(YT_BROWSE_URL, { method:"POST", headers:YT_HEADERS, body:JSON.stringify(body) });
   if (!r.ok) throw new Error(`YouTube responded ${r.status}`);
   return r.json();
 }
 
-function ytExtractVideos(data: any): Array<{ videoId: string; title: string; thumbnail: string; duration: string }> {
-  const out: Array<{ videoId: string; title: string; thumbnail: string; duration: string }> = [];
+function ytExtractVideos(data: any): Array<{ videoId:string; title:string; thumbnail:string; duration:string }> {
+  const out: Array<{ videoId:string; title:string; thumbnail:string; duration:string }> = [];
   const visit = (n: any) => {
-    if (!n || typeof n !== "object") return;
+    if (!n||typeof n!=="object") return;
     if (Array.isArray(n)) { n.forEach(visit); return; }
     const r = n.playlistVideoRenderer;
     if (r) {
-      const vid = r.videoId;
-      const title = r.title?.runs?.[0]?.text || r.title?.simpleText || "";
-      const thumb = r.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || (vid ? `https://i.ytimg.com/vi/${vid}/mqdefault.jpg` : "");
-      const duration = r.lengthText?.simpleText || r.lengthText?.runs?.[0]?.text || "";
-      if (vid && title && title !== "[Private video]" && title !== "[Deleted video]") {
-        out.push({ videoId: vid, title, thumbnail: thumb, duration });
-      }
+      const vid=r.videoId; const title=r.title?.runs?.[0]?.text||r.title?.simpleText||"";
+      const thumb=r.thumbnail?.thumbnails?.slice(-1)?.[0]?.url||(vid?`https://i.ytimg.com/vi/${vid}/mqdefault.jpg`:"");
+      const duration=r.lengthText?.simpleText||r.lengthText?.runs?.[0]?.text||"";
+      if (vid&&title&&title!=="[Private video]"&&title!=="[Deleted video]") out.push({videoId:vid,title,thumbnail:thumb,duration});
     }
     for (const v of Object.values(n)) visit(v);
   };
-  visit(data);
-  return out;
+  visit(data); return out;
 }
 
 function ytExtractContinuation(data: any): string | null {
-  // Look for the "continuation" token in continuationItemRenderer
   const visit = (n: any): string | null => {
-    if (!n || typeof n !== "object") return null;
-    if (Array.isArray(n)) { for (const x of n) { const t = visit(x); if (t) return t; } return null; }
+    if (!n||typeof n!=="object") return null;
+    if (Array.isArray(n)) { for(const x of n){const t=visit(x);if(t)return t;} return null; }
     if (n.continuationCommand?.token) return n.continuationCommand.token;
-    if (n.continuationItemRenderer) { const t = visit(n.continuationItemRenderer); if (t) return t; }
-    for (const v of Object.values(n)) { const t = visit(v); if (t) return t; }
+    if (n.continuationItemRenderer) { const t=visit(n.continuationItemRenderer); if(t) return t; }
+    for(const v of Object.values(n)){const t=visit(v);if(t)return t;}
     return null;
   };
   return visit(data);
 }
 
 function ytExtractPlaylistTitle(data: any): string {
-  return (
-    data?.header?.playlistHeaderRenderer?.title?.simpleText ||
-    data?.header?.playlistHeaderRenderer?.title?.runs?.[0]?.text ||
-    data?.metadata?.playlistMetadataRenderer?.title ||
-    "YouTube Playlist"
-  );
+  return data?.header?.playlistHeaderRenderer?.title?.simpleText||data?.header?.playlistHeaderRenderer?.title?.runs?.[0]?.text||data?.metadata?.playlistMetadataRenderer?.title||"YouTube Playlist";
 }
 
-/** STEP 1 — Fetch a playlist's videos (no DB writes) */
+/** STEP 1 — Fetch playlist videos */
 router.post("/admin/playlist/fetch", adminAuth, async (req, res) => {
-  const { playlist } = req.body || {};
+  const { playlist } = req.body||{};
   const pid = extractPlaylistId(playlist);
-  if (!pid) return res.status(400).json({ error: "Couldn't find a YouTube playlist ID in that URL. Paste a link like https://youtube.com/playlist?list=..." });
-
+  if (!pid) return res.status(400).json({ error: "Couldn't find a YouTube playlist ID in that URL." });
   try {
-    const all: Array<{ videoId: string; title: string; thumbnail: string; duration: string }> = [];
-    let continuation: string | null = null;
+    const all: Array<{videoId:string;title:string;thumbnail:string;duration:string}> = [];
+    let continuation: string|null = null;
     let title = "YouTube Playlist";
-    for (let page = 0; page < 12; page++) { // ~100 vids per page; safety cap ~1200
-      const data: any = await fetchYtPlaylistPage(pid, continuation || undefined);
-      if (page === 0) title = ytExtractPlaylistTitle(data);
+    for (let page=0;page<12;page++) {
+      const data: any = await fetchYtPlaylistPage(pid, continuation||undefined);
+      if (page===0) title = ytExtractPlaylistTitle(data);
       all.push(...ytExtractVideos(data));
       continuation = ytExtractContinuation(data);
       if (!continuation) break;
     }
-    if (all.length === 0) {
-      return res.status(404).json({ error: "Playlist is empty, private, or not accessible. Make sure it's Public or Unlisted." });
-    }
-    // Mark which ones already exist in our library
-    const existing = new Set(rd<Video[]>("vids.json", []).map(v => v.videoId));
-    res.json({
-      title,
-      playlistId: pid,
-      total: all.length,
-      videos: all.map(v => ({ ...v, exists: existing.has(v.videoId) })),
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message || "Failed to fetch playlist from YouTube" });
-  }
+    if (all.length===0) return res.status(404).json({ error: "Playlist is empty, private, or not accessible." });
+    const existing = new Set(rd<Video[]>("vids.json",[]).map(v=>v.videoId));
+    res.json({ title, playlistId:pid, total:all.length, videos:all.map(v=>({...v,exists:existing.has(v.videoId)})) });
+  } catch(err:any) { res.status(500).json({ error: err?.message||"Failed to fetch playlist" }); }
 });
 
-/** STEP 2 — Bulk create videos (used after the user picks which ones to import) */
+/** STEP 2 — Bulk import (auto-saves to DB immediately) */
 router.post("/admin/videos/bulk", adminAuth, (req, res) => {
-  const { videos, subjectId, chapterId, course, online } = req.body || {};
-  if (!Array.isArray(videos) || videos.length === 0) {
-    return res.status(400).json({ error: "videos[] is required" });
-  }
-  const list = rd<Video[]>("vids.json", []);
-  const existing = new Set(list.map(v => v.videoId));
-  let added = 0;
-  const created: Video[] = [];
+  const { videos, subjectId, chapterId, course, online } = req.body||{};
+  if (!Array.isArray(videos)||videos.length===0) return res.status(400).json({error:"videos[] is required"});
+  const list = rd<Video[]>("vids.json",[]);
+  const existing = new Set(list.map(v=>v.videoId));
+  let added=0;
+  const created: Video[]=[];
   for (const it of videos) {
-    const vid = String(it?.videoId || "").trim();
-    const title = String(it?.title || "").trim();
-    if (!vid || !title) continue;
+    const vid=String(it?.videoId||"").trim(); const title=String(it?.title||"").trim();
+    if (!vid||!title) continue;
     if (existing.has(vid)) continue;
-    const v: Video = {
-      id: crypto.randomUUID(),
-      videoId: vid,
-      title,
-      subjectId: subjectId || "",
-      chapterId: chapterId || undefined,
-      desc: String(it?.desc || it?.duration || "").slice(0, 800),
-      date: new Date().toLocaleString(),
-      course: course || "",
-      online: !!online,
-    };
-    created.push(v);
-    existing.add(vid);
-    added++;
+    const v: Video = { id:crypto.randomUUID(), videoId:vid, title, subjectId:subjectId||"", chapterId:chapterId||undefined, desc:String(it?.desc||it?.duration||"").slice(0,800), date:new Date().toLocaleString(), course:course||"", online:!!online };
+    created.push(v); existing.add(vid); added++;
   }
-  // Prepend in original playlist order (not reversed) so sequential playback works correctly
+  // Prepend in original playlist order so sequential playback works
   const updatedList = [...created, ...list];
   wr("vids.json", updatedList);
-  res.json({ ok: true, total: videos.length, added, skipped: videos.length - added, created });
+  res.json({ ok:true, total:videos.length, added, skipped:videos.length-added, created });
+});
+
+/** FETCH + AUTO-IMPORT in one step */
+router.post("/admin/playlist/fetch-import", adminAuth, async (req, res) => {
+  const { playlist, subjectId, chapterId, course, online } = req.body||{};
+  const pid = extractPlaylistId(playlist);
+  if (!pid) return res.status(400).json({ error: "Couldn't find a YouTube playlist ID." });
+  try {
+    const all: Array<{videoId:string;title:string;thumbnail:string;duration:string}> = [];
+    let continuation: string|null = null;
+    for (let page=0;page<12;page++) {
+      const data: any = await fetchYtPlaylistPage(pid, continuation||undefined);
+      all.push(...ytExtractVideos(data));
+      continuation = ytExtractContinuation(data);
+      if (!continuation) break;
+    }
+    if (all.length===0) return res.status(404).json({ error: "Playlist is empty or not accessible." });
+    const list = rd<Video[]>("vids.json",[]);
+    const existing = new Set(list.map(v=>v.videoId));
+    const created: Video[] = [];
+    for (const it of all) {
+      if (!it.videoId||existing.has(it.videoId)) continue;
+      created.push({ id:crypto.randomUUID(), videoId:it.videoId, title:it.title, subjectId:subjectId||"", chapterId:chapterId||undefined, desc:it.duration||"", date:new Date().toLocaleString(), course:course||"", online:!!online });
+      existing.add(it.videoId);
+    }
+    wr("vids.json", [...created, ...list]);
+    res.json({ ok:true, total:all.length, added:created.length, skipped:all.length-created.length });
+  } catch(err:any) { res.status(500).json({ error:err?.message||"Import failed" }); }
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -734,211 +965,129 @@ router.post("/admin/videos/bulk", adminAuth, (req, res) => {
 ══════════════════════════════════════════════════════════ */
 router.get("/admin/quizzes",           adminAuth, (_r, res) => res.json(rd<Quiz[]>("quizzes.json",[])));
 router.post("/admin/quizzes",          adminAuth, (req, res) => {
-  const { title, desc, timeMinutes, questions } = req.body;
-  if (!title) return res.status(400).json({error:"title required"});
-  const quizzes = rd<Quiz[]>("quizzes.json",[]);
-  const quiz: Quiz = {
-    id: crypto.randomUUID(), title, desc:desc||"", timeMinutes:timeMinutes||30,
-    published:false, createdAt:new Date().toISOString(), questions: questions||[],
-  };
+  const {title,desc,timeMinutes,questions}=req.body;
+  if(!title) return res.status(400).json({error:"title required"});
+  const quizzes=rd<Quiz[]>("quizzes.json",[]);
+  const quiz: Quiz={id:crypto.randomUUID(),title,desc:desc||"",timeMinutes:timeMinutes||30,published:false,createdAt:new Date().toISOString(),questions:questions||[]};
   quizzes.unshift(quiz); wr("quizzes.json",quizzes); res.json(quiz);
 });
 router.put("/admin/quizzes/:id",       adminAuth, (req, res) => {
-  const quizzes = rd<Quiz[]>("quizzes.json",[]);
-  const i = quizzes.findIndex(q=>q.id===req.params.id);
-  if (i===-1) return res.status(404).json({error:"Not found"});
-  quizzes[i] = {...quizzes[i], ...req.body, id:quizzes[i].id};
+  const quizzes=rd<Quiz[]>("quizzes.json",[]);
+  const i=quizzes.findIndex(q=>q.id===req.params.id);
+  if(i===-1) return res.status(404).json({error:"Not found"});
+  quizzes[i]={...quizzes[i],...req.body,id:quizzes[i].id};
   wr("quizzes.json",quizzes); res.json(quizzes[i]);
 });
 router.patch("/admin/quizzes/:id/publish", adminAuth, (req, res) => {
-  const quizzes = rd<Quiz[]>("quizzes.json",[]);
-  const i = quizzes.findIndex(q=>q.id===req.params.id);
-  if (i===-1) return res.status(404).json({error:"Not found"});
-  quizzes[i].published = !quizzes[i].published;
+  const quizzes=rd<Quiz[]>("quizzes.json",[]);
+  const i=quizzes.findIndex(q=>q.id===req.params.id);
+  if(i===-1) return res.status(404).json({error:"Not found"});
+  quizzes[i].published=!quizzes[i].published;
   wr("quizzes.json",quizzes); res.json({published:quizzes[i].published});
 });
 router.delete("/admin/quizzes/:id",    adminAuth, (req, res) => {
-  wr("quizzes.json", rd<Quiz[]>("quizzes.json",[]).filter(q=>q.id!==req.params.id)); res.json({ok:true});
+  wr("quizzes.json",rd<Quiz[]>("quizzes.json",[]).filter(q=>q.id!==req.params.id)); res.json({ok:true});
 });
 
 /* ══════════════════════════════════════════════════════════
-   ADMIN — NOTIFICATIONS (bulk send to all users)
+   ADMIN — NOTIFICATIONS
 ══════════════════════════════════════════════════════════ */
 router.get("/admin/notifications",     adminAuth, (_r, res) => res.json(rd<Notification[]>("notifs.json",[])));
 router.post("/admin/notifications",    adminAuth, (req, res) => {
-  const { title, body, recipients } = req.body;
-  if (!title||!body) return res.status(400).json({error:"title and body required"});
-  // recipients: array of usernames OR null/undefined/[] = broadcast to all
-  let recList: string[] = [];
+  const {title,body,recipients}=req.body;
+  if(!title||!body) return res.status(400).json({error:"title and body required"});
+  let recList: string[]=[];
   if (Array.isArray(recipients)) {
-    const users = rd<UniversalUser[]>("users.json", []);
-    const valid = new Set(users.map(u => u.username));
-    recList = recipients.filter(r => typeof r === "string" && valid.has(r));
+    const users=rd<UniversalUser[]>("users.json",[]);
+    const valid=new Set(users.map(u=>u.username));
+    recList=recipients.filter(r=>typeof r==="string"&&valid.has(r));
   }
-  const notifs = rd<Notification[]>("notifs.json",[]);
-  const n: Notification = {
-    id: crypto.randomUUID(),
-    title, body,
-    createdAt: new Date().toISOString(),
-    recipients: recList,
-    readBy: [],
-  };
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  const n: Notification={id:crypto.randomUUID(),title,body,createdAt:new Date().toISOString(),recipients:recList,readBy:[]};
   notifs.unshift(n); wr("notifs.json",notifs); res.json(n);
 });
 router.delete("/admin/notifications/:id", adminAuth, (req, res) => {
-  wr("notifs.json", rd<Notification[]>("notifs.json",[]).filter(n=>n.id!==req.params.id)); res.json({ok:true});
+  wr("notifs.json",rd<Notification[]>("notifs.json",[]).filter(n=>n.id!==req.params.id)); res.json({ok:true});
 });
 
-/* ── Admin: Dashboard menu CRUD ── */
-router.get("/admin/dashboard-menu", adminAuth, (_r, res) => {
-  res.json(rd<DashMenuItem[]>("dashmenu.json", []).sort((a,b)=>a.order-b.order));
-});
+/* ── Dashboard menu CRUD ── */
+router.get("/admin/dashboard-menu", adminAuth, (_r, res) => res.json(rd<DashMenuItem[]>("dashmenu.json",[]).sort((a,b)=>a.order-b.order)));
 router.post("/admin/dashboard-menu", adminAuth, (req, res) => {
-  const { label, icon, bg, chevron, path: navPath, order, enabled } = req.body || {};
-  if (!label || !icon) return res.status(400).json({ error: "label and icon required" });
-  const items = rd<DashMenuItem[]>("dashmenu.json", []);
-  const item: DashMenuItem = {
-    id: crypto.randomUUID(),
-    label: String(label).trim(),
-    icon: String(icon).trim(),
-    bg: bg || "#f3f4f6",
-    chevron: chevron || "#666",
-    path: navPath || "/",
-    order: typeof order === "number" ? order : (items.length + 1),
-    enabled: enabled !== false,
-  };
-  items.push(item);
-  wr("dashmenu.json", items);
-  res.json(item);
+  const {label,icon,bg,chevron,path:navPath,order,enabled}=req.body||{};
+  if(!label||!icon) return res.status(400).json({error:"label and icon required"});
+  const items=rd<DashMenuItem[]>("dashmenu.json",[]);
+  const item: DashMenuItem={id:crypto.randomUUID(),label:String(label).trim(),icon:String(icon).trim(),bg:bg||"#f3f4f6",chevron:chevron||"#666",path:navPath||"/",order:typeof order==="number"?order:(items.length+1),enabled:enabled!==false};
+  items.push(item); wr("dashmenu.json",items); res.json(item);
 });
 router.put("/admin/dashboard-menu/:id", adminAuth, (req, res) => {
-  const items = rd<DashMenuItem[]>("dashmenu.json", []);
-  const i = items.findIndex(x => x.id === req.params.id);
-  if (i < 0) return res.status(404).json({ error: "Not found" });
-  const b = req.body || {};
-  items[i] = {
-    ...items[i],
-    ...(b.label !== undefined ? { label: String(b.label).trim() } : {}),
-    ...(b.icon !== undefined ? { icon: String(b.icon).trim() } : {}),
-    ...(b.bg !== undefined ? { bg: String(b.bg) } : {}),
-    ...(b.chevron !== undefined ? { chevron: String(b.chevron) } : {}),
-    ...(b.path !== undefined ? { path: String(b.path) } : {}),
-    ...(typeof b.order === "number" ? { order: b.order } : {}),
-    ...(typeof b.enabled === "boolean" ? { enabled: b.enabled } : {}),
-  };
-  wr("dashmenu.json", items);
-  res.json(items[i]);
+  const items=rd<DashMenuItem[]>("dashmenu.json",[]);
+  const i=items.findIndex(x=>x.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const b=req.body||{};
+  items[i]={...items[i],...(b.label!==undefined?{label:String(b.label).trim()}:{}),...(b.icon!==undefined?{icon:String(b.icon).trim()}:{}),...(b.bg!==undefined?{bg:String(b.bg)}:{}),...(b.chevron!==undefined?{chevron:String(b.chevron)}:{}),...(b.path!==undefined?{path:String(b.path)}:{}),...(typeof b.order==="number"?{order:b.order}:{}),...(typeof b.enabled==="boolean"?{enabled:b.enabled}:{})};
+  wr("dashmenu.json",items); res.json(items[i]);
 });
 router.delete("/admin/dashboard-menu/:id", adminAuth, (req, res) => {
-  wr("dashmenu.json", rd<DashMenuItem[]>("dashmenu.json", []).filter(x => x.id !== req.params.id));
-  res.json({ ok: true });
+  wr("dashmenu.json",rd<DashMenuItem[]>("dashmenu.json",[]).filter(x=>x.id!==req.params.id)); res.json({ok:true});
 });
 router.post("/admin/dashboard-menu/reorder", adminAuth, (req, res) => {
-  const { ids } = req.body as { ids: string[] };
-  if (!Array.isArray(ids)) return res.status(400).json({ error: "ids array required" });
-  const items = rd<DashMenuItem[]>("dashmenu.json", []);
-  ids.forEach((id, idx) => {
-    const it = items.find(x => x.id === id);
-    if (it) it.order = idx + 1;
-  });
-  wr("dashmenu.json", items);
-  res.json({ ok: true });
+  const {ids}=req.body as {ids:string[]};
+  if(!Array.isArray(ids)) return res.status(400).json({error:"ids array required"});
+  const items=rd<DashMenuItem[]>("dashmenu.json",[]);
+  ids.forEach((id,idx)=>{const it=items.find(x=>x.id===id);if(it) it.order=idx+1;});
+  wr("dashmenu.json",items); res.json({ok:true});
 });
 
 /* ══════════════════════════════════════════════════════════
    ADMIN — MANUAL DATABASE EDITOR
-   Allows raw read/write of any JSON file in DATA_DIR.
 ══════════════════════════════════════════════════════════ */
-function safeName(name: string): string | null {
+function safeName(name: string): string|null {
   if (!/^[a-zA-Z0-9_\-]+\.json$/.test(name)) return null;
   return name;
 }
-
 router.get("/admin/db/files", adminAuth, (_r, res) => {
   try {
-    const files = fs.readdirSync(DATA_DIR)
-      .filter(f => f.endsWith(".json"))
-      .map(f => {
-        const p = path.join(DATA_DIR, f);
-        const st = fs.statSync(p);
-        return { name: f, size: st.size, mtime: st.mtime.toISOString() };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const files=fs.readdirSync(DATA_DIR).filter(f=>f.endsWith(".json")).map(f=>{const p=path.join(DATA_DIR,f);const st=fs.statSync(p);return{name:f,size:st.size,mtime:st.mtime.toISOString()};}).sort((a,b)=>a.name.localeCompare(b.name));
     res.json(files);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch(err:any){res.status(500).json({error:err.message});}
 });
-
 router.get("/admin/db/file/:name", adminAuth, (req, res) => {
-  const name = safeName(req.params.name);
-  if (!name) return res.status(400).json({ error: "Invalid filename" });
-  const p = path.join(DATA_DIR, name);
-  if (!fs.existsSync(p)) return res.status(404).json({ error: "File not found" });
-  try {
-    const raw = fs.readFileSync(p, "utf-8");
-    res.type("application/json").send(raw);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const name=safeName(req.params.name);
+  if(!name) return res.status(400).json({error:"Invalid filename"});
+  const p=path.join(DATA_DIR,name);
+  if(!fs.existsSync(p)) return res.status(404).json({error:"File not found"});
+  try{const raw=fs.readFileSync(p,"utf-8");res.type("application/json").send(raw);}
+  catch(err:any){res.status(500).json({error:err.message});}
 });
-
 router.put("/admin/db/file/:name", adminAuth, (req, res) => {
-  const name = safeName(req.params.name);
-  if (!name) return res.status(400).json({ error: "Invalid filename" });
-  const { content } = req.body as { content: string };
-  if (typeof content !== "string") return res.status(400).json({ error: "content (string) required" });
-  // Validate JSON before writing
+  const name=safeName(req.params.name);
+  if(!name) return res.status(400).json({error:"Invalid filename"});
+  const {content}=req.body as{content:string};
+  if(typeof content!=="string") return res.status(400).json({error:"content (string) required"});
   let parsed: any;
-  try { parsed = JSON.parse(content); }
-  catch (e: any) { return res.status(422).json({ error: "Invalid JSON: " + e.message }); }
-  // Pretty-write
-  try {
-    // Backup first
-    const p = path.join(DATA_DIR, name);
-    if (fs.existsSync(p)) {
-      const bakDir = path.join(DATA_DIR, ".backups");
-      if (!fs.existsSync(bakDir)) fs.mkdirSync(bakDir, { recursive: true });
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      fs.copyFileSync(p, path.join(bakDir, `${name}.${stamp}.bak`));
-    }
-    fs.writeFileSync(p, JSON.stringify(parsed, null, 2));
-    res.json({ ok: true, bytes: fs.statSync(p).size });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  try{parsed=JSON.parse(content);}catch(e:any){return res.status(422).json({error:"Invalid JSON: "+e.message});}
+  try{
+    const p=path.join(DATA_DIR,name);
+    if(fs.existsSync(p)){const bakDir=path.join(DATA_DIR,".backups");if(!fs.existsSync(bakDir))fs.mkdirSync(bakDir,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,"-");fs.copyFileSync(p,path.join(bakDir,`${name}.${stamp}.bak`));}
+    fs.writeFileSync(p,JSON.stringify(parsed,null,2));
+    res.json({ok:true,bytes:fs.statSync(p).size});
+  }catch(err:any){res.status(500).json({error:err.message});}
 });
-
 router.post("/admin/db/file/:name", adminAuth, (req, res) => {
-  // Create new file with empty content
-  const name = safeName(req.params.name);
-  if (!name) return res.status(400).json({ error: "Invalid filename" });
-  const p = path.join(DATA_DIR, name);
-  if (fs.existsSync(p)) return res.status(409).json({ error: "File already exists" });
-  try {
-    const init = req.body?.content ?? "[]";
-    JSON.parse(init); // validate
-    fs.writeFileSync(p, init);
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(422).json({ error: "Invalid JSON: " + err.message });
-  }
+  const name=safeName(req.params.name);
+  if(!name) return res.status(400).json({error:"Invalid filename"});
+  const p=path.join(DATA_DIR,name);
+  if(fs.existsSync(p)) return res.status(409).json({error:"File already exists"});
+  try{const init=req.body?.content??"[]";JSON.parse(init);fs.writeFileSync(p,init);res.json({ok:true});}
+  catch(err:any){res.status(422).json({error:"Invalid JSON: "+err.message});}
 });
-
 router.delete("/admin/db/file/:name", adminAuth, (req, res) => {
-  const name = safeName(req.params.name);
-  if (!name) return res.status(400).json({ error: "Invalid filename" });
-  const p = path.join(DATA_DIR, name);
-  if (!fs.existsSync(p)) return res.status(404).json({ error: "Not found" });
-  try {
-    const bakDir = path.join(DATA_DIR, ".backups");
-    if (!fs.existsSync(bakDir)) fs.mkdirSync(bakDir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    fs.renameSync(p, path.join(bakDir, `${name}.${stamp}.deleted`));
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const name=safeName(req.params.name);
+  if(!name) return res.status(400).json({error:"Invalid filename"});
+  const p=path.join(DATA_DIR,name);
+  if(!fs.existsSync(p)) return res.status(404).json({error:"Not found"});
+  try{const bakDir=path.join(DATA_DIR,".backups");if(!fs.existsSync(bakDir))fs.mkdirSync(bakDir,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,"-");fs.renameSync(p,path.join(bakDir,`${name}.${stamp}.deleted`));res.json({ok:true});}
+  catch(err:any){res.status(500).json({error:err.message});}
 });
 
 export default router;
