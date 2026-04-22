@@ -348,20 +348,17 @@ input, button, select, textarea, label {
   pointer-events: none !important;
 }
 
-/* ── TOP BAR ──
-   Permanently opaque black mask covering the area where YouTube would
-   render its title / share / "watch on YouTube" chrome. NEVER fades. */
+/* ── TOP BAR ── */
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 80px;
+  height: 60px;
   background: #000;
   z-index: 1001;
   display: flex; align-items: center;
   padding: 0 10px; gap: 8px;
   pointer-events: none;
-  opacity: 1 !important;
-  transition: opacity 300ms ease-out;
+  transition: opacity 250ms ease-out;
 }
 .ytp-top-bar .ytp-video-title {
   color: #fff; font-size: 13px; font-weight: 600;

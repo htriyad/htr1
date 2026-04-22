@@ -319,8 +319,15 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   }
   function seek(d: number) {
     const p = playerRef.current; if (!p) return;
+    /* Force the top mask up *before* the seekTo call so YouTube's own
+       title-flash that briefly appears during a scrub is hidden. Keep
+       it up for ~1.5s, then auto-hide via the normal delayed timer. */
+    showTopNow();
     p.seekTo(Math.max(0, p.getCurrentTime() + d), true);
-    p.playVideo(); handleInteraction();
+    p.playVideo();
+    handleInteraction();
+    if (topBarTimer.current) clearTimeout(topBarTimer.current);
+    topBarTimer.current = setTimeout(() => setShowTop(false), 1500);
   }
   function seekTo(ratio: number) {
     const p = playerRef.current; if (!p) return;
