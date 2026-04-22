@@ -342,18 +342,25 @@ input, button, select, textarea, label {
 .ytp-aspect-wrap iframe {
   position: absolute; inset: 0;
   width: 100%; height: 100%; border: none;
+  /* Block ALL pointer events on the YT iframe so the user can NEVER
+     trigger YouTube's native gestures (double-tap seek overlay, title
+     tooltip, share menu, etc). All input is handled by .ytp-overlay. */
+  pointer-events: none !important;
 }
 
-/* ── TOP BAR ── */
+/* ── TOP BAR ──
+   Permanently opaque black mask covering the area where YouTube would
+   render its title / share / "watch on YouTube" chrome. NEVER fades. */
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 60px;
+  height: 80px;
   background: #000;
   z-index: 1001;
   display: flex; align-items: center;
   padding: 0 10px; gap: 8px;
   pointer-events: none;
+  opacity: 1 !important;
   transition: opacity 300ms ease-out;
 }
 .ytp-top-bar .ytp-video-title {

@@ -172,11 +172,12 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
 
     playerRef.current = new window.YT.Player(playerDivRef.current, {
       videoId,
+      host: "https://www.youtube-nocookie.com",
       playerVars: {
         playsinline: 1,
         autoplay:    0,
         controls:    0,
-        modestbranding: 0,
+        modestbranding: 1,
         rel:         0,
         showinfo:    0,
         fs:          0,
@@ -184,7 +185,9 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
         disablekb:   1,
         cc_load_policy: 0,
         hl: "en",
-      },
+        widget_referrer: window.location.origin,
+        origin: window.location.origin,
+      } as any,
       events: {
         onReady: (e) => {
           /* ── CRITICAL: patch the iframe element directly ──
