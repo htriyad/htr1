@@ -10,16 +10,6 @@
     "enabled": true
   },
   {
-    "id": "m2",
-    "label": "Past Classes",
-    "icon": "🎬",
-    "bg": "#fff3e0",
-    "chevron": "#e65100",
-    "path": "/past-classes",
-    "order": 2,
-    "enabled": true
-  },
-  {
     "id": "m3",
     "label": "Live Exam",
     "icon": "📝",
@@ -67,7 +57,7 @@
     "chevron": "#e53935",
     "path": "/",
     "order": 7,
-    "enabled": true
+    "enabled": false
   },
   {
     "id": "m8",
@@ -95,8 +85,8 @@
     "icon": "📚",
     "bg": "#fce4ec",
     "chevron": "#e65100",
-    "path": "/",
-    "order": 10,
+    "path": "/courses",
+    "order": 2,
     "enabled": true
   },
   {
@@ -106,7 +96,7 @@
     "bg": "#e8f5e9",
     "chevron": "#2e7d32",
     "path": "/",
-    "order": 11,
+    "order": 10,
     "enabled": true
   }
 ]
