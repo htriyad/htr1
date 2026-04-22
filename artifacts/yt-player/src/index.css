@@ -348,22 +348,19 @@ input, button, select, textarea, label {
   pointer-events: none !important;
 }
 
-/* ── TOP BAR ──
-   Tall enough (90px) to cover both the YouTube title row AND the
-   channel-name row that appears underneath it on tablet/desktop.
-   Opacity fade-IN is instant (0ms) so it can never trail a seek event
-   and let the title flash through; only fade-OUT is animated. */
+/* ── TOP BAR ── */
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 90px;
+  height: 60px;
   background: #000;
   z-index: 1001;
-  display: flex; align-items: flex-start;
-  padding: 12px 10px 0; gap: 8px;
+  display: flex; align-items: center;
+  padding: 0 10px; gap: 8px;
   pointer-events: none;
-  transition: opacity 220ms ease-out 800ms; /* delay before fading out */
+  transition: opacity 220ms ease-out;
 }
+/* Set by JS the instant a seek begins — no fade, paints same frame. */
 .ytp-top-bar.instant-show {
   transition: none !important;
   opacity: 1 !important;

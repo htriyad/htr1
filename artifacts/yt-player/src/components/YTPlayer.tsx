@@ -321,17 +321,19 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   /* Synchronously paint the top mask black RIGHT NOW (no React render,
      no CSS fade) so YouTube's title flash during a fast double-tap seek
      never has a frame to leak through. Then arm a timer to release it. */
-  function armMaskInstant(holdMs = 1800) {
+  function armMaskInstant(holdMs = 600) {
     const el = topBarRef.current;
     if (el) {
-      el.classList.add("instant-show");
-      el.style.opacity = "1";
+      el.classList.add("instant-show"); // synchronous: zero-frame paint
     }
-    showTopNow();
     if (topBarTimer.current) clearTimeout(topBarTimer.current);
     topBarTimer.current = setTimeout(() => {
-      if (topBarRef.current) topBarRef.current.classList.remove("instant-show");
-      setShowTop(false);
+      // Release: drop the instant override; React state decides remaining visibility,
+      // and the CSS transition handles the fade-out smoothly.
+      if (topBarRef.current) {
+        topBarRef.current.classList.remove("instant-show");
+        topBarRef.current.style.opacity = "";
+      }
     }, holdMs);
   }
 
