@@ -23,7 +23,9 @@ function wr(file: string, data: unknown) {
 /* ── Types ─────────────────────────────────────────────── */
 interface IpMap    { [ip: string]: { approvedAt: string; note?: string } }
 interface Message  { id: string; ip: string; message: string; timestamp: string; status: "pending"|"noted" }
-interface Video    { id: string; videoId: string; title: string; subjectId: string; desc: string; date: string; course: string; online: boolean }
+interface Video    { id: string; videoId: string; title: string; subjectId: string; chapterId?: string; desc: string; date: string; course: string; online: boolean }
+interface Chapter  { id: string; name: string; order?: number }
+interface Subject  { id: string; name: string; course: string; color?: string; chapters: Chapter[]; createdAt: string }
 interface UniversalUser { id: string; username: string; password: string; note?: string; createdAt: string }
 interface QuizOption   { id: string; text: string }
 interface QuizQuestion { id: string; text: string; options: QuizOption[]; correct: string; solution?: string }
@@ -66,6 +68,11 @@ if (!fs.existsSync(path.join(DATA_DIR, "dashmenu.json"))) wr("dashmenu.json", [
   { id:"m10",label:"Course & Content", icon:"📚", bg:"#fce4ec", chevron:"#e65100", path:"/",             order:10, enabled:true },
   { id:"m11",label:"Discussion Group", icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/",             order:11, enabled:true },
 ]);
+if (!fs.existsSync(path.join(DATA_DIR, "subjects.json")))
+  wr("subjects.json", [
+    { id:"sub-physics", name:"Physics",     course:"HSC Science", color:"#7c3aed", chapters:[{id:"ch-p1",name:"Mechanics",order:1},{id:"ch-p2",name:"Thermodynamics",order:2}], createdAt:new Date().toISOString() },
+    { id:"sub-math",    name:"Mathematics", course:"HSC Math",    color:"#2563eb", chapters:[{id:"ch-m1",name:"Algebra",order:1},{id:"ch-m2",name:"Calculus",order:2}], createdAt:new Date().toISOString() },
+  ]);
 if (!fs.existsSync(path.join(DATA_DIR, "vids.json")))
   wr("vids.json", [
     { id:"1", videoId:"O6HL1Q3MCrM", title:"Chapter 1: Introduction to Physics", subjectId:"Ba-10", desc:"Newton's Laws of Motion\nKinematics\nForce & Acceleration", date:"19 Nov, 2025 08:00 PM", course:"HSC Science", online:true },
@@ -381,8 +388,213 @@ router.post("/admin/videos",       adminAuth, (req, res) => {
   const vid: Video = { id:crypto.randomUUID(), videoId, title, subjectId:subjectId||"", desc:desc||"", date:date||"", course:course||"", online:!!online };
   vids.unshift(vid); wr("vids.json",vids); res.json(vid);
 });
+router.put("/admin/videos/:id", adminAuth, (req, res) => {
+  const vids = rd<Video[]>("vids.json",[]);
+  const i = vids.findIndex(v=>v.id===req.params.id);
+  if (i===-1) return res.status(404).json({error:"Not found"});
+  vids[i] = { ...vids[i], ...req.body, id: vids[i].id };
+  wr("vids.json", vids); res.json(vids[i]);
+});
 router.delete("/admin/videos/:id", adminAuth, (req, res) => {
   wr("vids.json", rd<Video[]>("vids.json",[]).filter(v=>v.id!==req.params.id)); res.json({ok:true});
+});
+
+/* Bulk transfer videos to a different subject (and optional chapter) */
+router.post("/admin/videos/transfer", adminAuth, (req, res) => {
+  const { videoIds, targetSubjectId, targetChapterId } = req.body as {
+    videoIds: string[]; targetSubjectId: string; targetChapterId?: string;
+  };
+  if (!Array.isArray(videoIds) || !targetSubjectId) {
+    return res.status(400).json({ error: "videoIds[] and targetSubjectId required" });
+  }
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const subj = subjects.find(s => s.id === targetSubjectId);
+  if (!subj) return res.status(404).json({ error: "Target subject not found" });
+  if (targetChapterId && !subj.chapters.find(c => c.id === targetChapterId)) {
+    return res.status(400).json({ error: "Target chapter not in target subject" });
+  }
+  const vids = rd<Video[]>("vids.json", []);
+  const ids = new Set(videoIds);
+  let moved = 0;
+  for (const v of vids) {
+    if (ids.has(v.id)) {
+      v.subjectId = targetSubjectId;
+      v.chapterId = targetChapterId || undefined;
+      moved++;
+    }
+  }
+  wr("vids.json", vids);
+  res.json({ ok: true, moved });
+});
+
+/* ── ADMIN — SUBJECTS & CHAPTERS ───────────────────────── */
+router.get("/admin/subjects", adminAuth, (_r, res) => {
+  res.json(rd<Subject[]>("subjects.json", []));
+});
+router.post("/admin/subjects", adminAuth, (req, res) => {
+  const { name, course, color } = req.body || {};
+  if (!name) return res.status(400).json({ error: "name required" });
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const subj: Subject = {
+    id: "sub-" + crypto.randomUUID().slice(0, 8),
+    name: String(name).trim(),
+    course: String(course || "").trim(),
+    color: color || "#7c3aed",
+    chapters: [],
+    createdAt: new Date().toISOString(),
+  };
+  subjects.push(subj);
+  wr("subjects.json", subjects);
+  res.json(subj);
+});
+router.put("/admin/subjects/:id", adminAuth, (req, res) => {
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const i = subjects.findIndex(s => s.id === req.params.id);
+  if (i === -1) return res.status(404).json({ error: "Not found" });
+  const b = req.body || {};
+  subjects[i] = {
+    ...subjects[i],
+    ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
+    ...(b.course !== undefined ? { course: String(b.course).trim() } : {}),
+    ...(b.color !== undefined ? { color: String(b.color) } : {}),
+  };
+  wr("subjects.json", subjects);
+  res.json(subjects[i]);
+});
+router.delete("/admin/subjects/:id", adminAuth, (req, res) => {
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const next = subjects.filter(s => s.id !== req.params.id);
+  if (next.length === subjects.length) return res.status(404).json({ error: "Not found" });
+  wr("subjects.json", next);
+  // Detach videos from this subject
+  const vids = rd<Video[]>("vids.json", []);
+  let changed = false;
+  for (const v of vids) if (v.subjectId === req.params.id) { v.subjectId = ""; v.chapterId = undefined; changed = true; }
+  if (changed) wr("vids.json", vids);
+  res.json({ ok: true });
+});
+router.post("/admin/subjects/:id/chapters", adminAuth, (req, res) => {
+  const { name } = req.body || {};
+  if (!name) return res.status(400).json({ error: "name required" });
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const subj = subjects.find(s => s.id === req.params.id);
+  if (!subj) return res.status(404).json({ error: "Subject not found" });
+  const ch: Chapter = { id: "ch-" + crypto.randomUUID().slice(0, 8), name: String(name).trim(), order: subj.chapters.length + 1 };
+  subj.chapters.push(ch);
+  wr("subjects.json", subjects);
+  res.json(ch);
+});
+router.put("/admin/subjects/:sid/chapters/:cid", adminAuth, (req, res) => {
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const subj = subjects.find(s => s.id === req.params.sid);
+  if (!subj) return res.status(404).json({ error: "Subject not found" });
+  const ch = subj.chapters.find(c => c.id === req.params.cid);
+  if (!ch) return res.status(404).json({ error: "Chapter not found" });
+  if (req.body?.name !== undefined) ch.name = String(req.body.name).trim();
+  if (typeof req.body?.order === "number") ch.order = req.body.order;
+  wr("subjects.json", subjects);
+  res.json(ch);
+});
+router.delete("/admin/subjects/:sid/chapters/:cid", adminAuth, (req, res) => {
+  const subjects = rd<Subject[]>("subjects.json", []);
+  const subj = subjects.find(s => s.id === req.params.sid);
+  if (!subj) return res.status(404).json({ error: "Subject not found" });
+  subj.chapters = subj.chapters.filter(c => c.id !== req.params.cid);
+  wr("subjects.json", subjects);
+  // Detach videos from this chapter
+  const vids = rd<Video[]>("vids.json", []);
+  let changed = false;
+  for (const v of vids) if (v.chapterId === req.params.cid) { v.chapterId = undefined; changed = true; }
+  if (changed) wr("vids.json", vids);
+  res.json({ ok: true });
+});
+
+/* Public subject list (for student-side filters / future use) */
+router.get("/subjects", userAuth, (_req, res) => {
+  res.json(rd<Subject[]>("subjects.json", []));
+});
+
+/* ── ADMIN — YOUTUBE PLAYLIST IMPORT (public / unlisted) ──
+   Uses GOOGLE_API_KEY (YouTube Data API v3). Public + unlisted both work
+   because unlisted playlists are accessible by ID. Private playlists are not
+   accessible without OAuth and will fail with 404. */
+function extractPlaylistId(input: string): string | null {
+  const s = (input || "").trim();
+  if (!s) return null;
+  // Already an ID (starts with PL, UU, OL, RD, FL etc.)
+  if (/^[A-Za-z0-9_-]{16,64}$/.test(s) && !s.includes("/")) return s;
+  try {
+    const u = new URL(s);
+    const list = u.searchParams.get("list");
+    if (list) return list;
+  } catch { /* not a URL */ }
+  return null;
+}
+
+router.post("/admin/videos/import-playlist", adminAuth, async (req, res) => {
+  const { playlist, course, subjectId, chapterId, online } = req.body || {};
+  const key = process.env.GOOGLE_API_KEY;
+  if (!key) return res.status(500).json({ error: "GOOGLE_API_KEY not configured on server" });
+  const pid = extractPlaylistId(playlist);
+  if (!pid) return res.status(400).json({ error: "Could not detect playlist ID. Paste the playlist URL or ID." });
+
+  try {
+    const items: Array<{ videoId: string; title: string; desc: string; published: string }> = [];
+    let pageToken = "";
+    for (let page = 0; page < 20; page++) { // safety cap: 20 * 50 = 1000 videos
+      const url = new URL(`${"https://www.googleapis.com/youtube/v3/playlistItems"}`);
+      url.searchParams.set("part", "snippet,contentDetails");
+      url.searchParams.set("maxResults", "50");
+      url.searchParams.set("playlistId", pid);
+      url.searchParams.set("key", key);
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const r = await fetch(url.toString());
+      if (!r.ok) {
+        const txt = await r.text().catch(() => "");
+        return res.status(r.status).json({ error: `YouTube API ${r.status}: ${txt.slice(0, 250)}` });
+      }
+      const data: any = await r.json();
+      for (const it of data.items || []) {
+        const vid = it?.contentDetails?.videoId || it?.snippet?.resourceId?.videoId;
+        const title = it?.snippet?.title || "";
+        const desc = it?.snippet?.description || "";
+        const published = it?.contentDetails?.videoPublishedAt || it?.snippet?.publishedAt || "";
+        if (vid && title && title !== "Private video" && title !== "Deleted video") {
+          items.push({ videoId: vid, title, desc, published });
+        }
+      }
+      pageToken = data.nextPageToken || "";
+      if (!pageToken) break;
+    }
+
+    if (items.length === 0) return res.status(404).json({ error: "Playlist returned no public/unlisted videos. Make sure it's not Private." });
+
+    const vids = rd<Video[]>("vids.json", []);
+    const existing = new Set(vids.map(v => v.videoId));
+    let added = 0;
+    const created: Video[] = [];
+    for (const it of items) {
+      if (existing.has(it.videoId)) continue;
+      const v: Video = {
+        id: crypto.randomUUID(),
+        videoId: it.videoId,
+        title: it.title,
+        subjectId: subjectId || "",
+        chapterId: chapterId || undefined,
+        desc: (it.desc || "").slice(0, 800),
+        date: it.published ? new Date(it.published).toLocaleString() : "",
+        course: course || "",
+        online: !!online,
+      };
+      vids.unshift(v);
+      created.push(v);
+      added++;
+    }
+    wr("vids.json", vids);
+    res.json({ ok: true, total: items.length, added, skipped: items.length - added, created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Playlist import failed" });
+  }
 });
 
 /* ══════════════════════════════════════════════════════════

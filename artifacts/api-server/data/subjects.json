@@ -1,0 +1,40 @@
+[
+  {
+    "id": "sub-physics",
+    "name": "Physics",
+    "course": "HSC Science",
+    "color": "#7c3aed",
+    "chapters": [
+      {
+        "id": "ch-p1",
+        "name": "Mechanics",
+        "order": 1
+      },
+      {
+        "id": "ch-p2",
+        "name": "Thermodynamics",
+        "order": 2
+      }
+    ],
+    "createdAt": "2026-04-22T03:43:01.948Z"
+  },
+  {
+    "id": "sub-math",
+    "name": "Mathematics",
+    "course": "HSC Math",
+    "color": "#2563eb",
+    "chapters": [
+      {
+        "id": "ch-m1",
+        "name": "Algebra",
+        "order": 1
+      },
+      {
+        "id": "ch-m2",
+        "name": "Calculus",
+        "order": 2
+      }
+    ],
+    "createdAt": "2026-04-22T03:43:01.949Z"
+  }
+]

@@ -109,10 +109,10 @@ export default function AiTutor() {
           <div style={{ fontSize: 32, lineHeight: 1 }}>🤖</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 800, fontSize: 16, fontFamily: "Lato,sans-serif" }}>
-              AI Tutor & Doubt Solver
+              Red Rose 🥀 AI
             </div>
             <div style={{ fontSize: 11, opacity: 0.95, marginTop: 2 }}>
-              Bangla + English • Math • Chemistry • Always free
+              Bangla + English • Math • Chemistry • Powered by Gemini
             </div>
           </div>
           {msgs.length > 0 && (
@@ -146,7 +146,7 @@ export default function AiTutor() {
         )}
 
         {msgs.map((m, i) => (
-          <div key={i} style={{
+          <div key={i} className={m.role === "user" ? "user-bubble" : ""} style={{
             alignSelf: m.role === "user" ? "flex-end" : "flex-start",
             maxWidth: "88%",
             background: m.role === "user" ? "linear-gradient(135deg,#7c3aed,#db2777)" : "var(--card)",
@@ -158,10 +158,7 @@ export default function AiTutor() {
             fontSize: 14, lineHeight: 1.55,
             wordBreak: "break-word", overflowWrap: "anywhere",
           }}>
-            {m.role === "assistant"
-              ? <MathText text={m.content || (loading && i === msgs.length - 1 ? "…" : "")} block />
-              : <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
-            }
+            <MathText text={m.content || (m.role === "assistant" && loading && i === msgs.length - 1 ? "…" : "")} block />
           </div>
         ))}
 

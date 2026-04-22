@@ -6,12 +6,13 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db";
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",  icon:"📊", label:"Overview"      },
   { id:"users",     icon:"👤", label:"Users"         },
   { id:"ips",       icon:"🌐", label:"IP Access"     },
   { id:"inbox",     icon:"📨", label:"Inbox"         },
+  { id:"subjects",  icon:"📚", label:"Subjects"      },
   { id:"videos",    icon:"🎬", label:"Videos"        },
   { id:"quizzes",   icon:"📝", label:"Quizzes"       },
   { id:"notifs",    icon:"🔔", label:"Notify"        },
@@ -92,6 +93,7 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="users"     && <UsersTab />}
           {tab==="ips"       && <IPsTab />}
           {tab==="inbox"     && <InboxTab />}
+          {tab==="subjects"  && <SubjectsTab />}
           {tab==="videos"    && <VideosTab />}
           {tab==="quizzes"   && <QuizzesTab />}
           {tab==="notifs"    && <NotifsTab />}
@@ -272,46 +274,294 @@ function InboxTab() {
   );
 }
 
-/* ══ VIDEOS ════════════════════════════════════════════════ */
-function VideosTab() {
-  const [vids,setVids]=useState<any[]>([]); const [f,setF]=useState({videoId:"",title:"",subjectId:"",desc:"",date:"",course:"",online:true}); const [msg,setMsg]=useState("");
-  const load=()=>api("/api/admin/videos").then(r=>r.json()).then(d=>{if(Array.isArray(d))setVids(d);});
+/* ══ SUBJECTS & CHAPTERS ═══════════════════════════════════ */
+function SubjectsTab() {
+  const [subjects,setSubjects]=useState<any[]>([]);
+  const [f,setF]=useState({name:"",course:"",color:"#7c3aed"});
+  const [chapName,setChapName]=useState<Record<string,string>>({});
+  const [msg,setMsg]=useState("");
+
+  const load=()=>api("/api/admin/subjects").then(r=>r.json()).then(d=>{if(Array.isArray(d))setSubjects(d);});
   useEffect(()=>{load();},[]);
-  async function add(){if(!f.videoId||!f.title)return; await api("/api/admin/videos",{method:"POST",body:JSON.stringify(f)}); setF({videoId:"",title:"",subjectId:"",desc:"",date:"",course:"",online:true}); setMsg("✅ Video added!"); load();}
-  async function del(id:string){if(!confirm("Delete video?"))return; await api(`/api/admin/videos/${id}`,{method:"DELETE"}); load();}
+
+  async function addSubject(){
+    if(!f.name) return;
+    const r=await api("/api/admin/subjects",{method:"POST",body:JSON.stringify(f)});
+    if(!r.ok){const d=await r.json();setMsg("❌ "+(d.error||"Failed"));return;}
+    setF({name:"",course:"",color:"#7c3aed"}); setMsg("✅ Subject added"); load();
+  }
+  async function delSubject(id:string){
+    if(!confirm("Delete subject? Videos will be unassigned.")) return;
+    await api(`/api/admin/subjects/${id}`,{method:"DELETE"}); load();
+  }
+  async function renameSubject(s:any){
+    const name=prompt("New name:",s.name); if(!name) return;
+    await api(`/api/admin/subjects/${s.id}`,{method:"PUT",body:JSON.stringify({name})}); load();
+  }
+  async function addChapter(sid:string){
+    const name=(chapName[sid]||"").trim(); if(!name) return;
+    await api(`/api/admin/subjects/${sid}/chapters`,{method:"POST",body:JSON.stringify({name})});
+    setChapName({...chapName,[sid]:""}); load();
+  }
+  async function delChapter(sid:string,cid:string){
+    if(!confirm("Delete chapter? Videos will be unassigned.")) return;
+    await api(`/api/admin/subjects/${sid}/chapters/${cid}`,{method:"DELETE"}); load();
+  }
+  async function renameChapter(sid:string,c:any){
+    const name=prompt("New chapter name:",c.name); if(!name) return;
+    await api(`/api/admin/subjects/${sid}/chapters/${c.id}`,{method:"PUT",body:JSON.stringify({name})}); load();
+  }
+
+  return (
+    <div>
+      <SectionTitle>📚 Subjects & Chapters</SectionTitle>
+      <InfoBox>Create subjects (Physics, Math…) and chapters inside them. Videos can be assigned to a subject + chapter from the <b>Videos</b> tab.</InfoBox>
+
+      <Card title="➕ Add Subject">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px auto",gap:8,alignItems:"end"}}>
+          <Field label="Subject Name"><input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="Physics" style={inp}/></Field>
+          <Field label="Course"><input value={f.course} onChange={e=>setF({...f,course:e.target.value})} placeholder="HSC Science" style={inp}/></Field>
+          <Field label="Color"><input type="color" value={f.color} onChange={e=>setF({...f,color:e.target.value})} style={{...inp,padding:2,height:40}}/></Field>
+          <button onClick={addSubject} disabled={!f.name} style={btnStyle("var(--purple)")}>Add</button>
+        </div>
+        {msg&&<Feedback msg={msg} style={{marginTop:8}}/>}
+      </Card>
+
+      <SectionTitle style={{marginTop:20}}>Subjects ({subjects.length})</SectionTitle>
+      {subjects.length===0&&<Empty icon="📚" text="No subjects yet"/>}
+      {subjects.map(s=>(
+        <div key={s.id} style={{...listItem,marginBottom:12,borderLeft:`4px solid ${s.color||"#7c3aed"}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{width:36,height:36,borderRadius:9,background:s.color||"#7c3aed",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900}}>{s.name[0]?.toUpperCase()}</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:800,color:"var(--text)"}}>{s.name}</div>
+              <div style={{fontSize:11,color:"var(--sub)"}}>{s.course||"—"} · <code>{s.id}</code> · {s.chapters?.length||0} chapters</div>
+            </div>
+            <button onClick={()=>renameSubject(s)} style={smBtn("var(--navy)")}>✎</button>
+            <button onClick={()=>delSubject(s.id)} style={smBtn("var(--orange)")}>✕</button>
+          </div>
+
+          <div style={{paddingLeft:46,display:"flex",flexDirection:"column",gap:4}}>
+            {(s.chapters||[]).map((c:any)=>(
+              <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",background:"var(--bg)",borderRadius:6}}>
+                <span style={{fontSize:13,flex:1}}>📖 {c.name}</span>
+                <code style={{fontSize:10,color:"var(--sub)"}}>{c.id}</code>
+                <button onClick={()=>renameChapter(s.id,c)} style={{...smBtn("var(--navy)"),padding:"2px 8px",fontSize:10}}>✎</button>
+                <button onClick={()=>delChapter(s.id,c.id)} style={{...smBtn("var(--orange)"),padding:"2px 8px",fontSize:10}}>✕</button>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:6,marginTop:4}}>
+              <input value={chapName[s.id]||""} onChange={e=>setChapName({...chapName,[s.id]:e.target.value})}
+                placeholder="+ Add chapter…" style={{...inp,padding:"6px 10px",fontSize:12,flex:1}}
+                onKeyDown={e=>{if(e.key==="Enter")addChapter(s.id);}}/>
+              <button onClick={()=>addChapter(s.id)} disabled={!(chapName[s.id]||"").trim()} style={{...smBtn("var(--green)"),padding:"6px 12px"}}>Add</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ VIDEOS (with playlist import + transfer) ══════════════ */
+function VideosTab() {
+  const [vids,setVids]=useState<any[]>([]);
+  const [subjects,setSubjects]=useState<any[]>([]);
+  const [f,setF]=useState({videoId:"",title:"",subjectId:"",chapterId:"",desc:"",date:"",course:"",online:true});
+  const [msg,setMsg]=useState("");
+  const [filterSub,setFilterSub]=useState<string>("");
+  const [filterChap,setFilterChap]=useState<string>("");
+  const [selected,setSelected]=useState<Set<string>>(new Set());
+  const [moveSub,setMoveSub]=useState<string>("");
+  const [moveChap,setMoveChap]=useState<string>("");
+
+  // Playlist import
+  const [pl,setPl]=useState({playlist:"",subjectId:"",chapterId:"",course:"",online:true});
+  const [plBusy,setPlBusy]=useState(false);
+  const [plMsg,setPlMsg]=useState("");
+
+  const loadVids=()=>api("/api/admin/videos").then(r=>r.json()).then(d=>{if(Array.isArray(d))setVids(d);});
+  const loadSubs=()=>api("/api/admin/subjects").then(r=>r.json()).then(d=>{if(Array.isArray(d))setSubjects(d);});
+  useEffect(()=>{loadVids();loadSubs();},[]);
+
+  const subById=(id:string)=>subjects.find(s=>s.id===id);
+  const chapsFor=(id:string)=>(subById(id)?.chapters||[]) as any[];
+  const chapById=(sid:string,cid?:string)=>cid?chapsFor(sid).find(c=>c.id===cid):null;
+
+  async function add(){
+    if(!f.videoId||!f.title)return;
+    await api("/api/admin/videos",{method:"POST",body:JSON.stringify(f)});
+    setF({videoId:"",title:"",subjectId:"",chapterId:"",desc:"",date:"",course:"",online:true});
+    setMsg("✅ Video added!"); loadVids();
+  }
+  async function del(id:string){if(!confirm("Delete video?"))return; await api(`/api/admin/videos/${id}`,{method:"DELETE"}); loadVids();}
+
+  function toggleSel(id:string){
+    setSelected(s=>{const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n;});
+  }
+  function selAll(list:any[]){
+    setSelected(new Set(list.map(v=>v.id)));
+  }
+  async function transferSelected(){
+    if(selected.size===0||!moveSub){setMsg("⚠️ Pick videos and a target subject");return;}
+    const r=await api("/api/admin/videos/transfer",{method:"POST",body:JSON.stringify({
+      videoIds:Array.from(selected),
+      targetSubjectId:moveSub,
+      targetChapterId:moveChap||undefined,
+    })});
+    const d=await r.json();
+    if(!r.ok){setMsg("❌ "+(d.error||"Transfer failed"));return;}
+    setMsg(`✅ Moved ${d.moved} video(s)`);
+    setSelected(new Set()); setMoveSub(""); setMoveChap(""); loadVids();
+  }
+
+  async function importPlaylist(){
+    if(!pl.playlist.trim()){setPlMsg("⚠️ Paste a playlist URL or ID");return;}
+    setPlBusy(true); setPlMsg("");
+    try {
+      const r=await api("/api/admin/videos/import-playlist",{method:"POST",body:JSON.stringify(pl)});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||"Import failed");
+      setPlMsg(`✅ Imported ${d.added} new video(s) (${d.skipped} duplicates skipped)`);
+      setPl({...pl,playlist:""}); loadVids();
+    } catch(e:any){ setPlMsg("❌ "+e.message); }
+    finally{ setPlBusy(false); }
+  }
+
+  // Filter
+  const filtered = vids.filter(v=>{
+    if(filterSub && v.subjectId!==filterSub) return false;
+    if(filterChap && v.chapterId!==filterChap) return false;
+    return true;
+  });
+
   return (
     <div>
       <SectionTitle>🎬 Video Library</SectionTitle>
-      <Card title="➕ Add Class Recording">
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Field label="YouTube Video ID"><input value={f.videoId} onChange={e=>setF({...f,videoId:e.target.value})} placeholder="e.g. dQw4w9WgXcW (from URL)" style={inp}/></Field>
-          <Field label="Class Title (Bangla/English supported)"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="পদার্থবিজ্ঞান - নিউটনের সূত্র" style={inp}/></Field>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <Field label="Subject ID"><input value={f.subjectId} onChange={e=>setF({...f,subjectId:e.target.value})} placeholder="e.g. Phy-01" style={inp}/></Field>
-            <Field label="Course"><input value={f.course} onChange={e=>setF({...f,course:e.target.value})} placeholder="e.g. HSC Science" style={inp}/></Field>
+
+      {/* ── YouTube Playlist Import ── */}
+      <Card title="📥 Import YouTube Playlist (public or unlisted)">
+        <InfoBox>Paste a playlist URL (e.g. <code>https://youtube.com/playlist?list=PLxxxx</code>) or just the <code>list</code> ID. <b>Unlisted playlists work</b> as long as you have the link. Private playlists are not supported.</InfoBox>
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:10}}>
+          <Field label="Playlist URL or ID">
+            <input value={pl.playlist} onChange={e=>setPl({...pl,playlist:e.target.value})}
+              placeholder="https://www.youtube.com/playlist?list=PL..." style={inp}/>
+          </Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Assign to Subject">
+              <select value={pl.subjectId} onChange={e=>setPl({...pl,subjectId:e.target.value,chapterId:""})} style={inp}>
+                <option value="">— None —</option>
+                {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Chapter (optional)">
+              <select value={pl.chapterId} onChange={e=>setPl({...pl,chapterId:e.target.value})} style={inp} disabled={!pl.subjectId}>
+                <option value="">— None —</option>
+                {chapsFor(pl.subjectId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Course Label"><input value={pl.course} onChange={e=>setPl({...pl,course:e.target.value})} placeholder="HSC Science" style={inp}/></Field>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer",height:40,marginTop:18}}>
+              <input type="checkbox" checked={pl.online} onChange={e=>setPl({...pl,online:e.target.checked})} style={{width:16,height:16}}/> Mark as Online class
+            </label>
           </div>
-          <Field label="Date & Time"><input value={f.date} onChange={e=>setF({...f,date:e.target.value})} placeholder="19 Nov, 2025 08:00 PM" style={inp}/></Field>
-          <Field label="Description / Chapter (Bangla supported)"><textarea value={f.desc} onChange={e=>setF({...f,desc:e.target.value})} rows={3} placeholder="১ম অধ্যায়: নিউটনের সূত্র..." style={{...inp,resize:"vertical"}}/></Field>
+          {plMsg&&<Feedback msg={plMsg}/>}
+          <button onClick={importPlaylist} disabled={plBusy||!pl.playlist.trim()} style={btnStyle("var(--orange)")}>
+            {plBusy?"⏳ Importing…":"📥 Import Playlist →"}
+          </button>
+        </div>
+      </Card>
+
+      {/* ── Single video ── */}
+      <Card title="➕ Add Single Video">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="YouTube Video ID"><input value={f.videoId} onChange={e=>setF({...f,videoId:e.target.value})} placeholder="e.g. dQw4w9WgXcW" style={inp}/></Field>
+          <Field label="Class Title"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="পদার্থবিজ্ঞান - নিউটনের সূত্র" style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Subject">
+              <select value={f.subjectId} onChange={e=>setF({...f,subjectId:e.target.value,chapterId:""})} style={inp}>
+                <option value="">— None —</option>
+                {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Chapter">
+              <select value={f.chapterId} onChange={e=>setF({...f,chapterId:e.target.value})} style={inp} disabled={!f.subjectId}>
+                <option value="">— None —</option>
+                {chapsFor(f.subjectId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Course"><input value={f.course} onChange={e=>setF({...f,course:e.target.value})} placeholder="HSC Science" style={inp}/></Field>
+            <Field label="Date & Time"><input value={f.date} onChange={e=>setF({...f,date:e.target.value})} placeholder="19 Nov, 2025 08:00 PM" style={inp}/></Field>
+          </div>
+          <Field label="Description"><textarea value={f.desc} onChange={e=>setF({...f,desc:e.target.value})} rows={3} placeholder="..." style={{...inp,resize:"vertical"}}/></Field>
           <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer"}}>
             <input type="checkbox" checked={f.online} onChange={e=>setF({...f,online:e.target.checked})} style={{width:16,height:16}}/> Online class badge
           </label>
           {msg&&<Feedback msg={msg}/>}
-          <button onClick={add} disabled={!f.videoId||!f.title} style={btnStyle("var(--purple)")}>Add Video to Library →</button>
+          <button onClick={add} disabled={!f.videoId||!f.title} style={btnStyle("var(--purple)")}>Add Video →</button>
         </div>
       </Card>
-      <SectionTitle style={{marginTop:24}}>All Videos ({vids.length})</SectionTitle>
-      {vids.length===0&&<Empty icon="🎬" text="No videos yet"/>}
-      {vids.map(v=>(
-        <div key={v.id} style={{...listItem,display:"flex",alignItems:"flex-start",gap:12}}>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,color:"var(--text)",marginBottom:2}}>{v.title}</div>
-            <div style={{fontSize:11,color:"var(--purple)",fontWeight:700}}>{v.subjectId} · {v.course}</div>
-            <code style={{fontSize:11,color:"var(--sub)"}}>YT: {v.videoId}</code>
-          </div>
-          {v.online&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"2px 8px",fontWeight:700,flexShrink:0}}>Online</span>}
-          <button onClick={()=>del(v.id)} style={smBtn("var(--orange)")}>✕</button>
+
+      {/* ── Filter + Transfer toolbar ── */}
+      <Card title="🔍 Browse & Transfer">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <Field label="Filter by Subject">
+            <select value={filterSub} onChange={e=>{setFilterSub(e.target.value);setFilterChap("");}} style={inp}>
+              <option value="">All subjects</option>
+              {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Filter by Chapter">
+            <select value={filterChap} onChange={e=>setFilterChap(e.target.value)} style={inp} disabled={!filterSub}>
+              <option value="">All chapters</option>
+              {chapsFor(filterSub).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
         </div>
-      ))}
+        <InfoBox>
+          ✔ Tick the videos you want to move, then pick a target subject (and optional chapter) and click <b>Transfer</b>.
+        </InfoBox>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto auto",gap:8,marginTop:10,alignItems:"end"}}>
+          <Field label="→ Move to Subject">
+            <select value={moveSub} onChange={e=>{setMoveSub(e.target.value);setMoveChap("");}} style={inp}>
+              <option value="">— Pick target —</option>
+              {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </Field>
+          <Field label="→ Chapter (optional)">
+            <select value={moveChap} onChange={e=>setMoveChap(e.target.value)} style={inp} disabled={!moveSub}>
+              <option value="">— None —</option>
+              {chapsFor(moveSub).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <button onClick={()=>selAll(filtered)} style={smBtn("var(--navy)")}>Select all ({filtered.length})</button>
+          <button onClick={transferSelected} disabled={selected.size===0||!moveSub} style={btnStyle("var(--green)")}>
+            ↪ Transfer {selected.size>0?`(${selected.size})`:""}
+          </button>
+        </div>
+      </Card>
+
+      <SectionTitle style={{marginTop:24}}>Videos ({filtered.length} of {vids.length})</SectionTitle>
+      {filtered.length===0&&<Empty icon="🎬" text="No videos match these filters"/>}
+      {filtered.map(v=>{
+        const s=subById(v.subjectId); const c=chapById(v.subjectId,v.chapterId);
+        const sel=selected.has(v.id);
+        return (
+          <div key={v.id} style={{...listItem,display:"flex",alignItems:"center",gap:10,border:sel?"2px solid var(--purple)":"none"}}>
+            <input type="checkbox" checked={sel} onChange={()=>toggleSel(v.id)} style={{width:18,height:18,accentColor:"var(--purple)",cursor:"pointer"}}/>
+            <img src={`https://i.ytimg.com/vi/${v.videoId}/default.jpg`} alt="" style={{width:64,height:48,objectFit:"cover",borderRadius:6,flexShrink:0,background:"#000"}} onError={e=>{(e.target as HTMLImageElement).style.visibility="hidden";}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.title}</div>
+              <div style={{fontSize:11,color:"var(--purple)",fontWeight:700}}>
+                {s?.name||v.subjectId||"No subject"} {c?` · ${c.name}`:""} {v.course?` · ${v.course}`:""}
+              </div>
+              <code style={{fontSize:10,color:"var(--sub)"}}>YT: {v.videoId}</code>
+            </div>
+            {v.online&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"2px 8px",fontWeight:700,flexShrink:0}}>Online</span>}
+            <button onClick={()=>del(v.id)} style={smBtn("var(--orange)")}>✕</button>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1004,29 +1254,85 @@ function MenuTab(){
         </div>
       </Card>
 
-      <SectionTitle style={{marginTop:24}}>Current Items ({items.length})</SectionTitle>
+      <SectionTitle style={{marginTop:24}}>Current Items ({items.length}) <span style={{fontSize:11,fontWeight:500,color:"var(--sub)"}}>· drag <span className="dd-handle" style={{padding:0}}>⋮⋮</span> to reorder</span></SectionTitle>
       {items.length===0&&<Empty icon="⊞" text="No menu items yet — add some above"/>}
-      {items.sort((a,b)=>a.order-b.order).map((it,idx)=>(
-        <div key={it.id} style={{...listItem,display:"flex",alignItems:"center",gap:10,opacity:it.enabled?1:0.5}}>
-          <div style={{display:"flex",flexDirection:"column",gap:2}}>
-            <button onClick={()=>move(it,-1)} disabled={idx===0} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===0?0.3:1}}>▲</button>
-            <button onClick={()=>move(it,1)} disabled={idx===items.length-1} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===items.length-1?0.3:1}}>▼</button>
-          </div>
-          <div style={{width:42,height:42,borderRadius:10,background:it.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <span style={{fontSize:20}}>{it.icon}</span>
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,color:"var(--text)"}}>{it.label} {!it.enabled&&<span style={{fontSize:10,color:"var(--orange)"}}>(hidden)</span>}</div>
-            <div style={{fontSize:11,color:"var(--sub)",fontFamily:"monospace"}}>{it.path}</div>
-          </div>
-          <button onClick={()=>toggleEnabled(it)} style={smBtn(it.enabled?"#10b981":"#888")} title={it.enabled?"Hide":"Show"}>
-            {it.enabled?"👁️":"🚫"}
-          </button>
-          <button onClick={()=>startEdit(it)} style={smBtn("var(--navy)")}>✎</button>
-          <button onClick={()=>del(it.id)} style={smBtn("var(--orange)")}>✕</button>
+      <DraggableList
+        items={items.slice().sort((a,b)=>a.order-b.order)}
+        onReorder={async(ids)=>{
+          // optimistic
+          const next=ids.map((id,i)=>{const it=items.find(x=>x.id===id)!; return {...it, order:i+1};});
+          setItems(next);
+          await api("/api/admin/dashboard-menu/reorder",{method:"POST",body:JSON.stringify({ids})});
+          load();
+        }}
+        renderRow={(it,idx)=>(
+          <>
+            <span className="dd-handle" title="Drag to reorder">⋮⋮</span>
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              <button onClick={()=>move(it,-1)} disabled={idx===0} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===0?0.3:1}}>▲</button>
+              <button onClick={()=>move(it,1)} disabled={idx===items.length-1} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===items.length-1?0.3:1}}>▼</button>
+            </div>
+            <div style={{width:42,height:42,borderRadius:10,background:it.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <span style={{fontSize:20}}>{it.icon}</span>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:"var(--text)"}}>{it.label} {!it.enabled&&<span style={{fontSize:10,color:"var(--orange)"}}>(hidden)</span>}</div>
+              <div style={{fontSize:11,color:"var(--sub)",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.path}</div>
+            </div>
+            <button onClick={()=>toggleEnabled(it)} style={smBtn(it.enabled?"#10b981":"#888")} title={it.enabled?"Hide":"Show"}>
+              {it.enabled?"👁️":"🚫"}
+            </button>
+            <button onClick={()=>startEdit(it)} style={smBtn("var(--navy)")}>✎</button>
+            <button onClick={()=>del(it.id)} style={smBtn("var(--orange)")}>✕</button>
+          </>
+        )}
+      />
+    </div>
+  );
+}
+
+/* Generic HTML5 drag-and-drop list helper */
+function DraggableList<T extends { id:string; enabled?:boolean }>({
+  items, onReorder, renderRow,
+}: { items:T[]; onReorder:(ids:string[])=>void; renderRow:(it:T,idx:number)=>React.ReactNode }) {
+  const dragId = useRef<string|null>(null);
+  const [overId,setOverId] = useState<string|null>(null);
+  function onDragStart(e:React.DragEvent,id:string){
+    dragId.current=id;
+    e.dataTransfer.effectAllowed="move";
+    try { e.dataTransfer.setData("text/plain", id); } catch {}
+  }
+  function onDragOver(e:React.DragEvent,id:string){
+    e.preventDefault();
+    if (overId!==id) setOverId(id);
+  }
+  function onDragLeave(){ setOverId(null); }
+  function onDrop(e:React.DragEvent,targetId:string){
+    e.preventDefault();
+    setOverId(null);
+    const src = dragId.current; dragId.current=null;
+    if (!src || src===targetId) return;
+    const ids = items.map(i=>i.id);
+    const from = ids.indexOf(src), to = ids.indexOf(targetId);
+    if (from<0||to<0) return;
+    ids.splice(from,1);
+    ids.splice(to,0,src);
+    onReorder(ids);
+  }
+  return (
+    <>
+      {items.map((it,idx)=>(
+        <div key={it.id} draggable
+          onDragStart={e=>onDragStart(e,it.id)}
+          onDragOver={e=>onDragOver(e,it.id)}
+          onDragLeave={onDragLeave}
+          onDrop={e=>onDrop(e,it.id)}
+          className={`dd-row ${dragId.current===it.id?"dragging":""} ${overId===it.id?"over":""}`}
+          style={{...listItem,display:"flex",alignItems:"center",gap:10,opacity:it.enabled===false?0.5:1}}>
+          {renderRow(it,idx)}
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
