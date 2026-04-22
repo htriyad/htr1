@@ -70,6 +70,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   const hideCtrlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const topBarTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const topBarRef     = useRef<HTMLDivElement | null>(null);
+  const instantMaskTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstPlay   = useRef(true);
   const tickRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const leftTap       = useRef(0);
@@ -323,13 +324,9 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
      never has a frame to leak through. Then arm a timer to release it. */
   function armMaskInstant(holdMs = 600) {
     const el = topBarRef.current;
-    if (el) {
-      el.classList.add("instant-show"); // synchronous: zero-frame paint
-    }
-    if (topBarTimer.current) clearTimeout(topBarTimer.current);
-    topBarTimer.current = setTimeout(() => {
-      // Release: drop the instant override; React state decides remaining visibility,
-      // and the CSS transition handles the fade-out smoothly.
+    if (el) el.classList.add("instant-show"); // synchronous, zero-frame paint
+    if (instantMaskTimer.current) clearTimeout(instantMaskTimer.current);
+    instantMaskTimer.current = setTimeout(() => {
       if (topBarRef.current) {
         topBarRef.current.classList.remove("instant-show");
         topBarRef.current.style.opacity = "";
