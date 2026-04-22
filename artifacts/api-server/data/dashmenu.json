@@ -1,0 +1,112 @@
+[
+  {
+    "id": "m1",
+    "label": "AI Tutor",
+    "icon": "🤖",
+    "bg": "#ede9fe",
+    "chevron": "#7c3aed",
+    "path": "/ai-tutor",
+    "order": 1,
+    "enabled": true
+  },
+  {
+    "id": "m2",
+    "label": "Past Classes",
+    "icon": "🎬",
+    "bg": "#fff3e0",
+    "chevron": "#e65100",
+    "path": "/past-classes",
+    "order": 2,
+    "enabled": true
+  },
+  {
+    "id": "m3",
+    "label": "Live Exam",
+    "icon": "📝",
+    "bg": "#e3f2fd",
+    "chevron": "#2e7d32",
+    "path": "/exams",
+    "order": 3,
+    "enabled": true
+  },
+  {
+    "id": "m4",
+    "label": "Practice Exam",
+    "icon": "💻",
+    "bg": "#fff3e0",
+    "chevron": "#2e7d32",
+    "path": "/exams",
+    "order": 4,
+    "enabled": true
+  },
+  {
+    "id": "m5",
+    "label": "My Progress",
+    "icon": "🏆",
+    "bg": "#fef3c7",
+    "chevron": "#d97706",
+    "path": "/profile",
+    "order": 5,
+    "enabled": true
+  },
+  {
+    "id": "m6",
+    "label": "Leaderboard",
+    "icon": "🥇",
+    "bg": "#fee2e2",
+    "chevron": "#dc2626",
+    "path": "/leaderboard",
+    "order": 6,
+    "enabled": true
+  },
+  {
+    "id": "m7",
+    "label": "Live Class",
+    "icon": "👨‍🏫",
+    "bg": "#e8f5e9",
+    "chevron": "#e53935",
+    "path": "/",
+    "order": 7,
+    "enabled": true
+  },
+  {
+    "id": "m8",
+    "label": "Solve Sheet",
+    "icon": "📋",
+    "bg": "#f3e5f5",
+    "chevron": "#7b2fa5",
+    "path": "/",
+    "order": 8,
+    "enabled": true
+  },
+  {
+    "id": "m9",
+    "label": "Q&A Service",
+    "icon": "💬",
+    "bg": "#e0f7fa",
+    "chevron": "#2e7d32",
+    "path": "/",
+    "order": 9,
+    "enabled": true
+  },
+  {
+    "id": "m10",
+    "label": "Course & Content",
+    "icon": "📚",
+    "bg": "#fce4ec",
+    "chevron": "#e65100",
+    "path": "/",
+    "order": 10,
+    "enabled": true
+  },
+  {
+    "id": "m11",
+    "label": "Discussion Group",
+    "icon": "👥",
+    "bg": "#e8f5e9",
+    "chevron": "#2e7d32",
+    "path": "/",
+    "order": 11,
+    "enabled": true
+  }
+]

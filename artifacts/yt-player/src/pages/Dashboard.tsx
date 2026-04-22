@@ -1,20 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { X } from "lucide-react";
 import Header from "../components/Header";
 
-const MENU = [
+interface MenuItem {
+  id?: string;
+  label: string;
+  icon: string;
+  bg: string;
+  chevron: string;
+  path: string;
+}
+
+const FALLBACK_MENU: MenuItem[] = [
   { label: "AI Tutor",         icon: "🤖", bg: "#ede9fe", chevron: "#7c3aed", path: "/ai-tutor" },
   { label: "Past Classes",     icon: "🎬", bg: "#fff3e0", chevron: "#e65100", path: "/past-classes" },
   { label: "Live Exam",        icon: "📝", bg: "#e3f2fd", chevron: "#2e7d32", path: "/exams" },
   { label: "Practice Exam",    icon: "💻", bg: "#fff3e0", chevron: "#2e7d32", path: "/exams" },
   { label: "My Progress",      icon: "🏆", bg: "#fef3c7", chevron: "#d97706", path: "/profile" },
   { label: "Leaderboard",      icon: "🥇", bg: "#fee2e2", chevron: "#dc2626", path: "/leaderboard" },
-  { label: "Live Class",       icon: "👨‍🏫", bg: "#e8f5e9", chevron: "#e53935" },
-  { label: "Solve Sheet",      icon: "📋", bg: "#f3e5f5", chevron: "#7b2fa5" },
-  { label: "Q&A Service",      icon: "💬", bg: "#e0f7fa", chevron: "#2e7d32" },
-  { label: "Course & Content", icon: "📚", bg: "#fce4ec", chevron: "#e65100" },
-  { label: "Discussion Group", icon: "👥", bg: "#e8f5e9", chevron: "#2e7d32" },
 ];
 
 const SIDEBAR_ITEMS = [
@@ -37,6 +41,15 @@ const SIDEBAR_ITEMS = [
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, navigate] = useLocation();
+  const [menu, setMenu] = useState<MenuItem[]>(FALLBACK_MENU);
+
+  useEffect(() => {
+    const token = localStorage.getItem("rr_user_token") || "";
+    fetch("/api/dashboard-menu", { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (Array.isArray(d) && d.length) setMenu(d); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100svh" }}>
@@ -91,9 +104,9 @@ export default function Dashboard() {
 
         {/* Menu items */}
         <div className="dash-menu">
-          {MENU.map((item) => (
+          {menu.map((item) => (
             <button
-              key={item.label}
+              key={item.id || item.label}
               className="dash-menu-item"
               onClick={() => {
                 if ((item as any).path) navigate((item as any).path);

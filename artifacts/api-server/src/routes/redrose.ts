@@ -28,7 +28,24 @@ interface UniversalUser { id: string; username: string; password: string; note?:
 interface QuizOption   { id: string; text: string }
 interface QuizQuestion { id: string; text: string; options: QuizOption[]; correct: string; solution?: string }
 interface Quiz         { id: string; title: string; desc: string; timeMinutes: number; published: boolean; createdAt: string; questions: QuizQuestion[] }
-interface Notification { id: string; title: string; body: string; createdAt: string }
+interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  recipients?: string[];   // empty / undefined = broadcast to ALL users
+  readBy?: string[];       // usernames who have read it
+}
+interface DashMenuItem {
+  id: string;
+  label: string;
+  icon: string;            // emoji
+  bg: string;              // background color
+  chevron: string;         // chevron color
+  path: string;            // navigation path (e.g. "/ai-tutor")
+  order: number;
+  enabled: boolean;
+}
 
 /* ── Seed default data ──────────────────────────────────── */
 if (!fs.existsSync(path.join(DATA_DIR, "ips.json")))    wr("ips.json",    {});
@@ -36,6 +53,19 @@ if (!fs.existsSync(path.join(DATA_DIR, "msgs.json")))   wr("msgs.json",   []);
 if (!fs.existsSync(path.join(DATA_DIR, "users.json")))  wr("users.json",  []);
 if (!fs.existsSync(path.join(DATA_DIR, "quizzes.json")))wr("quizzes.json",[]);
 if (!fs.existsSync(path.join(DATA_DIR, "notifs.json"))) wr("notifs.json", []);
+if (!fs.existsSync(path.join(DATA_DIR, "dashmenu.json"))) wr("dashmenu.json", [
+  { id:"m1", label:"AI Tutor",         icon:"🤖", bg:"#ede9fe", chevron:"#7c3aed", path:"/ai-tutor",      order:1,  enabled:true },
+  { id:"m2", label:"Past Classes",     icon:"🎬", bg:"#fff3e0", chevron:"#e65100", path:"/past-classes",  order:2,  enabled:true },
+  { id:"m3", label:"Live Exam",        icon:"📝", bg:"#e3f2fd", chevron:"#2e7d32", path:"/exams",         order:3,  enabled:true },
+  { id:"m4", label:"Practice Exam",    icon:"💻", bg:"#fff3e0", chevron:"#2e7d32", path:"/exams",         order:4,  enabled:true },
+  { id:"m5", label:"My Progress",      icon:"🏆", bg:"#fef3c7", chevron:"#d97706", path:"/profile",       order:5,  enabled:true },
+  { id:"m6", label:"Leaderboard",      icon:"🥇", bg:"#fee2e2", chevron:"#dc2626", path:"/leaderboard",   order:6,  enabled:true },
+  { id:"m7", label:"Live Class",       icon:"👨‍🏫", bg:"#e8f5e9", chevron:"#e53935", path:"/",             order:7,  enabled:true },
+  { id:"m8", label:"Solve Sheet",      icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/",             order:8,  enabled:true },
+  { id:"m9", label:"Q&A Service",      icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/",             order:9,  enabled:true },
+  { id:"m10",label:"Course & Content", icon:"📚", bg:"#fce4ec", chevron:"#e65100", path:"/",             order:10, enabled:true },
+  { id:"m11",label:"Discussion Group", icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/",             order:11, enabled:true },
+]);
 if (!fs.existsSync(path.join(DATA_DIR, "vids.json")))
   wr("vids.json", [
     { id:"1", videoId:"O6HL1Q3MCrM", title:"Chapter 1: Introduction to Physics", subjectId:"Ba-10", desc:"Newton's Laws of Motion\nKinematics\nForce & Acceleration", date:"19 Nov, 2025 08:00 PM", course:"HSC Science", online:true },
@@ -154,8 +184,58 @@ router.get("/videos", userAuth, (_req, res) => {
 /* ══════════════════════════════════════════════════════════
    STUDENT — NOTIFICATIONS
 ══════════════════════════════════════════════════════════ */
-router.get("/notifications", userAuth, (_req, res) => {
-  res.json(rd<Notification[]>("notifs.json", []));
+router.get("/notifications", userAuth, (req, res) => {
+  const token = getUserToken(req);
+  const username = token ? USER_SESSIONS.get(token) || null : null;
+  const all = rd<Notification[]>("notifs.json", []);
+  // Filter: include if broadcast (no recipients), or recipients includes user.
+  // IP-only visitors (no username) only see broadcasts.
+  const visible = all.filter(n => {
+    const r = n.recipients;
+    if (!r || r.length === 0) return true;
+    return username ? r.includes(username) : false;
+  });
+  // Decorate with `read` flag for the current user
+  const decorated = visible.map(n => ({
+    ...n,
+    read: username ? !!(n.readBy?.includes(username)) : false,
+  }));
+  res.json(decorated);
+});
+
+router.post("/notifications/:id/read", userAuth, (req, res) => {
+  const token = getUserToken(req);
+  const username = token ? USER_SESSIONS.get(token) : null;
+  if (!username) return res.json({ ok: true }); // IP-only visitors: no-op
+  const all = rd<Notification[]>("notifs.json", []);
+  const n = all.find(x => x.id === req.params.id);
+  if (!n) return res.status(404).json({ error: "Not found" });
+  n.readBy = n.readBy || [];
+  if (!n.readBy.includes(username)) n.readBy.push(username);
+  wr("notifs.json", all);
+  res.json({ ok: true });
+});
+
+router.post("/notifications/read-all", userAuth, (req, res) => {
+  const token = getUserToken(req);
+  const username = token ? USER_SESSIONS.get(token) : null;
+  if (!username) return res.json({ ok: true });
+  const all = rd<Notification[]>("notifs.json", []);
+  for (const n of all) {
+    const r = n.recipients;
+    const visible = !r || r.length === 0 || r.includes(username);
+    if (!visible) continue;
+    n.readBy = n.readBy || [];
+    if (!n.readBy.includes(username)) n.readBy.push(username);
+  }
+  wr("notifs.json", all);
+  res.json({ ok: true });
+});
+
+/* ── Dashboard menu (public — anyone with access) ── */
+router.get("/dashboard-menu", userAuth, (_req, res) => {
+  const items = rd<DashMenuItem[]>("dashmenu.json", []);
+  res.json(items.filter(i => i.enabled).sort((a, b) => a.order - b.order));
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -342,14 +422,83 @@ router.delete("/admin/quizzes/:id",    adminAuth, (req, res) => {
 ══════════════════════════════════════════════════════════ */
 router.get("/admin/notifications",     adminAuth, (_r, res) => res.json(rd<Notification[]>("notifs.json",[])));
 router.post("/admin/notifications",    adminAuth, (req, res) => {
-  const { title, body } = req.body;
+  const { title, body, recipients } = req.body;
   if (!title||!body) return res.status(400).json({error:"title and body required"});
+  // recipients: array of usernames OR null/undefined/[] = broadcast to all
+  let recList: string[] = [];
+  if (Array.isArray(recipients)) {
+    const users = rd<UniversalUser[]>("users.json", []);
+    const valid = new Set(users.map(u => u.username));
+    recList = recipients.filter(r => typeof r === "string" && valid.has(r));
+  }
   const notifs = rd<Notification[]>("notifs.json",[]);
-  const n: Notification = { id:crypto.randomUUID(), title, body, createdAt:new Date().toISOString() };
+  const n: Notification = {
+    id: crypto.randomUUID(),
+    title, body,
+    createdAt: new Date().toISOString(),
+    recipients: recList,
+    readBy: [],
+  };
   notifs.unshift(n); wr("notifs.json",notifs); res.json(n);
 });
 router.delete("/admin/notifications/:id", adminAuth, (req, res) => {
   wr("notifs.json", rd<Notification[]>("notifs.json",[]).filter(n=>n.id!==req.params.id)); res.json({ok:true});
+});
+
+/* ── Admin: Dashboard menu CRUD ── */
+router.get("/admin/dashboard-menu", adminAuth, (_r, res) => {
+  res.json(rd<DashMenuItem[]>("dashmenu.json", []).sort((a,b)=>a.order-b.order));
+});
+router.post("/admin/dashboard-menu", adminAuth, (req, res) => {
+  const { label, icon, bg, chevron, path: navPath, order, enabled } = req.body || {};
+  if (!label || !icon) return res.status(400).json({ error: "label and icon required" });
+  const items = rd<DashMenuItem[]>("dashmenu.json", []);
+  const item: DashMenuItem = {
+    id: crypto.randomUUID(),
+    label: String(label).trim(),
+    icon: String(icon).trim(),
+    bg: bg || "#f3f4f6",
+    chevron: chevron || "#666",
+    path: navPath || "/",
+    order: typeof order === "number" ? order : (items.length + 1),
+    enabled: enabled !== false,
+  };
+  items.push(item);
+  wr("dashmenu.json", items);
+  res.json(item);
+});
+router.put("/admin/dashboard-menu/:id", adminAuth, (req, res) => {
+  const items = rd<DashMenuItem[]>("dashmenu.json", []);
+  const i = items.findIndex(x => x.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  const b = req.body || {};
+  items[i] = {
+    ...items[i],
+    ...(b.label !== undefined ? { label: String(b.label).trim() } : {}),
+    ...(b.icon !== undefined ? { icon: String(b.icon).trim() } : {}),
+    ...(b.bg !== undefined ? { bg: String(b.bg) } : {}),
+    ...(b.chevron !== undefined ? { chevron: String(b.chevron) } : {}),
+    ...(b.path !== undefined ? { path: String(b.path) } : {}),
+    ...(typeof b.order === "number" ? { order: b.order } : {}),
+    ...(typeof b.enabled === "boolean" ? { enabled: b.enabled } : {}),
+  };
+  wr("dashmenu.json", items);
+  res.json(items[i]);
+});
+router.delete("/admin/dashboard-menu/:id", adminAuth, (req, res) => {
+  wr("dashmenu.json", rd<DashMenuItem[]>("dashmenu.json", []).filter(x => x.id !== req.params.id));
+  res.json({ ok: true });
+});
+router.post("/admin/dashboard-menu/reorder", adminAuth, (req, res) => {
+  const { ids } = req.body as { ids: string[] };
+  if (!Array.isArray(ids)) return res.status(400).json({ error: "ids array required" });
+  const items = rd<DashMenuItem[]>("dashmenu.json", []);
+  ids.forEach((id, idx) => {
+    const it = items.find(x => x.id === id);
+    if (it) it.order = idx + 1;
+  });
+  wr("dashmenu.json", items);
+  res.json({ ok: true });
 });
 
 /* ══════════════════════════════════════════════════════════

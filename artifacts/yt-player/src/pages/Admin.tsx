@@ -6,7 +6,7 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"db";
+type Tab = "overview"|"users"|"ips"|"inbox"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",  icon:"📊", label:"Overview"      },
   { id:"users",     icon:"👤", label:"Users"         },
@@ -15,6 +15,7 @@ const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"videos",    icon:"🎬", label:"Videos"        },
   { id:"quizzes",   icon:"📝", label:"Quizzes"       },
   { id:"notifs",    icon:"🔔", label:"Notify"        },
+  { id:"menu",      icon:"⊞",  label:"Dashboard Menu"},
   { id:"doubts",    icon:"❓", label:"Doubts"        },
   { id:"micro",     icon:"⚡", label:"Micro Feed"    },
   { id:"market",    icon:"🏪", label:"Marketplace"   },
@@ -97,6 +98,7 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="doubts"    && <DoubtsTab />}
           {tab==="micro"     && <MicroFeedTab />}
           {tab==="market"    && <MarketplaceTab />}
+          {tab==="menu"      && <MenuTab />}
           {tab==="db"        && <DatabaseTab />}
         </main>
       </div>
@@ -693,33 +695,335 @@ A. Option A...`}</code>
 
 /* ══ NOTIFICATIONS ══════════════════════════════════════════ */
 function NotifsTab() {
-  const [notifs,setNotifs]=useState<any[]>([]); const [f,setF]=useState({title:"",body:""}); const [msg,setMsg]=useState("");
-  const load=()=>api("/api/admin/notifications").then(r=>r.json()).then(d=>{if(Array.isArray(d))setNotifs(d);});
+  const [notifs,setNotifs]=useState<any[]>([]);
+  const [users,setUsers]=useState<any[]>([]);
+  const [f,setF]=useState({title:"",body:""});
+  const [mode,setMode]=useState<"all"|"specific">("all");
+  const [picked,setPicked]=useState<Set<string>>(new Set());
+  const [search,setSearch]=useState("");
+  const [msg,setMsg]=useState("");
+  const [sending,setSending]=useState(false);
+
+  const load=()=>{
+    api("/api/admin/notifications").then(r=>r.json()).then(d=>{if(Array.isArray(d))setNotifs(d);});
+    api("/api/admin/users").then(r=>r.json()).then(d=>{if(Array.isArray(d))setUsers(d);});
+  };
   useEffect(()=>{load();},[]);
-  async function send(){if(!f.title||!f.body)return; await api("/api/admin/notifications",{method:"POST",body:JSON.stringify(f)}); setF({title:"",body:""}); setMsg("✅ Notification sent to all students!"); load();}
-  async function del(id:string){await api(`/api/admin/notifications/${id}`,{method:"DELETE"}); load();}
+
+  function toggleUser(u:string){
+    setPicked(p=>{const n=new Set(p); if(n.has(u))n.delete(u); else n.add(u); return n;});
+  }
+  function selectAll(){ setPicked(new Set(filteredUsers.map(u=>u.username))); }
+  function selectNone(){ setPicked(new Set()); }
+
+  async function send(){
+    if(!f.title||!f.body){setMsg("⚠️ Title and message required");return;}
+    if(mode==="specific"&&picked.size===0){setMsg("⚠️ Pick at least one user, or switch to 'All Users'");return;}
+    setSending(true);
+    const body = {
+      title: f.title,
+      body: f.body,
+      recipients: mode==="all" ? [] : Array.from(picked),
+    };
+    const r = await api("/api/admin/notifications",{method:"POST",body:JSON.stringify(body)});
+    setSending(false);
+    if(!r.ok){setMsg("❌ Send failed");return;}
+    setF({title:"",body:""}); setPicked(new Set());
+    setMsg(mode==="all"
+      ? "✅ Broadcast sent to ALL users instantly!"
+      : `✅ Sent to ${body.recipients.length} specific user(s)!`);
+    load();
+  }
+  async function del(id:string){
+    if(!confirm("Delete this notification?"))return;
+    await api(`/api/admin/notifications/${id}`,{method:"DELETE"}); load();
+  }
+
+  const filteredUsers = users.filter(u =>
+    !search.trim() || u.username.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div>
-      <SectionTitle>🔔 Broadcast Notifications</SectionTitle>
-      <InfoBox>Notifications are shown to all approved/logged-in students instantly.</InfoBox>
-      <Card title="📢 Send New Notification">
+      <SectionTitle>🔔 Send Notifications</SectionTitle>
+      <InfoBox>
+        Send to <b>everyone</b> or pick <b>specific members</b>. Users see them in their bell 🔔
+        instantly (polled every ~25s). Read state is tracked per user.
+      </InfoBox>
+
+      <Card title="📢 Compose Notification">
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Field label="Title"><input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="📅 Exam Tomorrow — Physics Chapter 3" style={inp}/></Field>
-          <Field label="Message Body (Bangla/English)"><textarea value={f.body} onChange={e=>setF({...f,body:e.target.value})} rows={3} placeholder="আগামীকাল পরীক্ষা আছে। সবাই প্রস্তুত থাকো!" style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',sans-serif"}}/></Field>
+          <Field label="Title">
+            <input value={f.title} onChange={e=>setF({...f,title:e.target.value})}
+              placeholder="📅 Exam Tomorrow — Physics Chapter 3" style={inp}/>
+          </Field>
+          <Field label="Message Body (Bangla/English supported)">
+            <textarea value={f.body} onChange={e=>setF({...f,body:e.target.value})}
+              rows={3}
+              placeholder="আগামীকাল পরীক্ষা আছে। সবাই প্রস্তুত থাকো!"
+              style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',sans-serif"}}/>
+          </Field>
+
+          <Field label="Send To">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button type="button" onClick={()=>setMode("all")}
+                style={{...btnStyle(mode==="all"?"var(--purple)":"var(--border)"),
+                        flex:1,minWidth:140,opacity:mode==="all"?1:0.7}}>
+                🌍 All Users ({users.length})
+              </button>
+              <button type="button" onClick={()=>setMode("specific")}
+                style={{...btnStyle(mode==="specific"?"var(--purple)":"var(--border)"),
+                        flex:1,minWidth:140,opacity:mode==="specific"?1:0.7}}>
+                👤 Specific Members
+              </button>
+            </div>
+          </Field>
+
+          {mode==="specific"&&(
+            <div style={{border:"1.5px solid var(--border)",borderRadius:10,padding:10,background:"var(--bg)"}}>
+              <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <input value={search} onChange={e=>setSearch(e.target.value)}
+                  placeholder="🔍 Search username..." style={{...inp,flex:1,minWidth:160}}/>
+                <button type="button" onClick={selectAll} style={smBtn("var(--navy)")}>Select All</button>
+                <button type="button" onClick={selectNone} style={smBtn("var(--orange)")}>Clear</button>
+              </div>
+              <div style={{fontSize:12,color:"var(--sub)",marginBottom:8,fontWeight:700}}>
+                {picked.size} of {users.length} selected
+              </div>
+              {users.length===0 && (
+                <div style={{padding:20,textAlign:"center",color:"var(--sub)",fontSize:13}}>
+                  No registered users yet — create accounts in the Users tab first.
+                </div>
+              )}
+              <div style={{maxHeight:240,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+                {filteredUsers.map(u=>{
+                  const sel = picked.has(u.username);
+                  return (
+                    <label key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",
+                      borderRadius:8,background:sel?"rgba(124,58,237,0.12)":"var(--surface)",cursor:"pointer",
+                      border:`1px solid ${sel?"var(--purple)":"var(--border)"}`}}>
+                      <input type="checkbox" checked={sel} onChange={()=>toggleUser(u.username)}
+                        style={{width:16,height:16,accentColor:"var(--purple)"}}/>
+                      <div style={{width:28,height:28,borderRadius:50,background:"var(--purple)",color:"#fff",
+                        display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12}}>
+                        {u.username[0]?.toUpperCase()}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{u.username}</div>
+                        {u.note&&<div style={{fontSize:11,color:"var(--sub)"}}>{u.note}</div>}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {msg&&<Feedback msg={msg}/>}
-          <button onClick={send} disabled={!f.title||!f.body} style={btnStyle("var(--purple)")}>📢 Broadcast Now →</button>
+          <button onClick={send} disabled={sending||!f.title||!f.body}
+            style={btnStyle("var(--purple)")}>
+            {sending?"Sending...":(mode==="all"?"📢 Broadcast to All →":`📨 Send to ${picked.size} Member(s) →`)}
+          </button>
         </div>
       </Card>
-      <SectionTitle style={{marginTop:24}}>Sent Notifications ({notifs.length})</SectionTitle>
+
+      <SectionTitle style={{marginTop:24}}>📜 Sent History ({notifs.length})</SectionTitle>
       {notifs.length===0&&<Empty icon="🔔" text="No notifications sent yet"/>}
-      {notifs.map(n=>(
-        <div key={n.id} style={{...listItem,display:"flex",alignItems:"flex-start",gap:10}}>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,color:"var(--text)",marginBottom:4}}>{n.title}</div>
-            <div style={{fontSize:13,color:"var(--sub)",lineHeight:1.6}}>{n.body}</div>
-            <div style={{fontSize:11,color:"var(--sub)",marginTop:6}}>{new Date(n.createdAt).toLocaleString()}</div>
+      {notifs.map(n=>{
+        const isAll = !n.recipients || n.recipients.length===0;
+        const totalRecipients = isAll ? users.length : n.recipients.length;
+        const readCount = (n.readBy||[]).length;
+        return (
+          <div key={n.id} style={{...listItem,display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                <div style={{fontWeight:700,color:"var(--text)"}}>{n.title}</div>
+                {isAll
+                  ? <span style={{fontSize:10,background:"#dcfce7",color:"#166534",padding:"2px 8px",borderRadius:99,fontWeight:700}}>🌍 BROADCAST</span>
+                  : <span style={{fontSize:10,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:99,fontWeight:700}}>👤 {n.recipients.length} member(s)</span>}
+                <span style={{fontSize:10,background:"#e0e7ff",color:"#3730a3",padding:"2px 8px",borderRadius:99,fontWeight:700}}>
+                  👁️ {readCount}/{totalRecipients} read
+                </span>
+              </div>
+              <div style={{fontSize:13,color:"var(--sub)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{n.body}</div>
+              {!isAll && n.recipients.length>0 && (
+                <div style={{fontSize:11,color:"var(--sub)",marginTop:6,fontStyle:"italic"}}>
+                  → {n.recipients.slice(0,5).join(", ")}{n.recipients.length>5?` +${n.recipients.length-5} more`:""}
+                </div>
+              )}
+              <div style={{fontSize:11,color:"var(--sub)",marginTop:6}}>{new Date(n.createdAt).toLocaleString()}</div>
+            </div>
+            <button onClick={()=>del(n.id)} style={smBtn("var(--orange)")}>✕</button>
           </div>
-          <button onClick={()=>del(n.id)} style={smBtn("var(--orange)")}>✕</button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══ DASHBOARD MENU MANAGER ════════════════════════════════ */
+function MenuTab(){
+  const [items,setItems]=useState<any[]>([]);
+  const [msg,setMsg]=useState("");
+  const [editing,setEditing]=useState<any|null>(null);
+  const blank = { label:"", icon:"⭐", bg:"#ede9fe", chevron:"#7c3aed", path:"/", order:0, enabled:true };
+  const [draft,setDraft]=useState<any>(blank);
+
+  const load=()=>api("/api/admin/dashboard-menu").then(r=>r.json())
+    .then(d=>{if(Array.isArray(d))setItems(d);});
+  useEffect(()=>{load();},[]);
+
+  function startNew(){ setEditing(null); setDraft({...blank, order: items.length+1}); }
+  function startEdit(it:any){ setEditing(it); setDraft({...it}); }
+
+  async function save(){
+    if(!draft.label.trim()||!draft.icon.trim()){setMsg("⚠️ Label and icon required");return;}
+    const r = editing
+      ? await api(`/api/admin/dashboard-menu/${editing.id}`,{method:"PUT",body:JSON.stringify(draft)})
+      : await api("/api/admin/dashboard-menu",{method:"POST",body:JSON.stringify(draft)});
+    if(!r.ok){setMsg("❌ Save failed");return;}
+    setMsg(editing?"✅ Updated!":"✅ Added to dashboard!");
+    setEditing(null); setDraft({...blank, order: items.length+2});
+    load();
+  }
+  async function del(id:string){
+    if(!confirm("Remove this menu item from dashboard?"))return;
+    await api(`/api/admin/dashboard-menu/${id}`,{method:"DELETE"}); load();
+  }
+  async function toggleEnabled(it:any){
+    await api(`/api/admin/dashboard-menu/${it.id}`,{method:"PUT",body:JSON.stringify({enabled:!it.enabled})});
+    load();
+  }
+  async function move(it:any, dir:-1|1){
+    const sorted = [...items].sort((a,b)=>a.order-b.order);
+    const idx = sorted.findIndex(x=>x.id===it.id);
+    const newIdx = idx+dir;
+    if(newIdx<0||newIdx>=sorted.length)return;
+    const ids = sorted.map(x=>x.id);
+    [ids[idx],ids[newIdx]] = [ids[newIdx],ids[idx]];
+    await api("/api/admin/dashboard-menu/reorder",{method:"POST",body:JSON.stringify({ids})});
+    load();
+  }
+
+  const PRESET_BG = ["#ede9fe","#fff3e0","#e3f2fd","#fef3c7","#fee2e2","#e8f5e9","#f3e5f5","#e0f7fa","#fce4ec","#dbeafe","#fed7aa"];
+  const PRESET_CHEV = ["#7c3aed","#e65100","#2e7d32","#d97706","#dc2626","#e53935","#7b2fa5","#0891b2","#db2777","#1d4ed8"];
+  const PRESET_PATH = ["/","/ai-tutor","/past-classes","/exams","/profile","/leaderboard"];
+
+  return (
+    <div>
+      <SectionTitle>⊞ Dashboard Menu Manager</SectionTitle>
+      <InfoBox>
+        Add, edit, reorder, hide or delete the menu items shown on every student's dashboard.
+        Changes appear instantly when they reload.
+      </InfoBox>
+
+      <Card title={editing?`✏️ Edit "${editing.label}"`:"➕ Add New Dashboard Item"}>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"flex",gap:10}}>
+            <Field label="Icon (emoji)">
+              <input value={draft.icon} onChange={e=>setDraft({...draft,icon:e.target.value})}
+                placeholder="🤖" style={{...inp,fontSize:20,textAlign:"center",width:70}}/>
+            </Field>
+            <div style={{flex:1}}>
+              <Field label="Label">
+                <input value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})}
+                  placeholder="e.g. AI Tutor" style={inp}/>
+              </Field>
+            </div>
+          </div>
+
+          <Field label="Navigation Path">
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              <input value={draft.path} onChange={e=>setDraft({...draft,path:e.target.value})}
+                placeholder="/ai-tutor" style={{...inp,flex:1,minWidth:160}}/>
+            </div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
+              {PRESET_PATH.map(p=>(
+                <button key={p} type="button" onClick={()=>setDraft({...draft,path:p})}
+                  style={{...smBtn(draft.path===p?"var(--purple)":"#888"),fontSize:11}}>{p}</button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="Background Color">
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input type="color" value={draft.bg} onChange={e=>setDraft({...draft,bg:e.target.value})}
+                style={{width:40,height:32,border:"none",cursor:"pointer",borderRadius:6}}/>
+              <input value={draft.bg} onChange={e=>setDraft({...draft,bg:e.target.value})}
+                style={{...inp,flex:1,fontFamily:"monospace"}}/>
+            </div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
+              {PRESET_BG.map(c=>(
+                <button key={c} type="button" onClick={()=>setDraft({...draft,bg:c})}
+                  style={{width:26,height:26,background:c,border:draft.bg===c?"3px solid var(--purple)":"1.5px solid var(--border)",borderRadius:6,cursor:"pointer"}}/>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="Accent (chevron) Color">
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input type="color" value={draft.chevron} onChange={e=>setDraft({...draft,chevron:e.target.value})}
+                style={{width:40,height:32,border:"none",cursor:"pointer",borderRadius:6}}/>
+              <input value={draft.chevron} onChange={e=>setDraft({...draft,chevron:e.target.value})}
+                style={{...inp,flex:1,fontFamily:"monospace"}}/>
+            </div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
+              {PRESET_CHEV.map(c=>(
+                <button key={c} type="button" onClick={()=>setDraft({...draft,chevron:c})}
+                  style={{width:26,height:26,background:c,border:draft.chevron===c?"3px solid var(--purple)":"1.5px solid var(--border)",borderRadius:6,cursor:"pointer"}}/>
+              ))}
+            </div>
+          </Field>
+
+          {/* Live preview */}
+          <Field label="Live Preview">
+            <div className="dash-menu-item" style={{display:"flex",alignItems:"center",gap:12,padding:12,background:"var(--surface)",borderRadius:12,border:"1.5px solid var(--border)"}}>
+              <div style={{width:46,height:46,borderRadius:10,background:draft.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <span style={{fontSize:22}}>{draft.icon||"⭐"}</span>
+              </div>
+              <span style={{flex:1,fontWeight:600,color:"var(--text)"}}>{draft.label||"Label"}</span>
+              <span style={{color:draft.chevron,fontSize:24,fontWeight:700}}>›</span>
+            </div>
+          </Field>
+
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+            <input type="checkbox" checked={draft.enabled} onChange={e=>setDraft({...draft,enabled:e.target.checked})}
+              style={{width:16,height:16,accentColor:"var(--purple)"}}/>
+            <span style={{fontSize:13,color:"var(--text)"}}>Visible on dashboard</span>
+          </label>
+
+          {msg&&<Feedback msg={msg}/>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={save} style={{...btnStyle("var(--purple)"),flex:1}}>
+              {editing?"💾 Save Changes":"➕ Add to Dashboard"}
+            </button>
+            {editing&&(
+              <button onClick={startNew} style={btnStyle("var(--orange)")}>Cancel</button>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <SectionTitle style={{marginTop:24}}>Current Items ({items.length})</SectionTitle>
+      {items.length===0&&<Empty icon="⊞" text="No menu items yet — add some above"/>}
+      {items.sort((a,b)=>a.order-b.order).map((it,idx)=>(
+        <div key={it.id} style={{...listItem,display:"flex",alignItems:"center",gap:10,opacity:it.enabled?1:0.5}}>
+          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+            <button onClick={()=>move(it,-1)} disabled={idx===0} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===0?0.3:1}}>▲</button>
+            <button onClick={()=>move(it,1)} disabled={idx===items.length-1} style={{...smBtn("#888"),padding:"2px 6px",fontSize:10,opacity:idx===items.length-1?0.3:1}}>▼</button>
+          </div>
+          <div style={{width:42,height:42,borderRadius:10,background:it.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <span style={{fontSize:20}}>{it.icon}</span>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,color:"var(--text)"}}>{it.label} {!it.enabled&&<span style={{fontSize:10,color:"var(--orange)"}}>(hidden)</span>}</div>
+            <div style={{fontSize:11,color:"var(--sub)",fontFamily:"monospace"}}>{it.path}</div>
+          </div>
+          <button onClick={()=>toggleEnabled(it)} style={smBtn(it.enabled?"#10b981":"#888")} title={it.enabled?"Hide":"Show"}>
+            {it.enabled?"👁️":"🚫"}
+          </button>
+          <button onClick={()=>startEdit(it)} style={smBtn("var(--navy)")}>✎</button>
+          <button onClick={()=>del(it.id)} style={smBtn("var(--orange)")}>✕</button>
         </div>
       ))}
     </div>
