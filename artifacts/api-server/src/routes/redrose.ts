@@ -514,102 +514,154 @@ router.get("/subjects", userAuth, (_req, res) => {
   res.json(rd<Subject[]>("subjects.json", []));
 });
 
-/* ── ADMIN — YOUTUBE PLAYLIST IMPORT (public / unlisted) ──
-   Uses GOOGLE_API_KEY (YouTube Data API v3). Public + unlisted both work
-   because unlisted playlists are accessible by ID. Private playlists are not
-   accessible without OAuth and will fail with 404. */
+/* ── ADMIN — YOUTUBE PLAYLIST IMPORT (no API key required!) ──
+   Uses YouTube's internal `youtubei/v1/browse` endpoint. Works for any
+   public or unlisted playlist with no Google Cloud setup, no quota, no key. */
 function extractPlaylistId(input: string): string | null {
   const s = (input || "").trim();
   if (!s) return null;
-  // Already an ID (starts with PL, UU, OL, RD, FL etc.)
-  if (/^[A-Za-z0-9_-]{16,64}$/.test(s) && !s.includes("/")) return s;
+  // Try URL first
   try {
     const u = new URL(s);
     const list = u.searchParams.get("list");
     if (list) return list;
   } catch { /* not a URL */ }
-  return null;
+  // Bare ID
+  if (/^[A-Za-z0-9_-]{10,}$/.test(s) && !s.includes("/")) return s;
+  // Last-ditch regex
+  const m = s.match(/[?&]list=([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
 }
 
-router.post("/admin/videos/import-playlist", adminAuth, async (req, res) => {
-  const { playlist, course, subjectId, chapterId, online } = req.body || {};
-  const key = process.env.GOOGLE_API_KEY;
-  if (!key) return res.status(500).json({ error: "GOOGLE_API_KEY not configured on server" });
+const YT_BROWSE_URL = "https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+const YT_HEADERS = {
+  "Content-Type": "application/json",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9",
+  "X-YouTube-Client-Name": "1",
+  "X-YouTube-Client-Version": "2.20240101.00.00",
+};
+
+async function fetchYtPlaylistPage(playlistId: string, continuation?: string): Promise<any> {
+  const body: any = {
+    context: { client: { clientName: "WEB", clientVersion: "2.20240101.00.00", hl: "en", gl: "US" } },
+  };
+  if (continuation) body.continuation = continuation;
+  else body.browseId = `VL${playlistId}`;
+  const r = await fetch(YT_BROWSE_URL, { method: "POST", headers: YT_HEADERS, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`YouTube responded ${r.status}`);
+  return r.json();
+}
+
+function ytExtractVideos(data: any): Array<{ videoId: string; title: string; thumbnail: string; duration: string }> {
+  const out: Array<{ videoId: string; title: string; thumbnail: string; duration: string }> = [];
+  const visit = (n: any) => {
+    if (!n || typeof n !== "object") return;
+    if (Array.isArray(n)) { n.forEach(visit); return; }
+    const r = n.playlistVideoRenderer;
+    if (r) {
+      const vid = r.videoId;
+      const title = r.title?.runs?.[0]?.text || r.title?.simpleText || "";
+      const thumb = r.thumbnail?.thumbnails?.slice(-1)?.[0]?.url || (vid ? `https://i.ytimg.com/vi/${vid}/mqdefault.jpg` : "");
+      const duration = r.lengthText?.simpleText || r.lengthText?.runs?.[0]?.text || "";
+      if (vid && title && title !== "[Private video]" && title !== "[Deleted video]") {
+        out.push({ videoId: vid, title, thumbnail: thumb, duration });
+      }
+    }
+    for (const v of Object.values(n)) visit(v);
+  };
+  visit(data);
+  return out;
+}
+
+function ytExtractContinuation(data: any): string | null {
+  // Look for the "continuation" token in continuationItemRenderer
+  const visit = (n: any): string | null => {
+    if (!n || typeof n !== "object") return null;
+    if (Array.isArray(n)) { for (const x of n) { const t = visit(x); if (t) return t; } return null; }
+    if (n.continuationCommand?.token) return n.continuationCommand.token;
+    if (n.continuationItemRenderer) { const t = visit(n.continuationItemRenderer); if (t) return t; }
+    for (const v of Object.values(n)) { const t = visit(v); if (t) return t; }
+    return null;
+  };
+  return visit(data);
+}
+
+function ytExtractPlaylistTitle(data: any): string {
+  return (
+    data?.header?.playlistHeaderRenderer?.title?.simpleText ||
+    data?.header?.playlistHeaderRenderer?.title?.runs?.[0]?.text ||
+    data?.metadata?.playlistMetadataRenderer?.title ||
+    "YouTube Playlist"
+  );
+}
+
+/** STEP 1 — Fetch a playlist's videos (no DB writes) */
+router.post("/admin/playlist/fetch", adminAuth, async (req, res) => {
+  const { playlist } = req.body || {};
   const pid = extractPlaylistId(playlist);
-  if (!pid) return res.status(400).json({ error: "Could not detect playlist ID. Paste the playlist URL or ID." });
+  if (!pid) return res.status(400).json({ error: "Couldn't find a YouTube playlist ID in that URL. Paste a link like https://youtube.com/playlist?list=..." });
 
   try {
-    const items: Array<{ videoId: string; title: string; desc: string; published: string }> = [];
-    let pageToken = "";
-    for (let page = 0; page < 20; page++) { // safety cap: 20 * 50 = 1000 videos
-      const url = new URL(`${"https://www.googleapis.com/youtube/v3/playlistItems"}`);
-      url.searchParams.set("part", "snippet,contentDetails");
-      url.searchParams.set("maxResults", "50");
-      url.searchParams.set("playlistId", pid);
-      url.searchParams.set("key", key);
-      if (pageToken) url.searchParams.set("pageToken", pageToken);
-      const r = await fetch(url.toString());
-      if (!r.ok) {
-        const txt = await r.text().catch(() => "");
-        let projectId = "";
-        try { const j = JSON.parse(txt); projectId = String(j?.error?.details?.[0]?.metadata?.consumer || "").replace(/^projects\//, ""); } catch {}
-        let friendly = `YouTube API ${r.status}: ${txt.slice(0, 250)}`;
-        if (r.status === 403 && /SERVICE_DISABLED|has not been used|is disabled/i.test(txt)) {
-          const enableUrl = projectId
-            ? `https://console.developers.google.com/apis/api/youtube.googleapis.com/overview?project=${projectId}`
-            : "https://console.developers.google.com/apis/api/youtube.googleapis.com/overview";
-          friendly = `YouTube Data API v3 is not enabled for the Google Cloud project that owns your GOOGLE_API_KEY. Enable it here (takes ~10 seconds, then wait 1–2 min and retry): ${enableUrl}`;
-        } else if (r.status === 403 && /quota/i.test(txt)) {
-          friendly = "YouTube Data API daily quota exceeded for this key. Wait until tomorrow or use a different GOOGLE_API_KEY.";
-        } else if (r.status === 404) {
-          friendly = "Playlist not found. Make sure the playlist is Public or Unlisted (Private playlists cannot be imported without OAuth).";
-        } else if (r.status === 400 && /API key not valid/i.test(txt)) {
-          friendly = "GOOGLE_API_KEY is invalid. Generate a new one at https://aistudio.google.com/apikey or in Google Cloud Console.";
-        }
-        return res.status(r.status).json({ error: friendly });
-      }
-      const data: any = await r.json();
-      for (const it of data.items || []) {
-        const vid = it?.contentDetails?.videoId || it?.snippet?.resourceId?.videoId;
-        const title = it?.snippet?.title || "";
-        const desc = it?.snippet?.description || "";
-        const published = it?.contentDetails?.videoPublishedAt || it?.snippet?.publishedAt || "";
-        if (vid && title && title !== "Private video" && title !== "Deleted video") {
-          items.push({ videoId: vid, title, desc, published });
-        }
-      }
-      pageToken = data.nextPageToken || "";
-      if (!pageToken) break;
+    const all: Array<{ videoId: string; title: string; thumbnail: string; duration: string }> = [];
+    let continuation: string | null = null;
+    let title = "YouTube Playlist";
+    for (let page = 0; page < 12; page++) { // ~100 vids per page; safety cap ~1200
+      const data: any = await fetchYtPlaylistPage(pid, continuation || undefined);
+      if (page === 0) title = ytExtractPlaylistTitle(data);
+      all.push(...ytExtractVideos(data));
+      continuation = ytExtractContinuation(data);
+      if (!continuation) break;
     }
-
-    if (items.length === 0) return res.status(404).json({ error: "Playlist returned no public/unlisted videos. Make sure it's not Private." });
-
-    const vids = rd<Video[]>("vids.json", []);
-    const existing = new Set(vids.map(v => v.videoId));
-    let added = 0;
-    const created: Video[] = [];
-    for (const it of items) {
-      if (existing.has(it.videoId)) continue;
-      const v: Video = {
-        id: crypto.randomUUID(),
-        videoId: it.videoId,
-        title: it.title,
-        subjectId: subjectId || "",
-        chapterId: chapterId || undefined,
-        desc: (it.desc || "").slice(0, 800),
-        date: it.published ? new Date(it.published).toLocaleString() : "",
-        course: course || "",
-        online: !!online,
-      };
-      vids.unshift(v);
-      created.push(v);
-      added++;
+    if (all.length === 0) {
+      return res.status(404).json({ error: "Playlist is empty, private, or not accessible. Make sure it's Public or Unlisted." });
     }
-    wr("vids.json", vids);
-    res.json({ ok: true, total: items.length, added, skipped: items.length - added, created });
+    // Mark which ones already exist in our library
+    const existing = new Set(rd<Video[]>("vids.json", []).map(v => v.videoId));
+    res.json({
+      title,
+      playlistId: pid,
+      total: all.length,
+      videos: all.map(v => ({ ...v, exists: existing.has(v.videoId) })),
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Playlist import failed" });
+    res.status(500).json({ error: err?.message || "Failed to fetch playlist from YouTube" });
   }
+});
+
+/** STEP 2 — Bulk create videos (used after the user picks which ones to import) */
+router.post("/admin/videos/bulk", adminAuth, (req, res) => {
+  const { videos, subjectId, chapterId, course, online } = req.body || {};
+  if (!Array.isArray(videos) || videos.length === 0) {
+    return res.status(400).json({ error: "videos[] is required" });
+  }
+  const list = rd<Video[]>("vids.json", []);
+  const existing = new Set(list.map(v => v.videoId));
+  let added = 0;
+  const created: Video[] = [];
+  for (const it of videos) {
+    const vid = String(it?.videoId || "").trim();
+    const title = String(it?.title || "").trim();
+    if (!vid || !title) continue;
+    if (existing.has(vid)) continue;
+    const v: Video = {
+      id: crypto.randomUUID(),
+      videoId: vid,
+      title,
+      subjectId: subjectId || "",
+      chapterId: chapterId || undefined,
+      desc: String(it?.desc || it?.duration || "").slice(0, 800),
+      date: new Date().toLocaleString(),
+      course: course || "",
+      online: !!online,
+    };
+    list.unshift(v);
+    created.push(v);
+    existing.add(vid);
+    added++;
+  }
+  wr("vids.json", list);
+  res.json({ ok: true, total: videos.length, added, skipped: videos.length - added, created });
 });
 
 /* ══════════════════════════════════════════════════════════

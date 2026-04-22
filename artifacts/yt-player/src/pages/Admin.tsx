@@ -375,10 +375,13 @@ function VideosTab() {
   const [moveSub,setMoveSub]=useState<string>("");
   const [moveChap,setMoveChap]=useState<string>("");
 
-  // Playlist import
+  // Playlist import (two-step: fetch → pick → bulk import)
   const [pl,setPl]=useState({playlist:"",subjectId:"",chapterId:"",course:"",online:true});
   const [plBusy,setPlBusy]=useState(false);
   const [plMsg,setPlMsg]=useState("");
+  const [plResult,setPlResult]=useState<null|{title:string;total:number;videos:Array<{videoId:string;title:string;thumbnail:string;duration:string;exists:boolean}>}>(null);
+  const [plPicked,setPlPicked]=useState<Set<string>>(new Set());
+  const [plQuery,setPlQuery]=useState("");
 
   const loadVids=()=>api("/api/admin/videos").then(r=>r.json()).then(d=>{if(Array.isArray(d))setVids(d);});
   const loadSubs=()=>api("/api/admin/subjects").then(r=>r.json()).then(d=>{if(Array.isArray(d))setSubjects(d);});
@@ -415,17 +418,48 @@ function VideosTab() {
     setSelected(new Set()); setMoveSub(""); setMoveChap(""); loadVids();
   }
 
-  async function importPlaylist(){
+  async function fetchPlaylist(){
     if(!pl.playlist.trim()){setPlMsg("⚠️ Paste a playlist URL or ID");return;}
-    setPlBusy(true); setPlMsg("");
-    try {
-      const r=await api("/api/admin/videos/import-playlist",{method:"POST",body:JSON.stringify(pl)});
+    setPlBusy(true); setPlMsg(""); setPlResult(null); setPlPicked(new Set());
+    try{
+      const r=await api("/api/admin/playlist/fetch",{method:"POST",body:JSON.stringify({playlist:pl.playlist.trim()})});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||"Fetch failed");
+      setPlResult(d);
+      // Auto-tick all videos that aren't already in the library
+      setPlPicked(new Set(d.videos.filter((v:any)=>!v.exists).map((v:any)=>v.videoId)));
+      setPlMsg(`✅ Found ${d.total} video(s) in "${d.title}". Tick the ones you want and click Import.`);
+    }catch(e:any){ setPlMsg("❌ "+e.message); }
+    finally{ setPlBusy(false); }
+  }
+  async function importPicked(){
+    if(!plResult || plPicked.size===0){setPlMsg("⚠️ Pick at least one video to import");return;}
+    setPlBusy(true);
+    try{
+      const chosen = plResult.videos.filter(v=>plPicked.has(v.videoId));
+      const r=await api("/api/admin/videos/bulk",{method:"POST",body:JSON.stringify({
+        videos: chosen,
+        subjectId: pl.subjectId, chapterId: pl.chapterId,
+        course: pl.course, online: pl.online,
+      })});
       const d=await r.json();
       if(!r.ok) throw new Error(d.error||"Import failed");
-      setPlMsg(`✅ Imported ${d.added} new video(s) (${d.skipped} duplicates skipped)`);
-      setPl({...pl,playlist:""}); loadVids();
-    } catch(e:any){ setPlMsg("❌ "+e.message); }
+      setPlMsg(`✅ Imported ${d.added} video(s) · ${d.skipped} duplicates skipped`);
+      // Mark imported as "exists" so they grey out
+      setPlResult({
+        ...plResult,
+        videos: plResult.videos.map(v=>plPicked.has(v.videoId)?{...v,exists:true}:v),
+      });
+      setPlPicked(new Set());
+      loadVids();
+    }catch(e:any){ setPlMsg("❌ "+e.message); }
     finally{ setPlBusy(false); }
+  }
+  function togglePick(vid:string){
+    setPlPicked(s=>{const n=new Set(s); n.has(vid)?n.delete(vid):n.add(vid); return n;});
+  }
+  function resetPlaylist(){
+    setPlResult(null); setPlPicked(new Set()); setPlMsg(""); setPlQuery(""); setPl({...pl,playlist:""});
   }
 
   // Filter
@@ -439,37 +473,110 @@ function VideosTab() {
     <div>
       <SectionTitle>🎬 Video Library</SectionTitle>
 
-      {/* ── YouTube Playlist Import ── */}
-      <Card title="📥 Import YouTube Playlist (public or unlisted)">
-        <InfoBox>Paste a playlist URL (e.g. <code>https://youtube.com/playlist?list=PLxxxx</code>) or just the <code>list</code> ID. <b>Unlisted playlists work</b> as long as you have the link. Private playlists are not supported.</InfoBox>
-        <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:10}}>
-          <Field label="Playlist URL or ID">
-            <input value={pl.playlist} onChange={e=>setPl({...pl,playlist:e.target.value})}
-              placeholder="https://www.youtube.com/playlist?list=PL..." style={inp}/>
-          </Field>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="Assign to Subject">
-              <select value={pl.subjectId} onChange={e=>setPl({...pl,subjectId:e.target.value,chapterId:""})} style={inp}>
-                <option value="">— None —</option>
-                {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Chapter (optional)">
-              <select value={pl.chapterId} onChange={e=>setPl({...pl,chapterId:e.target.value})} style={inp} disabled={!pl.subjectId}>
-                <option value="">— None —</option>
-                {chapsFor(pl.subjectId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Course Label"><input value={pl.course} onChange={e=>setPl({...pl,course:e.target.value})} placeholder="HSC Science" style={inp}/></Field>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer",height:40,marginTop:18}}>
-              <input type="checkbox" checked={pl.online} onChange={e=>setPl({...pl,online:e.target.checked})} style={{width:16,height:16}}/> Mark as Online class
-            </label>
-          </div>
-          {plMsg&&<Feedback msg={plMsg}/>}
-          <button onClick={importPlaylist} disabled={plBusy||!pl.playlist.trim()} style={btnStyle("var(--orange)")}>
-            {plBusy?"⏳ Importing…":"📥 Import Playlist →"}
+      {/* ── YouTube Playlist Import (no API key needed) ── */}
+      <Card title="📥 Import YouTube Playlist">
+        <InfoBox>Paste any <b>public or unlisted</b> playlist URL. We'll fetch the list, you tick the videos you want, then bulk-import them. <b>No API key required.</b></InfoBox>
+
+        {/* Step 1 — paste URL */}
+        <div style={{display:"flex",gap:8,marginTop:10,alignItems:"stretch"}}>
+          <input value={pl.playlist} onChange={e=>setPl({...pl,playlist:e.target.value})}
+            onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();fetchPlaylist();}}}
+            placeholder="https://www.youtube.com/playlist?list=PL..." style={{...inp,flex:1}}/>
+          <button onClick={fetchPlaylist} disabled={plBusy||!pl.playlist.trim()} style={btnStyle("var(--purple)")}>
+            {plBusy && !plResult?"⏳ Fetching…":"🔍 Fetch"}
           </button>
+          {plResult && (
+            <button onClick={resetPlaylist} style={btnStyle("#888")} title="Clear">✕</button>
+          )}
         </div>
+
+        {plMsg&&<div style={{marginTop:10}}><Feedback msg={plMsg}/></div>}
+
+        {/* Step 2 — preview + pick */}
+        {plResult && (
+          <>
+            <div style={{marginTop:14,padding:"10px 12px",background:"linear-gradient(135deg,#7c3aed10,#2563eb10)",borderRadius:10,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontWeight:800,color:"var(--text)",fontSize:14}}>📋 {plResult.title}</div>
+                <div style={{fontSize:11,color:"var(--sub)",marginTop:2}}>
+                  {plResult.total} videos · {plPicked.size} selected · {plResult.videos.filter(v=>v.exists).length} already in library
+                </div>
+              </div>
+              <button onClick={()=>{
+                const avail=plResult.videos.filter(v=>!v.exists).map(v=>v.videoId);
+                setPlPicked(plPicked.size===avail.length?new Set():new Set(avail));
+              }} style={smBtn("var(--navy)")}>
+                {plPicked.size===plResult.videos.filter(v=>!v.exists).length?"Deselect all":"Select all (new)"}
+              </button>
+              <button onClick={()=>setPlPicked(new Set(plResult.videos.map(v=>v.videoId)))} style={smBtn("#888")}>Pick everything</button>
+            </div>
+
+            {/* Assignment fields */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+              <Field label="Assign to Subject">
+                <select value={pl.subjectId} onChange={e=>setPl({...pl,subjectId:e.target.value,chapterId:""})} style={inp}>
+                  <option value="">— None —</option>
+                  {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Chapter (optional)">
+                <select value={pl.chapterId} onChange={e=>setPl({...pl,chapterId:e.target.value})} style={inp} disabled={!pl.subjectId}>
+                  <option value="">— None —</option>
+                  {chapsFor(pl.subjectId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Course Label">
+                <input value={pl.course} onChange={e=>setPl({...pl,course:e.target.value})} placeholder="HSC Science" style={inp}/>
+              </Field>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,cursor:"pointer",alignSelf:"end",height:42}}>
+                <input type="checkbox" checked={pl.online} onChange={e=>setPl({...pl,online:e.target.checked})} style={{width:16,height:16,accentColor:"var(--purple)"}}/> Mark as Online class
+              </label>
+            </div>
+
+            {/* Search inside playlist */}
+            <input value={plQuery} onChange={e=>setPlQuery(e.target.value)} placeholder="🔍 Filter videos by title…"
+              style={{...inp,marginTop:12,fontSize:13}}/>
+
+            {/* Video grid */}
+            <div style={{marginTop:10,maxHeight:420,overflowY:"auto",border:"1px solid var(--border)",borderRadius:10,padding:6,background:"var(--bg)"}}>
+              {plResult.videos
+                .filter(v=>!plQuery.trim() || v.title.toLowerCase().includes(plQuery.toLowerCase()))
+                .map(v=>{
+                  const picked=plPicked.has(v.videoId);
+                  return (
+                    <label key={v.videoId} style={{
+                      display:"flex",alignItems:"center",gap:10,padding:8,borderRadius:8,
+                      cursor:v.exists?"default":"pointer",
+                      background:picked?"rgba(124,58,237,0.08)":"transparent",
+                      border:picked?"1.5px solid var(--purple)":"1.5px solid transparent",
+                      opacity:v.exists?0.5:1,
+                      marginBottom:4,
+                    }}>
+                      <input type="checkbox" checked={picked} disabled={v.exists}
+                        onChange={()=>togglePick(v.videoId)}
+                        style={{width:18,height:18,accentColor:"var(--purple)",cursor:v.exists?"not-allowed":"pointer",flexShrink:0}}/>
+                      <div style={{position:"relative",flexShrink:0}}>
+                        <img src={v.thumbnail||`https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`}
+                          alt="" style={{width:96,height:54,objectFit:"cover",borderRadius:6,background:"#000",display:"block"}}
+                          onError={e=>{(e.target as HTMLImageElement).style.visibility="hidden";}}/>
+                        {v.duration && <span style={{position:"absolute",bottom:3,right:3,background:"rgba(0,0,0,0.85)",color:"#fff",fontSize:9,padding:"1px 4px",borderRadius:3,fontWeight:600}}>{v.duration}</span>}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{v.title}</div>
+                        <div style={{fontSize:10,color:"var(--sub)",marginTop:2,fontFamily:"monospace"}}>
+                          {v.videoId} {v.exists && <span style={{color:"var(--orange)",fontWeight:700}}>· already imported</span>}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+            </div>
+
+            <button onClick={importPicked} disabled={plBusy||plPicked.size===0} style={{...btnStyle("var(--orange)"),marginTop:12,width:"100%"}}>
+              {plBusy?"⏳ Importing…":`📥 Import ${plPicked.size} Selected Video${plPicked.size===1?"":"s"} →`}
+            </button>
+          </>
+        )}
       </Card>
 
       {/* ── Single video ── */}

@@ -189,15 +189,19 @@ function inline(s: string): string {
 
 function renderKatex(latex: string, display: boolean): string {
   try {
-    return katex.renderToString(latex, {
+    const html = katex.renderToString(latex, {
       displayMode: display,
       throwOnError: false,
       output: "html",
       trust: true,
       macros: { "\\ce": "\\text{#1}" },
     });
+    // Wrap so wide equations get a horizontal scroll instead of overflowing the bubble.
+    return display
+      ? `<div class="rr-math-block">${html}</div>`
+      : `<span class="rr-math-inline">${html}</span>`;
   } catch {
-    return `<code>${escape(latex)}</code>`;
+    return `<code class="rr-code">${escape(latex)}</code>`;
   }
 }
 

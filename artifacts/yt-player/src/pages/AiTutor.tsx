@@ -2,9 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import Header from "../components/Header";
 import MathText from "../components/MathText";
 
-interface Msg { role: "user" | "assistant"; content: string }
+interface Msg { role: "user" | "assistant"; content: string; ts?: number }
 
 const STORAGE = "rr_ai_chat_v1";
+
+const SUGGESTIONS: { emoji: string; text: string }[] = [
+  { emoji: "📘", text: "Newton's first law explain in Bangla" },
+  { emoji: "∫",  text: "Solve: $\\int x^2 \\,dx$" },
+  { emoji: "⚗️", text: "Balance: H₂ + O₂ → H₂O" },
+  { emoji: "🎯", text: "HSC physics 2024 important topics" },
+  { emoji: "📝", text: "Generate 5 MCQs on Photosynthesis" },
+  { emoji: "🧮", text: "Quadratic formula derivation" },
+];
+
+function fmtTime(t?: number) {
+  if (!t) return "";
+  const d = new Date(t);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 export default function AiTutor() {
   const [msgs, setMsgs] = useState<Msg[]>(() => {
@@ -15,6 +30,7 @@ export default function AiTutor() {
   const [loading,  setLoading] = useState(false);
   const [error,    setError]   = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const taRef     = useRef<HTMLTextAreaElement>(null);
   const abortRef  = useRef<AbortController | null>(null);
 
   useEffect(() => { localStorage.setItem(STORAGE, JSON.stringify(msgs.slice(-40))); }, [msgs]);
@@ -22,17 +38,24 @@ export default function AiTutor() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs, loading]);
 
+  // Autosize textarea
+  useEffect(() => {
+    const ta = taRef.current; if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(140, ta.scrollHeight) + "px";
+  }, [input]);
+
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
     setError("");
-    const next: Msg[] = [...msgs, { role: "user", content: trimmed }];
+    const next: Msg[] = [...msgs, { role: "user", content: trimmed, ts: Date.now() }];
     setMsgs(next);
     setInput("");
     setLoading(true);
 
     // Append placeholder assistant for streaming
-    setMsgs(m => [...m, { role: "assistant", content: "" }]);
+    setMsgs(m => [...m, { role: "assistant", content: "", ts: Date.now() }]);
 
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -83,132 +106,127 @@ export default function AiTutor() {
     }
   }
 
+  function stop() {
+    abortRef.current?.abort();
+    setLoading(false);
+  }
+
   function clearChat() {
+    if (msgs.length && !confirm("Clear this conversation?")) return;
     setMsgs([]); setError(""); localStorage.removeItem(STORAGE);
   }
 
-  const SUGGESTIONS = [
-    "Newton's first law explain in Bangla",
-    "Solve: $\\int x^2 dx$",
-    "Balance: H₂ + O₂ → H₂O",
-    "HSC physics 2024 important topics",
-    "Generate 5 MCQs on Photosynthesis",
-  ];
+  // Render bubble content. Show typing dots if it's the streaming assistant placeholder with no content yet.
+  const renderBubbleContent = (m: Msg, isLastAssistantStreaming: boolean) => {
+    if (m.role === "assistant" && isLastAssistantStreaming && !m.content) {
+      return (
+        <div className="ai-typing" aria-label="Red Rose AI is typing">
+          <span /><span /><span />
+        </div>
+      );
+    }
+    return <MathText text={m.content} block />;
+  };
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100svh", display: "flex", flexDirection: "column" }}>
+    <div className="ai-shell">
       <Header showBack backTo="/" />
 
-      {/* Hero */}
-      <div style={{ padding: "12px 14px 6px" }}>
-        <div style={{
-          background: "linear-gradient(135deg,#7c3aed 0%,#2563eb 100%)",
-          color: "#fff", borderRadius: 14, padding: 14,
-          display: "flex", alignItems: "center", gap: 12,
-        }}>
-          <div style={{ fontSize: 32, lineHeight: 1 }}>🤖</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 16, fontFamily: "Lato,sans-serif" }}>
-              Red Rose 🥀 AI
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.95, marginTop: 2 }}>
-              Bangla + English • Math • Chemistry • Powered by Gemini
-            </div>
+      {/* Polished chat header */}
+      <div className="ai-header">
+        <div className="ai-avatar">🌹</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="ai-title">Red Rose 🥀 AI</div>
+          <div className="ai-subtitle">
+            <span className="ai-status-dot" />
+            <span>Online · Bangla + English · Math · Chemistry · Powered by Gemini</span>
           </div>
-          {msgs.length > 0 && (
-            <button onClick={clearChat} style={{
-              background: "rgba(255,255,255,0.18)", border: "none",
-              color: "#fff", padding: "6px 10px", borderRadius: 8,
-              fontSize: 11, cursor: "pointer", fontWeight: 600,
-            }}>Clear</button>
-          )}
         </div>
+        {msgs.length > 0 && (
+          <button onClick={clearChat} className="ai-header-btn" title="Clear conversation">
+            ↺ Clear
+          </button>
+        )}
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} style={{
-        flex: 1, padding: "10px 12px 14px",
-        overflowY: "auto", display: "flex", flexDirection: "column", gap: 10,
-      }}>
+      <div ref={scrollRef} className="ai-messages">
         {msgs.length === 0 && (
-          <div style={{ color: "var(--sub)", fontSize: 13, textAlign: "center", padding: "30px 10px" }}>
-            👋 Ask me anything about your studies. Math, chemistry, physics, biology, English — Bangla or English, your choice.
-            <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+          <div className="ai-welcome">
+            <div className="ai-welcome-emoji">🌹🤖</div>
+            <div className="ai-welcome-title">How can I help you today?</div>
+            <div className="ai-welcome-sub">
+              Ask me anything about your studies — math, chemistry, physics, biology, English. Bangla or English, your choice. I support equations, chemistry, and rich formatting.
+            </div>
+            <div className="ai-suggestions">
               {SUGGESTIONS.map(s => (
-                <button key={s} onClick={() => send(s)} style={{
-                  background: "var(--card)", border: "1px solid var(--border)",
-                  color: "var(--text)", padding: "6px 10px", borderRadius: 999,
-                  fontSize: 11, cursor: "pointer",
-                }}>{s}</button>
+                <button key={s.text} onClick={() => send(s.text)} className="ai-suggest-chip">
+                  <span className="ai-suggest-chip-emoji">{s.emoji}</span>
+                  <span>{s.text.replace(/\$[^$]+\$/g, "…")}</span>
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        {msgs.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "user-bubble" : ""} style={{
-            alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-            maxWidth: "88%",
-            background: m.role === "user" ? "linear-gradient(135deg,#7c3aed,#db2777)" : "var(--card)",
-            color: m.role === "user" ? "#fff" : "var(--text)",
-            padding: "10px 14px", borderRadius: 14,
-            borderBottomRightRadius: m.role === "user" ? 4 : 14,
-            borderBottomLeftRadius:  m.role === "assistant" ? 4 : 14,
-            boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-            fontSize: 14, lineHeight: 1.55,
-            wordBreak: "break-word", overflowWrap: "anywhere",
-          }}>
-            <MathText text={m.content || (m.role === "assistant" && loading && i === msgs.length - 1 ? "…" : "")} block />
-          </div>
-        ))}
+        {msgs.map((m, i) => {
+          const isLast = i === msgs.length - 1;
+          const isLastAssistantStreaming = isLast && loading && m.role === "assistant";
+          const isUser = m.role === "user";
+          return (
+            <div key={i} className={`ai-row ${isUser ? "user" : "bot"}`}>
+              {!isUser && <div className="ai-bubble-avatar">🌹</div>}
+              <div className={`ai-bubble ${isUser ? "user user-bubble" : "bot"}`}>
+                {renderBubbleContent(m, isLastAssistantStreaming)}
+                {m.ts && m.content && (
+                  <div className="ai-bubble-meta">{fmtTime(m.ts)}</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
 
         {error && (
-          <div style={{
-            alignSelf: "flex-start", background: "#fee2e2", color: "#991b1b",
-            padding: "8px 12px", borderRadius: 10, fontSize: 12,
-          }}>⚠ {error}</div>
+          <div className="ai-error">
+            <span className="ai-error-icon">⚠️</span>
+            <span>{error}</span>
+          </div>
         )}
       </div>
 
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); send(input); }}
-        style={{
-          padding: "8px 10px 14px",
-          background: "var(--card)",
-          borderTop: "1px solid var(--border)",
-          display: "flex", gap: 8, alignItems: "flex-end",
-          position: "sticky", bottom: 0,
-        }}
+        className="ai-composer"
       >
         <textarea
+          ref={taRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
           }}
-          placeholder="Ask anything... (Bangla or English)"
+          placeholder="Ask anything…  (Shift + Enter = new line)"
           rows={1}
-          style={{
-            flex: 1, padding: "10px 12px", borderRadius: 12,
-            border: "1px solid var(--border)", background: "var(--bg)",
-            color: "var(--text)", fontFamily: "'Roboto','Noto Sans Bengali',sans-serif",
-            fontSize: 14, resize: "none", maxHeight: 140, outline: "none",
-          }}
+          className="ai-textarea"
         />
-        <button
-          type="submit"
-          disabled={loading || !input.trim()}
-          style={{
-            background: loading ? "#94a3b8" : "linear-gradient(135deg,#7c3aed,#2563eb)",
-            color: "#fff", border: "none", borderRadius: 12,
-            padding: "10px 16px", fontWeight: 700, fontSize: 14,
-            cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-            opacity: loading || !input.trim() ? 0.7 : 1,
-          }}
-        >
-          {loading ? "…" : "Send"}
-        </button>
+        {loading ? (
+          <button type="button" onClick={stop} className="ai-stop-btn" title="Stop generating" aria-label="Stop">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!input.trim()}
+            className="ai-send-btn"
+            title="Send"
+            aria-label="Send"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.5 12 22 3l-9 19.5-2.5-9L2.5 12z"/>
+            </svg>
+          </button>
+        )}
       </form>
     </div>
   );
