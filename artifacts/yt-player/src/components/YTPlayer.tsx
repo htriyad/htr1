@@ -69,6 +69,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const hideCtrlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const topBarTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const topBarRef     = useRef<HTMLDivElement | null>(null);
   const isFirstPlay   = useRef(true);
   const tickRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const leftTap       = useRef(0);
@@ -317,20 +318,33 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     const p = playerRef.current; if (!p) return;
     p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo();
   }
+  /* Synchronously paint the top mask black RIGHT NOW (no React render,
+     no CSS fade) so YouTube's title flash during a fast double-tap seek
+     never has a frame to leak through. Then arm a timer to release it. */
+  function armMaskInstant(holdMs = 1800) {
+    const el = topBarRef.current;
+    if (el) {
+      el.classList.add("instant-show");
+      el.style.opacity = "1";
+    }
+    showTopNow();
+    if (topBarTimer.current) clearTimeout(topBarTimer.current);
+    topBarTimer.current = setTimeout(() => {
+      if (topBarRef.current) topBarRef.current.classList.remove("instant-show");
+      setShowTop(false);
+    }, holdMs);
+  }
+
   function seek(d: number) {
     const p = playerRef.current; if (!p) return;
-    /* Force the top mask up *before* the seekTo call so YouTube's own
-       title-flash that briefly appears during a scrub is hidden. Keep
-       it up for ~1.5s, then auto-hide via the normal delayed timer. */
-    showTopNow();
+    armMaskInstant();
     p.seekTo(Math.max(0, p.getCurrentTime() + d), true);
     p.playVideo();
     handleInteraction();
-    if (topBarTimer.current) clearTimeout(topBarTimer.current);
-    topBarTimer.current = setTimeout(() => setShowTop(false), 1500);
   }
   function seekTo(ratio: number) {
     const p = playerRef.current; if (!p) return;
+    armMaskInstant();
     p.seekTo(ratio * p.getDuration(), true); handleInteraction();
   }
   function changeVolume(v: number) {
@@ -429,6 +443,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
           Visible whenever YT might show its own overlay: not started, paused, buffering,
           or whenever our own controls are visible. */}
       <div
+        ref={topBarRef}
         className="ytp-top-bar"
         style={{ opacity: (showTop || showCtrl || buffering || !started || !playing) ? 1 : 0 }}
       >
