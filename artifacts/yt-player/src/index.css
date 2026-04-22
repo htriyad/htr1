@@ -316,6 +316,66 @@ input, button, select, textarea, label {
 .vp-card-link:hover { background: #faf5ff; }
 .vp-card-link svg { color: var(--purple); flex-shrink: 0; }
 
+/* Playlist panel */
+.vp-playlist-panel {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.vp-playlist-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 13px; font-weight: 700; color: var(--purple);
+  border-bottom: 1px solid var(--border);
+}
+.vp-auto-next-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--sub); cursor: pointer;
+}
+.vp-playlist-list { max-height: 260px; overflow-y: auto; }
+.vp-playlist-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; width: 100%;
+  border: none; background: none; cursor: pointer; text-align: left;
+  border-bottom: 1px solid var(--border);
+  transition: background 150ms;
+}
+.vp-playlist-item:hover { background: var(--bg); }
+.vp-playlist-item.active { background: linear-gradient(90deg, #ede9fe 0%, transparent 100%); }
+.vp-playlist-num {
+  font-size: 12px; font-weight: 800; color: var(--sub);
+  width: 22px; text-align: center; flex-shrink: 0;
+}
+.vp-playlist-item.active .vp-playlist-num { color: var(--purple); }
+.vp-playlist-thumb {
+  width: 72px; height: 41px; object-fit: cover; border-radius: 6px;
+  background: #000; flex-shrink: 0;
+}
+.vp-playlist-info { flex: 1; min-width: 0; }
+.vp-playlist-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.35;
+}
+.vp-playlist-item.active .vp-playlist-title { color: var(--purple); }
+.vp-playlist-date { font-size: 11px; color: var(--sub); margin-top: 2px; }
+
+/* Prev/Next nav */
+.vp-nav-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.vp-nav-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--bg);
+  color: var(--purple); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 150ms;
+}
+.vp-nav-btn:hover { background: var(--purple); color: #fff; border-color: var(--purple); }
+.vp-nav-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ═══════════════════════════════════════════
    VIDEO PLAYER SHELL — 16:9 ratio
 ═══════════════════════════════════════════ */
@@ -832,6 +892,7 @@ input, button, select, textarea, label {
   width: 100%; display: flex; align-items: center; gap: 12px;
   padding: 14px 14px; border: none; background: transparent;
   cursor: pointer; text-align: left; font: inherit; color: inherit;
+  -webkit-user-select: none; user-select: none;
 }
 .cc-subject-icon {
   width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0;
@@ -908,6 +969,21 @@ input, button, select, textarea, label {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .cc-video-sub { font-size: 11px; color: var(--sub); margin-top: 3px; }
+
+/* Request access button */
+.cc-request-btn {
+  font-size: 11px; font-weight: 700; padding: 4px 10px;
+  border-radius: 20px; border: 1.5px solid; cursor: pointer;
+  background: transparent; transition: all 150ms;
+  white-space: nowrap; flex-shrink: 0;
+}
+.cc-request-btn:hover { opacity: 0.8; }
+
+/* Playlist number in course video list */
+.cc-playlist-num {
+  width: 22px; flex-shrink: 0; text-align: center;
+  font-size: 12px; font-weight: 800; opacity: 0.5;
+}
 
 /* Eye theme */
 .eye-theme .cc-subject-card { background: #272519; }

@@ -245,32 +245,82 @@ function IPsTab() {
 /* ══ INBOX ══════════════════════════════════════════════════ */
 function InboxTab() {
   const [msgs,setMsgs]=useState<any[]>([]);
+  const [expandQuick,setExpandQuick]=useState<Record<string,boolean>>({});
+  const [quickForm,setQuickForm]=useState<Record<string,{username:string;password:string;note:string}>>({});
+  const [quickMsg,setQuickMsg]=useState<Record<string,string>>({});
   const load=()=>api("/api/admin/msgs").then(r=>r.json()).then(d=>{if(Array.isArray(d))setMsgs(d);});
   useEffect(()=>{load();},[]);
   async function approveIp(ip:string){await api("/api/admin/ips",{method:"POST",body:JSON.stringify({ip})}); alert(`✅ IP ${ip} approved!`);}
   async function dismiss(id:string){await api(`/api/admin/msgs/${id}`,{method:"PATCH"}); load();}
   async function del(id:string){await api(`/api/admin/msgs/${id}`,{method:"DELETE"}); load();}
+  async function createUserFromMsg(id:string){
+    const f=quickForm[id]||{username:"",password:"",note:""};
+    if(!f.username||!f.password){setQuickMsg({...quickMsg,[id]:"❌ Username and password required"});return;}
+    const r=await api(`/api/admin/msgs/${id}/quick-user`,{method:"POST",body:JSON.stringify(f)});
+    const d=await r.json();
+    if(d.error) setQuickMsg({...quickMsg,[id]:"❌ "+d.error});
+    else{setQuickMsg({...quickMsg,[id]:`✅ Account @${d.username} created! Message marked as noted.`});setExpandQuick({...expandQuick,[id]:false});load();}
+  }
   const pending=msgs.filter(m=>m.status==="pending");
   return (
     <div>
       <SectionTitle>📨 Student Inbox {pending.length>0&&<span style={{background:"var(--orange)",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,marginLeft:8}}>{pending.length} new</span>}</SectionTitle>
+      <InfoBox>Access requests from students. For <b>mobile data users</b> (who have changing IPs), use <b>Quick Create Account</b> to give them a permanent login instead.</InfoBox>
       {msgs.length===0&&<Empty icon="📭" text="Inbox is empty"/>}
-      {msgs.map(m=>(
-        <div key={m.id} style={{...listItem,opacity:m.status==="noted"?0.6:1}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <code style={{background:"var(--bg)",padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:700,color:"var(--purple)"}}>{m.ip}</code>
-            {m.status==="pending"&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>NEW</span>}
-            <span style={{fontSize:11,color:"var(--sub)",marginLeft:"auto"}}>{new Date(m.timestamp).toLocaleString()}</span>
+      {msgs.map(m=>{
+        const di=m.deviceInfo;
+        const isMobile=di?.isMobileData;
+        const isContent=m.type==="content-request";
+        const qf=quickForm[m.id]||{username:"",password:"",note:""};
+        const setQf=(v:any)=>setQuickForm({...quickForm,[m.id]:{...qf,...v}});
+        return(
+          <div key={m.id} style={{...listItem,opacity:m.status==="noted"?0.65:1,borderLeft:isContent?"4px solid var(--purple)":isMobile?"4px solid var(--orange)":"4px solid transparent"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+              <code style={{background:"var(--bg)",padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:700,color:"var(--purple)"}}>{m.ip}</code>
+              {m.status==="pending"&&<span style={{fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>NEW</span>}
+              {isContent&&<span style={{fontSize:10,background:"var(--purple)",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>📚 CONTENT REQUEST</span>}
+              {isMobile&&<span style={{fontSize:10,background:"#f59e0b",color:"#fff",borderRadius:6,padding:"1px 8px",fontWeight:700}}>📶 MOBILE DATA</span>}
+              <span style={{fontSize:11,color:"var(--sub)",marginLeft:"auto"}}>{new Date(m.timestamp).toLocaleString()}</span>
+            </div>
+            {di&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                {di.deviceType&&<DeviceBadge icon={di.deviceType==="Mobile"?"📱":"💻"} text={di.deviceType}/>}
+                {di.os&&<DeviceBadge icon="🖥️" text={di.os}/>}
+                {di.browser&&<DeviceBadge icon="🌍" text={di.browser}/>}
+                {di.connectionType&&<DeviceBadge icon={di.isMobileData?"📶":"📡"} text={di.connectionType} highlight={di.isMobileData}/>}
+              </div>
+            )}
+            <p style={{fontSize:14,color:"var(--text)",margin:"0 0 12px",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{m.message}</p>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {!isContent&&<button onClick={()=>approveIp(m.ip)} style={smBtn("var(--green)")}>✔ Approve IP</button>}
+              <button onClick={()=>setExpandQuick({...expandQuick,[m.id]:!expandQuick[m.id]})} style={smBtn("#7c3aed")}>👤 Quick Create Account</button>
+              <button onClick={()=>dismiss(m.id)} style={smBtn("#888")}>✓ Mark Read</button>
+              <button onClick={()=>del(m.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
+            </div>
+            {expandQuick[m.id]&&(
+              <div style={{marginTop:14,padding:14,background:"var(--bg)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--purple)",marginBottom:10}}>👤 Create Login Account for this Student</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <input value={qf.username} onChange={e=>setQf({username:e.target.value})} placeholder="Username (student will use this)" style={inp}/>
+                  <input type="password" value={qf.password} onChange={e=>setQf({password:e.target.value})} placeholder="Set a password" style={inp}/>
+                  <input value={qf.note} onChange={e=>setQf({note:e.target.value})} placeholder="Note (e.g. Mobile data user - batch 2025)" style={inp}/>
+                  {quickMsg[m.id]&&<div style={{fontSize:12,color:quickMsg[m.id].startsWith("✅")?"var(--green)":"var(--orange)"}}>{quickMsg[m.id]}</div>}
+                  <button onClick={()=>createUserFromMsg(m.id)} style={{...btnStyle("var(--purple)"),fontSize:13,padding:"9px 0"}}>✅ Create Account & Mark as Resolved</button>
+                </div>
+              </div>
+            )}
           </div>
-          <p style={{fontSize:14,color:"var(--text)",margin:"0 0 12px",lineHeight:1.6}}>{m.message}</p>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <button onClick={()=>approveIp(m.ip)} style={smBtn("var(--green)")}>✔ Approve This IP</button>
-            <button onClick={()=>dismiss(m.id)} style={smBtn("#888")}>✓ Mark Read</button>
-            <button onClick={()=>del(m.id)} style={smBtn("var(--orange)")}>✕ Delete</button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
+  );
+}
+
+function DeviceBadge({icon,text,highlight}:{icon:string;text:string;highlight?:boolean}){
+  return(
+    <span style={{fontSize:11,display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:20,background:highlight?"#fef3c7":"var(--bg)",color:highlight?"#92400e":"var(--sub)",border:highlight?"1px solid #fcd34d":"1px solid var(--border)",fontWeight:600}}>
+      {icon} {text}
+    </span>
   );
 }
 

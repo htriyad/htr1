@@ -47,7 +47,7 @@ declare namespace YT {
   }
 }
 
-interface Props { videoId: string; title?: string; }
+interface Props { videoId: string; title?: string; onEnded?: () => void; }
 
 const SEEK_SECS        = 10;
 const HIDE_DELAY       = 3500;
@@ -63,7 +63,7 @@ const fmt = (t: number) => {
   return h > 0 ? `${h}:${z(m)}:${z(s)}` : `${z(m)}:${z(s)}`;
 };
 
-export default function YTPlayer({ videoId, title = "" }: Props) {
+export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
   const playerRef     = useRef<YT.Player | null>(null);
   const playerDivRef  = useRef<HTMLDivElement>(null);
   const containerRef  = useRef<HTMLDivElement>(null);
@@ -246,6 +246,7 @@ export default function YTPlayer({ videoId, title = "" }: Props) {
     } else if (state === 0) {
       setPlaying(false); setProgress(0); setCurrentTime(0); stopTick();
       showTopNow(); setShowCtrl(true); clearAllTimers();
+      onEnded?.();
     }
   }
 

@@ -22,7 +22,24 @@ function wr(file: string, data: unknown) {
 
 /* ── Types ─────────────────────────────────────────────── */
 interface IpMap    { [ip: string]: { approvedAt: string; note?: string } }
-interface Message  { id: string; ip: string; message: string; timestamp: string; status: "pending"|"noted" }
+interface DeviceInfo {
+  os?: string;
+  browser?: string;
+  deviceType?: string;
+  connectionType?: string;
+  isMobileData?: boolean;
+  userAgent?: string;
+}
+interface Message  {
+  id: string;
+  ip: string;
+  message: string;
+  timestamp: string;
+  status: "pending"|"noted";
+  deviceInfo?: DeviceInfo;
+  type?: "access-request" | "content-request";
+  subject?: string;
+}
 interface Video    { id: string; videoId: string; title: string; subjectId: string; chapterId?: string; desc: string; date: string; course: string; online: boolean }
 interface Chapter  { id: string; name: string; order?: number }
 interface Subject  { id: string; name: string; course: string; color?: string; chapters: Chapter[]; createdAt: string }
@@ -143,10 +160,41 @@ router.get("/check-ip", (req, res) => {
 /* POST /api/message  — blocked visitor sends a request */
 router.post("/message", (req, res) => {
   const ip      = clientIp(req);
-  const { message } = req.body;
+  const { message, deviceInfo } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
   const msgs = rd<Message[]>("msgs.json", []);
-  msgs.push({ id: crypto.randomUUID(), ip, message, timestamp: new Date().toISOString(), status: "pending" });
+  msgs.push({
+    id: crypto.randomUUID(),
+    ip,
+    message,
+    timestamp: new Date().toISOString(),
+    status: "pending",
+    type: "access-request",
+    deviceInfo: deviceInfo || undefined,
+  });
+  wr("msgs.json", msgs);
+  res.json({ ok: true });
+});
+
+/* POST /api/content-request  — logged-in student requests course access */
+router.post("/content-request", userAuth, (req, res) => {
+  const ip = clientIp(req);
+  const token = getUserToken(req);
+  const username = token ? USER_SESSIONS.get(token) : null;
+  const { subject, message, deviceInfo } = req.body;
+  if (!subject) return res.status(400).json({ error: "subject required" });
+  const msgs = rd<Message[]>("msgs.json", []);
+  const body = `📚 Course Access Request\nSubject: ${subject}\n${username ? `Student: @${username}\n` : ""}${message ? `Message: ${message}` : ""}`;
+  msgs.push({
+    id: crypto.randomUUID(),
+    ip,
+    message: body,
+    timestamp: new Date().toISOString(),
+    status: "pending",
+    type: "content-request",
+    subject,
+    deviceInfo: deviceInfo || undefined,
+  });
   wr("msgs.json", msgs);
   res.json({ ok: true });
 });
@@ -375,6 +423,22 @@ router.patch("/admin/users/:id/password", adminAuth, (req, res) => {
   if (i===-1) return res.status(404).json({error:"Not found"});
   users[i].password = password;
   wr("users.json",users); res.json({ok:true});
+});
+
+/* POST /admin/msgs/:id/quick-user — Create account from inbox message & auto-mark noted */
+router.post("/admin/msgs/:id/quick-user", adminAuth, (req, res) => {
+  const { username, password, note } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "username and password required" });
+  const users = rd<UniversalUser[]>("users.json", []);
+  if (users.find(u => u.username === username)) return res.status(400).json({ error: "Username already exists" });
+  const user: UniversalUser = { id: crypto.randomUUID(), username: username.trim(), password, note: note || "", createdAt: new Date().toISOString() };
+  users.push(user);
+  wr("users.json", users);
+  // Mark the message as noted
+  const msgs = rd<Message[]>("msgs.json", []);
+  const i = msgs.findIndex(m => m.id === req.params.id);
+  if (i !== -1) { msgs[i].status = "noted"; wr("msgs.json", msgs); }
+  res.json({ id: user.id, username: user.username, createdAt: user.createdAt });
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -655,12 +719,13 @@ router.post("/admin/videos/bulk", adminAuth, (req, res) => {
       course: course || "",
       online: !!online,
     };
-    list.unshift(v);
     created.push(v);
     existing.add(vid);
     added++;
   }
-  wr("vids.json", list);
+  // Prepend in original playlist order (not reversed) so sequential playback works correctly
+  const updatedList = [...created, ...list];
+  wr("vids.json", updatedList);
   res.json({ ok: true, total: videos.length, added, skipped: videos.length - added, created });
 });
 

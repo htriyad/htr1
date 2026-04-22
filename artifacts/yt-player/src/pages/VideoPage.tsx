@@ -1,80 +1,189 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import Header from "../components/Header";
 import YTPlayer from "../components/YTPlayer";
 
+interface Video {
+  id: string; videoId: string; title: string;
+  subjectId: string; chapterId?: string;
+  desc: string; date: string; course: string; online: boolean;
+}
+
 export default function VideoPage() {
   const params = useParams<{ videoId: string }>();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
 
   const searchStr = location.includes("?") ? location.split("?")[1] : "";
   const searchParams = new URLSearchParams(searchStr);
-  const title = searchParams.get("title") || "SSC Final Revision Class Bangla-10";
+  const title = searchParams.get("title") || "Video Class";
+  const playlistSubject = searchParams.get("subject") || "";
+  const playlistChapter = searchParams.get("chapter") || "";
+  const backTo = searchParams.get("back") || "/past-classes";
 
-  const videoId = params.videoId || "O6HL1Q3MCrM";
+  const videoId = params.videoId || "";
 
+  const [videos, setVideos] = useState<Video[]>([]);
   const [activeSource, setActiveSource] = useState<1 | 2>(2);
   const [activeLang, setActiveLang] = useState<"bn" | "en">("bn");
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [autoNext, setAutoNext] = useState(true);
+
+  useEffect(() => {
+    if (!playlistSubject) return;
+    const token = localStorage.getItem("rr_user_token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    fetch("/api/videos", { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(v => { if (Array.isArray(v)) setVideos(v); })
+      .catch(() => {});
+  }, [playlistSubject]);
+
+  const playlist = useMemo(() => {
+    if (!playlistSubject) return [];
+    let filtered = videos.filter(v => v.subjectId === playlistSubject);
+    if (playlistChapter) filtered = filtered.filter(v => v.chapterId === playlistChapter);
+    return filtered;
+  }, [videos, playlistSubject, playlistChapter]);
+
+  const currentIdx = useMemo(() =>
+    playlist.findIndex(v => v.videoId === videoId),
+    [playlist, videoId]
+  );
+
+  const nextVideo = currentIdx >= 0 && currentIdx < playlist.length - 1
+    ? playlist[currentIdx + 1] : null;
+  const prevVideo = currentIdx > 0
+    ? playlist[currentIdx - 1] : null;
+
+  const currentVideoData = playlist.find(v => v.videoId === videoId);
+
+  function goToVideo(v: Video) {
+    const q = new URLSearchParams({
+      title: v.title,
+      ...(playlistSubject ? { subject: playlistSubject } : {}),
+      ...(playlistChapter ? { chapter: playlistChapter } : {}),
+      back: backTo,
+    });
+    navigate(`/video/${v.videoId}?${q.toString()}`);
+  }
+
+  function handleEnded() {
+    if (autoNext && nextVideo) {
+      setTimeout(() => goToVideo(nextVideo), 800);
+    }
+  }
 
   return (
     <div className="vp-page">
       <div className="page" style={{ padding: 0 }}>
-        <Header showBack backTo="/past-classes" title={title} />
+        <Header showBack backTo={backTo} title={title} />
 
         {/* Player */}
-        <div style={{ background: "#000" }}>
-          <YTPlayer videoId={videoId} title={title} />
+        <div style={{ background: "#000", position: "relative" }}>
+          <YTPlayer videoId={videoId} title={title} onEnded={handleEnded} />
         </div>
 
-        {/* Source tabs */}
+        {/* Source tabs + playlist toggle */}
         <div className="vp-source-tabs">
-          <button
-            className={`vp-source-tab ${activeSource === 1 ? "active" : ""}`}
-            onClick={() => setActiveSource(1)}
-          >
-            Source-1
-          </button>
-          <button
-            className={`vp-source-tab ${activeSource === 2 ? "active" : ""}`}
-            onClick={() => setActiveSource(2)}
-          >
-            Source-2
-          </button>
+          <button className={`vp-source-tab ${activeSource === 1 ? "active" : ""}`} onClick={() => setActiveSource(1)}>Source-1</button>
+          <button className={`vp-source-tab ${activeSource === 2 ? "active" : ""}`} onClick={() => setActiveSource(2)}>Source-2</button>
+          {playlist.length > 1 && (
+            <button
+              className={`vp-source-tab ${showPlaylist ? "active" : ""}`}
+              onClick={() => setShowPlaylist(p => !p)}
+              style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+              Playlist ({playlist.length})
+            </button>
+          )}
         </div>
+
+        {/* Playlist panel */}
+        {showPlaylist && playlist.length > 0 && (
+          <div className="vp-playlist-panel">
+            <div className="vp-playlist-header">
+              <span>Playlist · {playlist.length} videos</span>
+              <label className="vp-auto-next-toggle">
+                <input type="checkbox" checked={autoNext} onChange={e => setAutoNext(e.target.checked)} />
+                Auto-next
+              </label>
+            </div>
+            <div className="vp-playlist-list">
+              {playlist.map((v, i) => {
+                const isCurrent = v.videoId === videoId;
+                return (
+                  <button
+                    key={v.id}
+                    className={`vp-playlist-item ${isCurrent ? "active" : ""}`}
+                    onClick={() => goToVideo(v)}
+                  >
+                    <div className="vp-playlist-num">{isCurrent ? "▶" : i + 1}</div>
+                    <img
+                      className="vp-playlist-thumb"
+                      src={`https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`}
+                      alt=""
+                      loading="lazy"
+                      onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden"; }}
+                    />
+                    <div className="vp-playlist-info">
+                      <div className="vp-playlist-title">{v.title}</div>
+                      {v.date && <div className="vp-playlist-date">{v.date}</div>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Prev / Next navigation */}
+        {(prevVideo || nextVideo) && (
+          <div className="vp-nav-row">
+            {prevVideo ? (
+              <button className="vp-nav-btn" onClick={() => goToVideo(prevVideo)}>
+                ← <span className="vp-nav-label">Previous</span>
+              </button>
+            ) : <span />}
+            {nextVideo && (
+              <button className="vp-nav-btn next" onClick={() => goToVideo(nextVideo)}>
+                <span className="vp-nav-label">Next</span> →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Class info card */}
         <div className="vp-info-card">
           <div className="vp-lang-row">
-            <button
-              className={`vp-lang-btn ${activeLang === "bn" ? "active" : ""}`}
-              onClick={() => setActiveLang("bn")}
-            >বাংলা</button>
-            <button
-              className={`vp-lang-btn ${activeLang === "en" ? "active" : ""}`}
-              onClick={() => setActiveLang("en")}
-            >English</button>
+            <button className={`vp-lang-btn ${activeLang === "bn" ? "active" : ""}`} onClick={() => setActiveLang("bn")}>বাংলা</button>
+            <button className={`vp-lang-btn ${activeLang === "en" ? "active" : ""}`} onClick={() => setActiveLang("en")}>English</button>
           </div>
 
-          <div className="vp-card-title">{title}</div>
-          <div className="vp-card-date">Nov 19, 2025, 8:00 PM to 9:45 PM</div>
-
-          <div className="vp-card-subject">Ba-10</div>
-          <div className="vp-card-desc" style={{ whiteSpace: "pre-line" }}>
-            {activeLang === "bn"
-              ? "১ম পত্র- উপন্যাস: ১৯৭১\n২য় পত্র- পরিচ্ছেদ: ৪৫ (সারাংশ ও সারমর্ম), ৪৬ (ভাব-সম্প্রসারণ), ৪৮ (সংবাদ প্রতিবেদন), ৪৯ (প্রবন্ধ)"
-              : "1st Paper- Novel: 1971\n2nd Paper- Chapter: 45 (Summary), 46 (Expansion), 48 (News Report), 49 (Essay)"}
-          </div>
-
-          <div className="vp-card-links">
-            <button className="vp-card-link">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Video
-            </button>
-            <button className="vp-card-link">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Notes
-            </button>
-          </div>
+          <div className="vp-card-title">{currentVideoData?.title || title}</div>
+          {currentVideoData?.date && <div className="vp-card-date">{currentVideoData.date}</div>}
+          {currentVideoData?.course && <div className="vp-card-subject">{currentVideoData.course}</div>}
+          {currentVideoData?.desc && (
+            <div className="vp-card-desc" style={{ whiteSpace: "pre-line" }}>
+              {currentVideoData.desc}
+            </div>
+          )}
+          {!currentVideoData && (
+            <>
+              <div className="vp-card-date">Class recording</div>
+              <div className="vp-card-links">
+                <button className="vp-card-link">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Video
+                </button>
+                <button className="vp-card-link">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Notes
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ height: 40 }} />
