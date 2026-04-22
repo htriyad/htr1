@@ -139,7 +139,7 @@ export default function AiTutor() {
           <div className="ai-title">Red Rose 🥀 AI</div>
           <div className="ai-subtitle">
             <span className="ai-status-dot" />
-            <span>Online · Bangla + English · Math · Chemistry · Powered by Gemini</span>
+            <span>Online · Bangla + English · Math · Chemistry</span>
           </div>
         </div>
         {msgs.length > 0 && (
