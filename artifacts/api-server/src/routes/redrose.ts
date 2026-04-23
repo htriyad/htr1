@@ -71,9 +71,10 @@ interface DashMenuItem {
 }
 
 /* ── Seed default data ──────────────────────────────────── */
-if (!fs.existsSync(path.join(DATA_DIR, "ips.json")))    wr("ips.json",    {});
-if (!fs.existsSync(path.join(DATA_DIR, "msgs.json")))   wr("msgs.json",   []);
-if (!fs.existsSync(path.join(DATA_DIR, "users.json")))  wr("users.json",  []);
+if (!fs.existsSync(path.join(DATA_DIR, "ips.json")))      wr("ips.json",      {});
+if (!fs.existsSync(path.join(DATA_DIR, "msgs.json")))     wr("msgs.json",     []);
+if (!fs.existsSync(path.join(DATA_DIR, "users.json")))    wr("users.json",    []);
+if (!fs.existsSync(path.join(DATA_DIR, "settings.json"))) wr("settings.json", { universalSite: false, universalFree: false });
 if (!fs.existsSync(path.join(DATA_DIR, "quizzes.json")))wr("quizzes.json",[]);
 if (!fs.existsSync(path.join(DATA_DIR, "notifs.json"))) wr("notifs.json", []);
 if (!fs.existsSync(path.join(DATA_DIR, "dashmenu.json"))) wr("dashmenu.json", [
@@ -85,7 +86,7 @@ if (!fs.existsSync(path.join(DATA_DIR, "dashmenu.json"))) wr("dashmenu.json", [
   { id:"m6", label:"Leaderboard",      icon:"🥇", bg:"#fee2e2", chevron:"#dc2626", path:"/leaderboard",   order:6,  enabled:true },
   { id:"m7", label:"Live Class",       icon:"👨‍🏫", bg:"#e8f5e9", chevron:"#e53935", path:"/",             order:7,  enabled:true },
   { id:"m8", label:"Solve Sheet",      icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/",             order:8,  enabled:true },
-  { id:"m9", label:"Q&A Service",      icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/",             order:9,  enabled:true },
+  { id:"m9", label:"Q&A Service",      icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/ask",         order:9,  enabled:true },
   { id:"m10",label:"Course & Content", icon:"📚", bg:"#fce4ec", chevron:"#e65100", path:"/",             order:10, enabled:true },
   { id:"m11",label:"Discussion Group", icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/",             order:11, enabled:true },
 ]);
@@ -235,6 +236,12 @@ router.get("/check-ip", async (req, res) => {
   const ip      = clientIp(req);
   const token   = getUserToken(req);
   const ips     = rd<IpMap>("ips.json", {});
+  const settings = rd<any>("settings.json", { universalSite: false, universalFree: false });
+
+  // Universal Site mode — everyone gets in
+  if (settings.universalSite) {
+    return res.json({ allowed: true, ip, universalSite: true });
+  }
 
   // Check if IP is bot-blocked
   if (BOT_BLOCKED.has(ip) && !isLocalhost(ip)) {
@@ -288,7 +295,7 @@ router.post("/message", botGuard, (req, res) => {
   const ips = rd<IpMap>("ips.json", {});
   if (ips[ip]?.banned) return res.status(403).json({ error: "Your access has been permanently blocked." });
 
-  const { fullName, deviceInfo } = req.body;
+  const { fullName, message, deviceInfo } = req.body;
   if (!fullName || !fullName.trim()) return res.status(400).json({ error: "Full name is required" });
 
   // Rate limit: max 2 requests per IP in 7 days
@@ -303,11 +310,15 @@ router.post("/message", botGuard, (req, res) => {
     return res.status(429).json({ error: "You have already sent 2 requests this week. Please wait for admin response or try again next week." });
   }
 
+  const bodyText = message?.trim()
+    ? message.trim()
+    : "";
+
   msgs.push({
     id: crypto.randomUUID(),
     ip,
     fullName: fullName.trim(),
-    message: `Name: ${fullName.trim()}`,
+    message: bodyText,
     timestamp: new Date().toISOString(),
     status: "pending",
     type: "access-request",
@@ -446,7 +457,11 @@ router.post("/user/logout", (req, res) => {
 /* ══════════════════════════════════════════════════════════
    STUDENT — VIDEOS
 ══════════════════════════════════════════════════════════ */
-router.get("/videos", userAuth, (_req, res) => {
+router.get("/videos", (req, res) => {
+  const settings = rd<any>("settings.json", { universalSite: false, universalFree: false });
+  if (!settings.universalFree && !settings.universalSite && !isAllowed(req)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
   res.json(rd<Video[]>("vids.json", []));
 });
 
@@ -505,7 +520,11 @@ router.get("/dashboard-menu", userAuth, (_req, res) => {
 });
 
 /* Public subject list */
-router.get("/subjects", userAuth, (_req, res) => {
+router.get("/subjects", (req, res) => {
+  const settings = rd<any>("settings.json", { universalSite: false, universalFree: false });
+  if (!settings.universalFree && !settings.universalSite && !isAllowed(req)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
   res.json(rd<Subject[]>("subjects.json", []));
 });
 
@@ -558,6 +577,21 @@ router.post("/admin/login", (req, res) => {
     return res.json({ token });
   }
   res.status(401).json({ error: "Invalid credentials" });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — GLOBAL SETTINGS
+══════════════════════════════════════════════════════════ */
+router.get("/admin/settings", adminAuth, (_req, res) => {
+  res.json(rd<any>("settings.json", { universalSite: false, universalFree: false }));
+});
+router.patch("/admin/settings", adminAuth, (req, res) => {
+  const current = rd<any>("settings.json", { universalSite: false, universalFree: false });
+  const { universalSite, universalFree } = req.body || {};
+  if (typeof universalSite === "boolean") current.universalSite = universalSite;
+  if (typeof universalFree  === "boolean") current.universalFree  = universalFree;
+  wr("settings.json", current);
+  res.json(current);
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -1036,6 +1070,77 @@ router.post("/admin/dashboard-menu/reorder", adminAuth, (req, res) => {
   const items=rd<DashMenuItem[]>("dashmenu.json",[]);
   ids.forEach((id,idx)=>{const it=items.find(x=>x.id===id);if(it) it.order=idx+1;});
   wr("dashmenu.json",items); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   DOUBTS / Q&A
+══════════════════════════════════════════════════════════ */
+interface DoubtQuestion {
+  id: string; ip: string; username?: string; fullName?: string;
+  question: string; audioData?: string; imageData?: string;
+  timestamp: string; status: "open" | "answered";
+  reply?: { text?: string; audioData?: string; repliedAt: string };
+}
+if (!fs.existsSync(path.join(DATA_DIR, "doubts.json"))) wr("doubts.json", []);
+
+router.post("/doubts", userAuth, (req, res) => {
+  const ip = clientIp(req);
+  const { question, audioData, imageData, fullName } = req.body || {};
+  if (!question?.trim() && !audioData) return res.status(400).json({ error: "question or audio required" });
+  const username = getLoggedInUser(req)?.username;
+  const doubts = rd<DoubtQuestion[]>("doubts.json", []);
+  const item: DoubtQuestion = {
+    id: crypto.randomUUID(), ip, username,
+    fullName: String(fullName || username || "Student").slice(0, 100),
+    question: String(question || "").slice(0, 3000),
+    audioData: audioData ? String(audioData).slice(0, 8_000_000) : undefined,
+    imageData: imageData ? String(imageData).slice(0, 8_000_000) : undefined,
+    timestamp: new Date().toISOString(), status: "open",
+  };
+  doubts.unshift(item);
+  wr("doubts.json", doubts.slice(0, 500));
+  res.json({ ok: true, id: item.id });
+});
+
+router.get("/doubts/my", userAuth, (req, res) => {
+  const username = getLoggedInUser(req)?.username;
+  const ip = clientIp(req);
+  const doubts = rd<DoubtQuestion[]>("doubts.json", []);
+  res.json(doubts.filter(d => d.username === username || d.ip === ip));
+});
+
+router.get("/doubts", adminAuth, (_req, res) => {
+  res.json(rd<DoubtQuestion[]>("doubts.json", []));
+});
+
+router.patch("/doubts/:id/reply", adminAuth, (req, res) => {
+  const { text, audioData } = req.body || {};
+  const doubts = rd<DoubtQuestion[]>("doubts.json", []);
+  const i = doubts.findIndex(d => d.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  doubts[i].reply = {
+    text: text ? String(text).slice(0, 5000) : undefined,
+    audioData: audioData ? String(audioData).slice(0, 8_000_000) : undefined,
+    repliedAt: new Date().toISOString(),
+  };
+  doubts[i].status = "answered";
+  wr("doubts.json", doubts);
+  res.json({ ok: true });
+});
+
+router.patch("/doubts/:id/reopen", adminAuth, (req, res) => {
+  const doubts = rd<DoubtQuestion[]>("doubts.json", []);
+  const i = doubts.findIndex(d => d.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  doubts[i].status = "open";
+  doubts[i].reply = undefined;
+  wr("doubts.json", doubts);
+  res.json({ ok: true });
+});
+
+router.delete("/doubts/:id", adminAuth, (req, res) => {
+  wr("doubts.json", rd<DoubtQuestion[]>("doubts.json", []).filter(d => d.id !== req.params.id));
+  res.json({ ok: true });
 });
 
 /* ══════════════════════════════════════════════════════════

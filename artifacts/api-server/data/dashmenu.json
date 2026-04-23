@@ -75,7 +75,7 @@
     "icon": "💬",
     "bg": "#e0f7fa",
     "chevron": "#2e7d32",
-    "path": "/",
+    "path": "/ask",
     "order": 9,
     "enabled": true
   },

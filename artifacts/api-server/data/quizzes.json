@@ -4,7 +4,7 @@
     "title": "nznzn",
     "desc": "zhhzh",
     "timeMinutes": 31,
-    "published": false,
+    "published": true,
     "createdAt": "2026-04-21T16:16:52.594Z",
     "questions": [
       {
@@ -31,6 +31,8 @@
         "correct": "D",
         "solution": "snnan"
       }
-    ]
+    ],
+    "negativeMarking": false,
+    "negativeRatio": 0.25
   }
 ]

@@ -9,6 +9,7 @@ import IpGate from "./pages/IpGate";
 import ExamList from "./pages/ExamList";
 import ExamTake from "./pages/ExamTake";
 import AiTutor from "./pages/AiTutor";
+import AskTeacher from "./pages/AskTeacher";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
 import "./index.css";
@@ -181,6 +182,7 @@ export default function App() {
         <Route path="/exams"           component={ExamList} />
         <Route path="/exam/:examId"    component={ExamTake} />
         <Route path="/ai-tutor"        component={AiTutor} />
+        <Route path="/ask"             component={AskTeacher} />
         <Route path="/profile"         component={Profile} />
         <Route path="/leaderboard"     component={Leaderboard} />
         <Route path="/admin"           component={Admin} />

@@ -21,7 +21,7 @@ function fmtTime(t?: number) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-export default function AiTutor() {
+export default function AiTutor({ embedded, onBack }: { embedded?: boolean; onBack?: () => void } = {}) {
   const [msgs, setMsgs] = useState<Msg[]>(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE) || "[]"); }
     catch { return []; }
@@ -130,7 +130,7 @@ export default function AiTutor() {
 
   return (
     <div className="ai-shell">
-      <Header showBack backTo="/" />
+      {!embedded && <Header showBack backTo={onBack ? "#" : "/"} onBack={onBack} />}
 
       {/* Polished chat header */}
       <div className="ai-header">

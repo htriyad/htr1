@@ -81,6 +81,10 @@ function apiPlugin() {
         const p = new URL(req.url, "http://x").pathname;
         const m = req.method?.toUpperCase() || "GET";
 
+        // ── Pass-through to API server proxy for modern routes ─────────
+        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification"];
+        if (PROXIED.some(prefix => p === prefix || p.startsWith(prefix+"/")||p.startsWith(prefix+"?"))) return next();
+
         // ── GET /api/check-ip ──────────────────────────────────────────
         if (m==="GET" && p==="/api/check-ip") {
           const ip = clientIp(req);
@@ -176,7 +180,7 @@ function apiPlugin() {
           return json(res, {ok:true});
         }
 
-        return json(res, {error:"Not found"}, 404);
+        return next();
       });
     },
   };
@@ -215,6 +219,17 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   build: { outDir: path.resolve(import.meta.dirname, "dist/public"), emptyOutDir: true },
-  server: { port, host:"0.0.0.0", allowedHosts:true, fs:{ strict:true, deny:["**/.*"] } },
+  server: {
+    port, host:"0.0.0.0", allowedHosts:true,
+    proxy: {
+      '/api/ai':             { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/validate-token': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/security':       { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/user':           { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/subjects':       { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/doubts':         { target: 'http://localhost:8080', changeOrigin: true },
+    },
+    fs:{ strict:true, deny:["**/.*"] },
+  },
   preview: { port, host:"0.0.0.0", allowedHosts:true },
 });

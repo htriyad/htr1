@@ -1609,25 +1609,215 @@ function DraggableList<T extends { id:string; enabled?:boolean }>({
 }
 
 /* ══ DOUBTS MODERATION ══════════════════════════════════════ */
+/* ── Admin voice recorder hook ─────────────────────────── */
+function useAdminVoice() {
+  const [recording,setRecording]=useState(false);
+  const [audioData,setAudioData]=useState<string|null>(null);
+  const [secs,setSecs]=useState(0);
+  const mrRef=useRef<MediaRecorder|null>(null);
+  const chunksRef=useRef<BlobPart[]>([]);
+  const timerRef=useRef<ReturnType<typeof setInterval>|null>(null);
+  const start=useCallback(async()=>{
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const mr=new MediaRecorder(stream);
+      mrRef.current=mr; chunksRef.current=[];
+      mr.ondataavailable=e=>{if(e.data.size)chunksRef.current.push(e.data);};
+      mr.onstop=()=>{
+        const blob=new Blob(chunksRef.current,{type:mr.mimeType||"audio/webm"});
+        const reader=new FileReader();
+        reader.onload=()=>setAudioData(reader.result as string);
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      mr.start(); setRecording(true); setSecs(0);
+      timerRef.current=setInterval(()=>setSecs(s=>s+1),1000);
+    }catch{alert("Microphone access denied.");}
+  },[]);
+  const stop=useCallback(()=>{mrRef.current?.stop();setRecording(false);if(timerRef.current)clearInterval(timerRef.current);},[]);
+  const clear=useCallback(()=>{setAudioData(null);setSecs(0);},[]);
+  return{recording,audioData,secs,start,stop,clear};
+}
+
+function DoubtReplyPanel({d,token,onDone}:{d:any;token:string;onDone:()=>void}){
+  const [text,setText]=useState("");
+  const [saving,setSaving]=useState(false);
+  const voice=useAdminVoice();
+  async function submit(){
+    if(!text.trim()&&!voice.audioData)return;
+    setSaving(true);
+    await fetch(`/api/doubts/${d.id}/reply`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({text:text||undefined,audioData:voice.audioData||undefined})});
+    setSaving(false); onDone();
+  }
+  return(
+    <div style={{borderTop:"1px solid var(--border)",paddingTop:12,marginTop:8}}>
+      <div style={{fontWeight:700,fontSize:12,color:"var(--purple)",marginBottom:8}}>SEND REPLY</div>
+      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Type reply (Bangla or English)…" rows={3}
+        style={{width:"100%",borderRadius:10,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",padding:"8px 10px",fontSize:13,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+      <div style={{marginTop:8,marginBottom:10}}>
+        {!voice.audioData?(
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {!voice.recording?(
+              <button type="button" onClick={voice.start} style={{padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>🎤 Record Voice Reply</button>
+            ):(
+              <>
+                <button type="button" onClick={voice.stop} style={{padding:"6px 14px",borderRadius:8,border:"none",background:"#dc2626",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>⏹ Stop ({voice.secs}s)</button>
+                <span style={{fontSize:11,color:"#dc2626",fontWeight:700}}>● REC</span>
+              </>
+            )}
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <audio src={voice.audioData} controls style={{width:"100%",height:34}}/>
+            <button type="button" onClick={voice.clear} style={{alignSelf:"flex-start",padding:"3px 10px",borderRadius:6,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:11,cursor:"pointer",fontWeight:700}}>✕ Remove</button>
+          </div>
+        )}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={submit} disabled={saving||(!text.trim()&&!voice.audioData)}
+          style={{padding:"8px 18px",borderRadius:10,border:"none",background:"var(--purple)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+          {saving?"Sending…":"📨 Send Reply"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DoubtsTab() {
+  const token=TOKEN();
   const [doubts,setDoubts]=useState<any[]>([]);
-  useEffect(()=>{ fetch("/api/doubts").then(r=>r.json()).then(d=>{if(Array.isArray(d))setDoubts(d);}); },[]);
-  return (
+  const [filter,setFilter]=useState<"all"|"open"|"answered">("all");
+  const [expanded,setExpanded]=useState<string|null>(null);
+  const [replyId,setReplyId]=useState<string|null>(null);
+  const load=useCallback(()=>{
+    api("/api/doubts").then(r=>r.json()).then(d=>{if(Array.isArray(d))setDoubts(d);});
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  const shown=doubts.filter(d=>filter==="all"||d.status===filter);
+  const open=doubts.filter(d=>d.status==="open").length;
+  const answered=doubts.filter(d=>d.status==="answered").length;
+
+  async function del(id:string){
+    if(!confirm("Delete this doubt?"))return;
+    await api(`/api/doubts/${id}`,{method:"DELETE"});
+    load();
+  }
+  async function reopen(id:string){
+    await api(`/api/doubts/${id}/reopen`,{method:"PATCH"});
+    load();
+  }
+
+  return(
     <div>
       <SectionTitle>❓ Student Doubts & Q&A</SectionTitle>
-      {doubts.length===0&&<Empty icon="❓" text="No doubts posted yet"/>}
-      {doubts.map(d=>(
-        <div key={d.id} style={{...listItem,marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700,color:"var(--text)",marginBottom:4}}>{d.title}</div>
-              <div style={{fontSize:13,color:"var(--sub)",marginBottom:6}}>{d.text.substring(0,150)}{d.text.length>150?"...":""}</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:"var(--sub)"}}>{d.answers?.length||0} answers · {d.views} views</span>
-                {d.resolved&&<span style={{fontSize:11,background:"#d4edda",color:"#155724",borderRadius:20,padding:"1px 8px",fontWeight:700}}>✅ Resolved</span>}
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+        {[["Total",doubts.length,"#7c3aed"],["Pending",open,"#d97706"],["Answered",answered,"#16a34a"]].map(([l,v,c])=>(
+          <div key={String(l)} style={{background:"var(--surface)",borderRadius:12,padding:"10px 12px",textAlign:"center",border:"1.5px solid var(--border)"}}>
+            <div style={{fontSize:22,fontWeight:900,color:String(c)}}>{v}</div>
+            <div style={{fontSize:11,color:"var(--sub)"}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {(["all","open","answered"] as const).map(f=>(
+          <button key={f} onClick={()=>setFilter(f)}
+            style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,
+              background:filter===f?"var(--purple)":"var(--bg)",
+              color:filter===f?"#fff":"var(--sub)"}}>
+            {f==="all"?"All":f==="open"?"⏳ Pending":"✅ Answered"}
+          </button>
+        ))}
+      </div>
+
+      {shown.length===0&&<Empty icon="❓" text="No doubts here yet"/>}
+
+      {shown.map(d=>(
+        <div key={d.id} style={{...listItem,marginBottom:10,padding:0,overflow:"hidden"}}>
+          {/* Header row */}
+          <button onClick={()=>{setExpanded(e=>e===d.id?null:d.id);setReplyId(null);}}
+            style={{width:"100%",textAlign:"left",padding:"12px 14px",border:"none",background:"transparent",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
+                <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,fontWeight:700,
+                  background:d.status==="answered"?"#dcfce7":"#fef3c7",
+                  color:d.status==="answered"?"#166534":"#92400e"}}>
+                  {d.status==="answered"?"✅ Answered":"⏳ Pending"}
+                </span>
+                <span style={{fontSize:11,color:"var(--purple)",fontWeight:600}}>{d.fullName||d.username||"Student"}</span>
+                <span style={{fontSize:11,color:"var(--sub)"}}>{d.ip}</span>
+              </div>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--text)",lineHeight:1.5}}>
+                {d.question?(d.question.length>100?d.question.slice(0,100)+"…":d.question):"Voice question"}
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:4}}>
+                {d.audioData&&<span style={{fontSize:11,color:"var(--sub)"}}>🎤 Audio</span>}
+                {d.imageData&&<span style={{fontSize:11,color:"var(--sub)"}}>📷 Image</span>}
+                <span style={{fontSize:11,color:"var(--sub)"}}>{new Date(d.timestamp).toLocaleString("en-BD",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
               </div>
             </div>
-          </div>
+            <span style={{color:"var(--sub)",fontSize:14,flexShrink:0}}>{expanded===d.id?"▲":"▼"}</span>
+          </button>
+
+          {/* Expanded detail */}
+          {expanded===d.id&&(
+            <div style={{padding:"0 14px 14px"}}>
+              {d.question&&(
+                <div style={{background:"var(--bg)",borderRadius:10,padding:10,marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",marginBottom:4}}>QUESTION</div>
+                  <div style={{fontSize:13,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{d.question}</div>
+                </div>
+              )}
+              {d.audioData&&(
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",marginBottom:4}}>🎤 VOICE QUESTION</div>
+                  <audio src={d.audioData} controls style={{width:"100%",height:34}}/>
+                </div>
+              )}
+              {d.imageData&&(
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",marginBottom:4}}>📷 ATTACHED IMAGE</div>
+                  <img src={d.imageData} alt="student attachment" style={{maxWidth:"100%",borderRadius:10,border:"1.5px solid var(--border)"}}/>
+                </div>
+              )}
+
+              {/* Existing reply */}
+              {d.reply&&(
+                <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#166534",marginBottom:6}}>👨‍🏫 YOUR REPLY · {new Date(d.reply.repliedAt).toLocaleString("en-BD",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                  {d.reply.text&&<div style={{fontSize:13,color:"#166534",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{d.reply.text}</div>}
+                  {d.reply.audioData&&<audio src={d.reply.audioData} controls style={{width:"100%",height:34,marginTop:8}}/>}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                <button onClick={()=>setReplyId(r=>r===d.id?null:d.id)}
+                  style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,
+                    background:replyId===d.id?"#ede9fe":"var(--purple)",color:replyId===d.id?"var(--purple)":"#fff"}}>
+                  {replyId===d.id?"✕ Cancel":"💬 "+(d.reply?"Edit Reply":"Reply")}
+                </button>
+                {d.status==="answered"&&(
+                  <button onClick={()=>reopen(d.id)}
+                    style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:"#fef3c7",color:"#92400e"}}>
+                    ↩ Reopen
+                  </button>
+                )}
+                <button onClick={()=>del(d.id)}
+                  style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:"#fee2e2",color:"#dc2626"}}>
+                  🗑 Delete
+                </button>
+              </div>
+
+              {replyId===d.id&&(
+                <DoubtReplyPanel d={d} token={token} onDone={()=>{setReplyId(null);setExpanded(null);load();}}/>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

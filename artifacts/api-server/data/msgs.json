@@ -1,9 +1,43 @@
 [
   {
-    "id": "0c6a02c5-c8e9-4e00-90f7-8c22ac0248cf",
-    "ip": "103.77.16.77",
-    "message": "    bj",
-    "timestamp": "2026-04-21T16:18:43.076Z",
-    "status": "noted"
+    "id": "cf2efb60-2b6a-49de-be2f-738df26944af",
+    "ip": "103.77.16.76",
+    "fullName": "Riyad",
+    "message": "Name: Riyad",
+    "timestamp": "2026-04-23T08:52:12.442Z",
+    "status": "noted",
+    "type": "access-request",
+    "deviceInfo": {
+      "os": "Android",
+      "browser": "Chrome",
+      "deviceType": "Mobile",
+      "connectionType": "4G Mobile Data",
+      "isMobileData": true
+    }
+  },
+  {
+    "id": "71883f9e-f918-4629-b6c9-e443e11c5975",
+    "ip": "103.77.16.76",
+    "fullName": "htr",
+    "message": "Name: htr",
+    "timestamp": "2026-04-23T08:52:22.071Z",
+    "status": "noted",
+    "type": "access-request",
+    "deviceInfo": {
+      "os": "Android",
+      "browser": "Chrome",
+      "deviceType": "Mobile",
+      "connectionType": "4G Mobile Data",
+      "isMobileData": true
+    }
+  },
+  {
+    "id": "5a876e88-4b2f-479c-bd5c-b77d4cb298b0",
+    "ip": "103.77.16.76",
+    "message": "📚 Course Access Request\nSubject: Hsc English\nMessage: 💕",
+    "timestamp": "2026-04-23T08:59:56.789Z",
+    "status": "pending",
+    "type": "content-request",
+    "subject": "Hsc English"
   }
 ]

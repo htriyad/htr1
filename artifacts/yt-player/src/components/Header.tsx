@@ -5,6 +5,7 @@ import { Menu, X, Bell, ArrowLeft, Sun, Moon } from "lucide-react";
 interface HeaderProps {
   showBack?: boolean;
   backTo?: string;
+  onBack?: () => void;
   onMenuClick?: () => void;
   title?: string;
 }
@@ -29,7 +30,7 @@ function authHeaders(): HeadersInit {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
-export default function Header({ showBack, backTo = "/", onMenuClick, title }: HeaderProps) {
+export default function Header({ showBack, backTo = "/", onBack, onMenuClick, title }: HeaderProps) {
   void title;
   const [, navigate] = useLocation();
   const isEye = document.documentElement.classList.contains("eye-theme");
@@ -86,7 +87,7 @@ export default function Header({ showBack, backTo = "/", onMenuClick, title }: H
   return (
     <header className="uu-header">
       {showBack ? (
-        <button className="uu-header-icon-btn" onClick={() => navigate(backTo)} aria-label="Back">
+        <button className="uu-header-icon-btn" onClick={() => onBack ? onBack() : navigate(backTo)} aria-label="Back">
           <ArrowLeft size={22} />
         </button>
       ) : (

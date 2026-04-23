@@ -33,11 +33,19 @@ pnpm workspace monorepo using TypeScript. Educational platform for Bangladeshi s
 - **Subjects & Chapters**: Full CRUD; videos assigned to subjects/chapters
 - **Content Request**: Students request subject access, admin sees in Inbox
 
+### Q&A / Ask a Teacher (/ask)
+- **Hub page**: Two options — AI Teacher (Gemini) or Human Teacher
+- **AI Teacher**: Embedded full AI chat (Gemini streaming via proxy → API server). Supports LaTeX, chemistry, Bangla+English
+- **Human Teacher**: Students ask questions with text, voice recording (MediaRecorder API → base64 WebM), or image attachment. Questions stored in doubts.json
+- **My Questions list**: Students see their own submitted questions + teacher replies
+- **Teacher reply**: Admin replies with text or voice recording, student sees reply in their question list
+
 ### Admin Panel
 - **Inbox**: Filterable by All / Access / Content / 🚨 Security. Security alerts shown in red. fullName prominently displayed per access request
 - **Users Tab**: Ban/Unban toggle, Universal Access toggle, Reset Device button, device-lock badge, banned red borders
 - **IPs Tab**: Name column, Ban IP toggle, banned badge, name field when manually adding IPs
 - **Quick Create Account**: From inbox message, auto-fills note with student's fullName
+- **Doubts Tab**: Full Q&A moderation — expand questions, see voice/image, reply with text + voice recording, reopen or delete
 
 ## Stack
 
@@ -57,6 +65,7 @@ pnpm workspace monorepo using TypeScript. Educational platform for Bangladeshi s
 - `ips.json`: `{ [ip]: { approvedAt, name?, banned? } }`
 - `users.json`: `{ id, username, password, note?, banned?, universalAccess?, firstLoginDevice?, firstLoginAt? }`
 - `msgs.json`: `{ id, ip, fullName?, message, timestamp, status, type (access-request|content-request|security-alert), alertType?, deviceInfo? }`
+- `doubts.json`: `{ id, ip, username?, fullName?, question, audioData?, imageData?, timestamp, status (open|answered), reply?: { text?, audioData?, repliedAt } }`
 
 ## In-Memory Stores (API Server)
 - `ADMIN_SESSIONS` — Set of active admin tokens

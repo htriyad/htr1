@@ -4,12 +4,8 @@ import Header from "../components/Header";
 
 interface Chapter { id: string; name: string; order: number }
 interface Subject {
-  id: string;
-  name: string;
-  course: string;
-  color?: string;
-  chapters: Chapter[];
-  createdAt: string;
+  id: string; name: string; course: string; color?: string;
+  chapters: Chapter[]; createdAt: string;
 }
 interface Video {
   id: string; videoId: string; title: string;
@@ -24,19 +20,35 @@ export default function Courses() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [videos, setVideos]     = useState<Video[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [denied, setDenied]     = useState(false);
   const [openSubject, setOpenSubject] = useState<string | null>(null);
   const [search, setSearch]     = useState("");
   const [requestModal, setRequestModal] = useState<Subject | null>(null);
 
   useEffect(() => {
+    const token = localStorage.getItem("rr_user_token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     Promise.all([
-      fetch("/api/subjects").then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch("/api/videos").then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch("/api/subjects", { headers }).then(r => {
+        if (r.status === 403) { setDenied(true); return []; }
+        return r.ok ? r.json() : [];
+      }).catch(() => []),
+      fetch("/api/videos", { headers }).then(r => {
+        if (r.status === 403) { setDenied(true); return []; }
+        return r.ok ? r.json() : [];
+      }).catch(() => []),
     ]).then(([s, v]) => {
       if (Array.isArray(s)) setSubjects(s);
       if (Array.isArray(v)) setVideos(v);
     }).finally(() => setLoading(false));
   }, []);
+
+  // If denied, send back to root (IpGate will show)
+  useEffect(() => {
+    if (denied) navigate("/");
+  }, [denied]);
 
   const bySubject = useMemo(() => {
     const map = new Map<string, Video[]>();
@@ -65,7 +77,6 @@ export default function Courses() {
       <div className="page">
         <Header showBack backTo="/" />
 
-        {/* Hero */}
         <div className="cc-hero">
           <div className="cc-hero-inner">
             <div className="cc-hero-emoji">📚</div>
@@ -100,7 +111,6 @@ export default function Courses() {
           </div>
         )}
 
-        {/* Subject grid */}
         <div className="cc-grid">
           {subjectsWithVideos.map((s, idx) => {
             const color = s.color || FALLBACK_COLORS[idx % FALLBACK_COLORS.length];
@@ -116,8 +126,7 @@ export default function Courses() {
               <div key={s.id} className="cc-subject-card" style={{ borderTopColor: color }}>
                 <div
                   className="cc-subject-head"
-                  role="button"
-                  tabIndex={0}
+                  role="button" tabIndex={0}
                   onClick={() => setOpenSubject(isOpen ? null : s.id)}
                   onKeyDown={e => e.key === "Enter" && setOpenSubject(isOpen ? null : s.id)}
                   style={{ background: `linear-gradient(135deg, ${color}18, transparent)`, cursor: "pointer" }}
@@ -149,28 +158,21 @@ export default function Courses() {
                   <div className="cc-subject-body">
                     {chaptersWithCounts.map(ch => {
                       if (ch.count === 0) return null;
-                      const chVids = vids
-                        .filter(v => v.chapterId === ch.id);
+                      const chVids = vids.filter(v => v.chapterId === ch.id);
                       return (
                         <ChapterBlock
-                          key={ch.id}
-                          color={color}
+                          key={ch.id} color={color}
                           title={`${ch.order ? ch.order + ". " : ""}${ch.name}`}
-                          videos={chVids}
-                          subjectId={s.id}
-                          chapterId={ch.id}
+                          videos={chVids} subjectId={s.id} chapterId={ch.id}
                           navigate={navigate}
                         />
                       );
                     })}
                     {unassignedCount > 0 && (
                       <ChapterBlock
-                        color={color}
-                        title="Unsorted videos"
+                        color={color} title="Unsorted videos"
                         videos={vids.filter(v => !v.chapterId)}
-                        subjectId={s.id}
-                        chapterId=""
-                        navigate={navigate}
+                        subjectId={s.id} chapterId="" navigate={navigate}
                       />
                     )}
                   </div>
@@ -182,22 +184,15 @@ export default function Courses() {
       </div>
 
       {requestModal && (
-        <RequestModal
-          subject={requestModal}
-          onClose={() => setRequestModal(null)}
-        />
+        <RequestModal subject={requestModal} onClose={() => setRequestModal(null)} />
       )}
     </div>
   );
 }
 
 function ChapterBlock({ color, title, videos, subjectId, chapterId, navigate }: {
-  color: string;
-  title: string;
-  videos: Video[];
-  subjectId: string;
-  chapterId: string;
-  navigate: (to: string) => void;
+  color: string; title: string; videos: Video[];
+  subjectId: string; chapterId: string; navigate: (to: string) => void;
 }) {
   return (
     <div className="cc-chapter">
@@ -226,8 +221,7 @@ function ChapterBlock({ color, title, videos, subjectId, chapterId, navigate }: 
               <img
                 className="cc-thumb"
                 src={`https://i.ytimg.com/vi/${v.videoId}/mqdefault.jpg`}
-                alt=""
-                loading="lazy"
+                alt="" loading="lazy"
                 onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden"; }}
               />
               <div className="cc-thumb-play">▶</div>
@@ -260,8 +254,7 @@ function RequestModal({ subject, onClose }: { subject: Subject; onClose: () => v
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch("/api/content-request", {
-        method: "POST",
-        headers,
+        method: "POST", headers,
         body: JSON.stringify({ subject: subject.name + (subject.course ? ` (${subject.course})` : ""), message }),
       });
       if (r.ok) { setSent(true); }
@@ -276,7 +269,7 @@ function RequestModal({ subject, onClose }: { subject: Subject; onClose: () => v
         {!sent ? (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 12, background: subject.color ? subject.color + "22" : "#ede9fe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 900, color: subject.color || "var(--purple)" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: (subject.color || "#7c3aed") + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 900, color: subject.color || "var(--purple)" }}>
                 {subject.name.charAt(0).toUpperCase()}
               </div>
               <div>
@@ -285,9 +278,6 @@ function RequestModal({ subject, onClose }: { subject: Subject; onClose: () => v
               </div>
               <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--sub)" }}>×</button>
             </div>
-            <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: 14, lineHeight: 1.6 }}>
-              Send a request to the admin to get access to this course. Your message will be sent along with your account info.
-            </p>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
@@ -307,12 +297,8 @@ function RequestModal({ subject, onClose }: { subject: Subject; onClose: () => v
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
             <div style={{ fontWeight: 800, fontSize: 17, color: "var(--text)", marginBottom: 8 }}>Request Sent!</div>
-            <p style={{ fontSize: 14, color: "var(--sub)", lineHeight: 1.7 }}>
-              The admin has been notified. You'll have access once they approve your request.
-            </p>
-            <button onClick={onClose} style={{ marginTop: 18, padding: "10px 28px", borderRadius: 10, border: "1.5px solid var(--purple)", background: "transparent", color: "var(--purple)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-              Close
-            </button>
+            <p style={{ fontSize: 14, color: "var(--sub)", lineHeight: 1.7 }}>The admin has been notified. You'll get access once they approve.</p>
+            <button onClick={onClose} style={{ marginTop: 18, padding: "10px 28px", borderRadius: 10, border: "1.5px solid var(--purple)", background: "transparent", color: "var(--purple)", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Close</button>
           </div>
         )}
       </div>
