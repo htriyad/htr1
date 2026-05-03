@@ -46,6 +46,9 @@ const SIDEBAR_ITEMS = [
   { label: "Tools",            icon: "🔢", path: "/tools" },
   { label: "Past Papers",      icon: "📄", path: "/papers" },
   { label: "Live Exam",        icon: "📝", path: "/exams" },
+  { label: "🧠 Smart Quiz",    icon: "🧠", path: "/smart-quiz" },
+  { label: "🗺️ Study Roadmap", icon: "🗺️", path: "/roadmap" },
+  { label: "🔐 Memory Vault",  icon: "🔐", path: "/vault" },
   { label: "AI Tutor",         icon: "🤖", path: "/ai-tutor" },
   { label: "Q&A Service",      icon: "💬", path: "/ask" },
   { label: "Discussion Group", icon: "👥", path: "/discussion" },
@@ -400,6 +403,9 @@ export default function Dashboard() {
         {/* ── QUICK ACCESS STRIP ───────────────────── */}
         <div className="dash-quick-strip">
           {[
+            { icon:"🧠", label:"Smart Quiz",  path:"/smart-quiz",  bg:"linear-gradient(135deg,#ede9fe,#fce7f3)", color:"#7c3aed" },
+            { icon:"🗺️", label:"Roadmap",    path:"/roadmap",     bg:"linear-gradient(135deg,#dcfce7,#dbeafe)", color:"#16a34a" },
+            { icon:"🔐", label:"Vault",      path:"/vault",       bg:"linear-gradient(135deg,#fef3c7,#fee2e2)", color:"#d97706" },
             { icon:"🃏", label:"Flashcards", path:"/flashcards",  bg:"#ede9fe", color:"#7c3aed" },
             { icon:"⏱",  label:"Timer",      path:"/study-timer", bg:"#fef3c7", color:"#d97706" },
             { icon:"📊", label:"Analytics",  path:"/analytics",   bg:"#dbeafe", color:"#2563eb" },

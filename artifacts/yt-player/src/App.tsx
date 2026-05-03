@@ -23,6 +23,10 @@ import Formulas from "./pages/Formulas";
 import Planner from "./pages/Planner";
 import Papers from "./pages/Papers";
 import Notes from "./pages/Notes";
+import SmartQuiz from "./pages/SmartQuiz";
+import Roadmap from "./pages/Roadmap";
+import Vault from "./pages/Vault";
+import ExamSim from "./pages/ExamSim";
 import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
@@ -208,6 +212,10 @@ export default function App() {
         <Route path="/planner"         component={Planner} />
         <Route path="/papers"          component={Papers} />
         <Route path="/notes"           component={Notes} />
+        <Route path="/smart-quiz"      component={SmartQuiz} />
+        <Route path="/roadmap"         component={Roadmap} />
+        <Route path="/vault"           component={Vault} />
+        <Route path="/exam-sim/:examId" component={ExamSim} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>
