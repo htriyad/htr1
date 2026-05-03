@@ -1957,5 +1957,279 @@ router.put("/study-rooms/:id/timer",(req:any,res)=>{
   res.json(room.timerState);
 });
 
+/* ══════════════════════════════════════════════════════════
+   COMMUNITY — POSTS, REACTIONS, COMMENTS, STORIES
+══════════════════════════════════════════════════════════ */
+interface CPost {
+  id:string; author:string; text:string;
+  imageData?:string; videoUrl?:string; subject?:string;
+  createdAt:string;
+  reactions:Record<string,string[]>;
+  comments:{id:string;author:string;text:string;createdAt:string;reactions:Record<string,string[]>}[];
+}
+interface CStory {
+  id:string; author:string; text?:string; imageData?:string;
+  bgColor:string; createdAt:string; expiresAt:string; views:string[];
+}
+
+const STORY_COLORS=["linear-gradient(135deg,#7c3aed,#a855f7)","linear-gradient(135deg,#0ea5e9,#38bdf8)","linear-gradient(135deg,#f59e0b,#fbbf24)","linear-gradient(135deg,#ef4444,#f97316)","linear-gradient(135deg,#10b981,#34d399)","linear-gradient(135deg,#6366f1,#818cf8)","linear-gradient(135deg,#ec4899,#f43f5e)"];
+
+function getPosts():CPost[]{return rd<CPost[]>("community-posts.json",[]);}
+function savePosts(p:CPost[]){wr("community-posts.json",p);}
+function getStories():CStory[]{
+  const all=rd<CStory[]>("community-stories.json",[]);
+  return all.filter(s=>new Date(s.expiresAt)>new Date());
+}
+function saveStories(s:CStory[]){wr("community-stories.json",s);}
+
+router.get("/community/feed",(req:any,res)=>{
+  const page=Number((req.query as any).page)||0;
+  const all=getPosts();
+  res.json(all.slice(page*20,(page+1)*20));
+});
+
+router.post("/community/posts",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{text,imageData,videoUrl,subject}=req.body||{};
+  if(!text?.trim()&&!imageData&&!videoUrl) return res.status(400).json({error:"Content required"});
+  const post:CPost={
+    id:crypto.randomUUID(),author:u,
+    text:String(text||"").slice(0,2000),
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    videoUrl:videoUrl?String(videoUrl).slice(0,500):undefined,
+    subject:subject?String(subject).slice(0,60):undefined,
+    createdAt:new Date().toISOString(),
+    reactions:{},comments:[]
+  };
+  const posts=getPosts();
+  posts.unshift(post);
+  savePosts(posts.slice(0,1000));
+  res.json(post);
+});
+
+router.post("/community/posts/:id/react",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{emoji}=req.body||{};
+  if(!emoji) return res.status(400).json({error:"emoji required"});
+  const posts=getPosts();
+  const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const p=posts[i];
+  if(!p.reactions[emoji]) p.reactions[emoji]=[];
+  const idx=p.reactions[emoji].indexOf(u);
+  if(idx>=0) p.reactions[emoji].splice(idx,1);
+  else{
+    // remove user from any other emoji first
+    Object.keys(p.reactions).forEach(e=>{const j=p.reactions[e].indexOf(u);if(j>=0)p.reactions[e].splice(j,1);});
+    p.reactions[emoji].push(u);
+  }
+  posts[i]=p; savePosts(posts);
+  res.json(p.reactions);
+});
+
+router.post("/community/posts/:id/comments",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{text}=req.body||{};
+  if(!text?.trim()) return res.status(400).json({error:"text required"});
+  const posts=getPosts();
+  const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const comment={id:crypto.randomUUID(),author:u,text:String(text).slice(0,1000),createdAt:new Date().toISOString(),reactions:{}};
+  posts[i].comments.push(comment);
+  savePosts(posts);
+  res.json(comment);
+});
+
+router.delete("/community/posts/:id",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const posts=getPosts();
+  const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  if(posts[i].author!==u&&u!=="htr") return res.status(403).json({error:"Forbidden"});
+  posts.splice(i,1); savePosts(posts);
+  res.json({ok:true});
+});
+
+router.get("/community/stories",userAuth,(req:any,res)=>res.json(getStories()));
+
+router.post("/community/stories",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{text,imageData,bgColor}=req.body||{};
+  if(!text?.trim()&&!imageData) return res.status(400).json({error:"text or image required"});
+  const now=new Date();
+  const story:CStory={
+    id:crypto.randomUUID(),author:u,
+    text:text?String(text).slice(0,200):undefined,
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    bgColor:STORY_COLORS[Math.floor(Math.random()*STORY_COLORS.length)],
+    ...(bgColor?{bgColor:String(bgColor)}:{}),
+    createdAt:now.toISOString(),
+    expiresAt:new Date(now.getTime()+24*60*60*1000).toISOString(),
+    views:[]
+  };
+  const stories=getStories();
+  stories.unshift(story);
+  saveStories(stories);
+  res.json(story);
+});
+
+router.post("/community/stories/:id/view",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const stories=getStories();
+  const i=stories.findIndex(s=>s.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  if(!stories[i].views.includes(u)) stories[i].views.push(u);
+  saveStories(stories); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   DIRECT MESSAGES
+══════════════════════════════════════════════════════════ */
+interface DMThread{id:string;participants:string[];lastMsg?:string;lastAt?:string;updatedAt:string;}
+interface DMMessage{id:string;threadId:string;author:string;text?:string;audioData?:string;imageData?:string;ts:string;}
+
+function getThreads():DMThread[]{return rd<DMThread[]>("dm-threads.json",[]);}
+function saveThreads(t:DMThread[]){wr("dm-threads.json",t);}
+function getDMMessages(threadId:string):DMMessage[]{return rd<DMMessage[]>(`dm-${threadId}.json`,[]);}
+function saveDMMessages(threadId:string,msgs:DMMessage[]){wr(`dm-${threadId}.json`,msgs.slice(-500));}
+
+router.get("/dm/threads",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  res.json(getThreads().filter(t=>t.participants.includes(u)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)));
+});
+
+router.post("/dm/threads",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{other}=req.body||{};
+  if(!other||other===me) return res.status(400).json({error:"other username required"});
+  const threads=getThreads();
+  let thread=threads.find(t=>t.participants.length===2&&t.participants.includes(me)&&t.participants.includes(String(other)));
+  if(!thread){
+    thread={id:crypto.randomUUID(),participants:[me,String(other)],updatedAt:new Date().toISOString()};
+    threads.push(thread); saveThreads(threads);
+  }
+  res.json(thread);
+});
+
+router.get("/dm/threads/:id/messages",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const threads=getThreads();
+  const t=threads.find(x=>x.id===req.params.id);
+  if(!t||!t.participants.includes(u)) return res.status(403).json({error:"Forbidden"});
+  const since=(req.query as any).since;
+  const msgs=getDMMessages(req.params.id);
+  res.json(since?msgs.filter(m=>m.ts>since):msgs);
+});
+
+router.post("/dm/threads/:id/messages",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const threads=getThreads();
+  const ti=threads.findIndex(x=>x.id===req.params.id);
+  if(ti<0||!threads[ti].participants.includes(u)) return res.status(403).json({error:"Forbidden"});
+  const{text,audioData,imageData}=req.body||{};
+  if(!text?.trim()&&!audioData&&!imageData) return res.status(400).json({error:"content required"});
+  const msg:DMMessage={id:crypto.randomUUID(),threadId:req.params.id,author:u,
+    text:text?String(text).slice(0,2000):undefined,
+    audioData:audioData?String(audioData).slice(0,8_000_000):undefined,
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    ts:new Date().toISOString()};
+  const msgs=getDMMessages(req.params.id);
+  msgs.push(msg);
+  saveDMMessages(req.params.id,msgs);
+  threads[ti].lastMsg=text?String(text).slice(0,80):(audioData?"🎤 Voice message":"📷 Photo");
+  threads[ti].lastAt=msg.ts;
+  threads[ti].updatedAt=msg.ts;
+  saveThreads(threads);
+  // notify recipient
+  const other=threads[ti].participants.find(p=>p!==u);
+  if(other){
+    const notifs=rd<Notification[]>("notifs.json",[]);
+    notifs.unshift({id:crypto.randomUUID(),title:`💬 ${u} sent you a message`,body:threads[ti].lastMsg||"",createdAt:msg.ts,recipients:[other],readBy:[]});
+    wr("notifs.json",notifs.slice(0,300));
+  }
+  res.json(msg);
+});
+
+router.get("/dm/users",userAuth,(req:any,res)=>{
+  // return list of known usernames (for starting new DM)
+  const users=rd<any[]>("users.json",[]);
+  res.json(users.map(u=>({username:u.username||u.name,ip:undefined})));
+});
+
+/* ══════════════════════════════════════════════════════════
+   WEBRTC SIGNALING — 1:1 CALLS
+══════════════════════════════════════════════════════════ */
+interface CallSignal{
+  id:string; caller:string; callee:string;
+  type:"audio"|"video";
+  offer?:any; answer?:any;
+  callerCandidates:any[]; calleeCandidates:any[];
+  status:"pending"|"ringing"|"active"|"ended"|"rejected";
+  createdAt:string;
+}
+function getCalls():CallSignal[]{
+  const calls=rd<CallSignal[]>("calls.json",[]);
+  const cutoff=Date.now()-120_000; // 2 min expiry
+  return calls.filter(c=>new Date(c.createdAt).getTime()>cutoff&&c.status!=="ended");
+}
+function saveCalls(c:CallSignal[]){wr("calls.json",c);}
+
+router.post("/calls",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{callee,type,offer}=req.body||{};
+  if(!callee||!offer) return res.status(400).json({error:"callee and offer required"});
+  // end any existing active call for this caller
+  const calls=getCalls().filter(c=>!(c.caller===me&&c.status!=="ended"));
+  const call:CallSignal={id:crypto.randomUUID(),caller:me,callee:String(callee),type:type==="audio"?"audio":"video",
+    offer,answer:undefined,callerCandidates:[],calleeCandidates:[],status:"ringing",createdAt:new Date().toISOString()};
+  calls.push(call); saveCalls(calls);
+  res.json({id:call.id});
+});
+
+router.get("/calls/incoming",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const call=getCalls().find(c=>c.callee===me&&c.status==="ringing");
+  res.json(call||null);
+});
+
+router.get("/calls/:id",userAuth,(req:any,res)=>{
+  const call=getCalls().find(c=>c.id===req.params.id);
+  res.json(call||null);
+});
+
+router.patch("/calls/:id/answer",userAuth,(req:any,res)=>{
+  const calls=getCalls();
+  const i=calls.findIndex(c=>c.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  calls[i].answer=req.body.answer;
+  calls[i].status="active";
+  saveCalls(calls); res.json({ok:true});
+});
+
+router.patch("/calls/:id/reject",userAuth,(req:any,res)=>{
+  const calls=getCalls();
+  const i=calls.findIndex(c=>c.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  calls[i].status="rejected"; saveCalls(calls); res.json({ok:true});
+});
+
+router.post("/calls/:id/candidate",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const calls=getCalls();
+  const i=calls.findIndex(c=>c.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const{candidate}=req.body||{};
+  if(calls[i].caller===me) calls[i].callerCandidates.push(candidate);
+  else calls[i].calleeCandidates.push(candidate);
+  saveCalls(calls); res.json({ok:true});
+});
+
+router.delete("/calls/:id",userAuth,(req:any,res)=>{
+  const calls=getCalls();
+  const i=calls.findIndex(c=>c.id===req.params.id);
+  if(i>=0){calls[i].status="ended"; saveCalls(calls);}
+  res.json({ok:true});
+});
+
 export default router;
 

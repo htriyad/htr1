@@ -292,9 +292,11 @@ export default function Dashboard() {
     { label:"Live Exam",     icon:"📝", bg:"#e3f2fd", chevron:"#2e7d32", path:"/exams" },
     { label:"Practice Exam", icon:"💻", bg:"#fff3e0", chevron:"#2e7d32", path:"/exams" },
     { label:"Solve Sheet",   icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/solve-sheet" },
-    { label:"Q&A Service",   icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/ask" },
+    { label:"Community",     icon:"🌐", bg:"#ede9fe", chevron:"#7c3aed", path:"/community" },
+    { label:"Messages",      icon:"💬", bg:"#e0f7fa", chevron:"#0ea5e9", path:"/messages" },
+    { label:"Q&A Service",   icon:"❓", bg:"#fef3c7", chevron:"#d97706", path:"/ask" },
     { label:"Discussion",    icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/discussion" },
-    { label:"My Progress",   icon:"🏆", bg:"#fef3c7", chevron:"#d97706", path:"/profile" },
+    { label:"My Progress",   icon:"🏆", bg:"#fff3e0", chevron:"#d97706", path:"/profile" },
     { label:"Leaderboard",   icon:"🥇", bg:"#fee2e2", chevron:"#dc2626", path:"/leaderboard" },
   ];
 
@@ -676,9 +678,9 @@ export default function Dashboard() {
         <div className="dash-bottom-nav">
           {[
             { icon:"🏠", label:"Home",      path:"/" },
-            { icon:"🃏", label:"Cards",     path:"/flashcards" },
-            { icon:"👨‍🏫", label:"Live",      path:"/live-class" },
-            { icon:"💬", label:"Q&A",       path:"/ask" },
+            { icon:"🌐", label:"Community", path:"/community" },
+            { icon:"💬", label:"Messages",  path:"/messages" },
+            { icon:"❓", label:"Q&A",       path:"/ask" },
             { icon:"👤", label:"Profile",   path:"/profile" },
           ].map(item => (
             <button key={item.label} onClick={() => navigate(item.path)} className="dash-bottom-nav-item">

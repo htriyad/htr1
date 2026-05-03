@@ -32,6 +32,8 @@ import VocabBuilder from "./pages/VocabBuilder";
 import BattleQuiz from "./pages/BattleQuiz";
 import FocusRoom from "./pages/FocusRoom";
 import StudyRoom from "./pages/StudyRoom";
+import Community from "./pages/Community";
+import Messages from "./pages/Messages";
 import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
@@ -228,6 +230,9 @@ export default function App() {
         <Route path="/focus-room"        component={FocusRoom} />
         <Route path="/study-room/:id"    component={StudyRoom} />
         <Route path="/study-room"        component={StudyRoom} />
+        <Route path="/community"         component={Community} />
+        <Route path="/messages/:threadId" component={Messages} />
+        <Route path="/messages"          component={Messages} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "6bacb4e9-d7fd-470f-b3e4-47bc56ef05f6",
+    "author": "Arif_BCS",
+    "text": "BCS preparation চলছে 🔥",
+    "bgColor": "linear-gradient(135deg,#6366f1,#818cf8)",
+    "createdAt": "2026-05-03T09:59:02.063Z",
+    "expiresAt": "2026-05-04T09:59:02.063Z",
+    "views": []
+  },
+  {
+    "id": "fc82383b-a819-4dec-9373-20df4d91cfc1",
+    "author": "Sumaiya_HSC25",
+    "text": "Study hard! 📚💪",
+    "bgColor": "linear-gradient(135deg,#0ea5e9,#38bdf8)",
+    "createdAt": "2026-05-03T09:59:01.927Z",
+    "expiresAt": "2026-05-04T09:59:01.927Z",
+    "views": []
+  },
+  {
+    "id": "a280ee52-9e5f-42bf-9fa8-28b8ffb5d04d",
+    "author": "Rahim_SSC25",
+    "text": "আজকে Physics exam দিলাম! 🎉",
+    "bgColor": "linear-gradient(135deg,#10b981,#34d399)",
+    "createdAt": "2026-05-03T09:59:01.797Z",
+    "expiresAt": "2026-05-04T09:59:01.797Z",
+    "views": []
+  }
+]
