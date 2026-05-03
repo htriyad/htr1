@@ -38,6 +38,12 @@ import Channels from "./pages/Channels";
 import Explore from "./pages/Explore";
 import ModLogin from "./pages/ModLogin";
 import ModPanel from "./pages/ModPanel";
+import SocialProfile from "./pages/SocialProfile";
+import Stories from "./pages/Stories";
+import Events from "./pages/Events";
+import Friends from "./pages/Friends";
+import Notifications from "./pages/Notifications";
+import UserSettings from "./pages/UserSettings";
 import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
@@ -241,7 +247,14 @@ export default function App() {
         <Route path="/explore"           component={Explore} />
         <Route path="/mod-login"         component={ModLogin} />
         <Route path="/mod"               component={ModPanel} />
-        <Route path="/admin"           component={Admin} />
+        <Route path="/admin"             component={Admin} />
+        <Route path="/social/:username"  component={SocialProfile} />
+        <Route path="/social"            component={SocialProfile} />
+        <Route path="/stories"           component={Stories} />
+        <Route path="/events"            component={Events} />
+        <Route path="/friends"           component={Friends} />
+        <Route path="/notifications"     component={Notifications} />
+        <Route path="/settings"          component={UserSettings} />
         <Route><Dashboard /></Route>
       </Switch>
       <FloatingMusic />

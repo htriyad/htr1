@@ -1,0 +1,345 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
+import Header from "../components/Header";
+import { USER_NAME_KEY } from "../App";
+
+const ME = () => localStorage.getItem(USER_NAME_KEY) || "";
+const api = (p: string, o: RequestInit = {}) =>
+  fetch(p, { ...o, headers: { "Content-Type": "application/json", "x-username": ME(), ...(o.headers as any || {}) } });
+
+const THEMES = [
+  { id: "rose",    label: "Rose",    grad: "linear-gradient(135deg,#e05c8a 0%,#7c3aed 100%)" },
+  { id: "ocean",   label: "Ocean",   grad: "linear-gradient(135deg,#0891b2 0%,#1d4ed8 100%)" },
+  { id: "sunset",  label: "Sunset",  grad: "linear-gradient(135deg,#f59e0b 0%,#dc2626 100%)" },
+  { id: "forest",  label: "Forest",  grad: "linear-gradient(135deg,#16a34a 0%,#0891b2 100%)" },
+  { id: "galaxy",  label: "Galaxy",  grad: "linear-gradient(135deg,#1e1b4b 0%,#7c3aed 60%,#db2777 100%)" },
+];
+
+const BADGES = [
+  { key: "verified", icon: "✅", label: "Verified" },
+  { key: "student",  icon: "📚", label: "Student" },
+  { key: "teacher",  icon: "👨‍🏫", label: "Teacher" },
+  { key: "creator",  icon: "🎨", label: "Creator" },
+  { key: "legend",   icon: "🏆", label: "Legend" },
+  { key: "helper",   icon: "🤝", label: "Helper" },
+];
+
+const inp: React.CSSProperties = { padding: "10px 12px", borderRadius: 9, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontSize: 13, width: "100%", boxSizing: "border-box", outline: "none", fontFamily: "Roboto,'Noto Sans Bengali',sans-serif" };
+
+export default function SocialProfile() {
+  const [, nav] = useLocation();
+  const path = window.location.pathname;
+  const urlUser = path.startsWith("/social/") ? path.split("/social/")[1] : ME();
+  const username = urlUser || ME();
+  const isMe = username === ME();
+
+  const [profile, setProfile] = useState<any>(null);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [followers, setFollowers] = useState<string[]>([]);
+  const [following, setFollowing] = useState<string[]>([]);
+  const [visitors, setVisitors] = useState<string[]>([]);
+  const [tab, setTab] = useState<"posts"|"media"|"liked"|"about">("posts");
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState("");
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [showFollowers, setShowFollowers] = useState(false);
+  const [showFollowing, setShowFollowing] = useState(false);
+  const [followerProfiles, setFollowerProfiles] = useState<any[]>([]);
+  const [followingProfiles, setFollowingProfiles] = useState<any[]>([]);
+
+  const [form, setForm] = useState({ displayName: "", bio: "", website: "", location: "", theme: "rose", isPrivate: false, avatar: "", cover: "", badges: [] as string[] });
+
+  const avatarRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [p, fl, fw, vs, pp] = await Promise.all([
+      api(`/api/social/profile/${username}`).then(r => r.json()),
+      api(`/api/social/followers/${username}`).then(r => r.json()),
+      api(`/api/social/following/${username}`).then(r => r.json()),
+      isMe ? api("/api/social/visitors").then(r => r.json()) : Promise.resolve([]),
+      api(`/api/community/posts?author=${username}`).then(r => r.json()).catch(() => []),
+    ]);
+    setProfile(p);
+    setFollowers(Array.isArray(fl) ? fl : []);
+    setFollowing(Array.isArray(fw) ? fw : []);
+    setVisitors(Array.isArray(vs) ? vs : []);
+    setPosts(Array.isArray(pp) ? pp : []);
+    setIsFollowing(p?.isFollowing || false);
+    setIsBlocked(p?.isBlocked || false);
+    if (p) setForm({ displayName: p.displayName || username, bio: p.bio || "", website: p.website || "", location: p.location || "", theme: p.theme || "rose", isPrivate: !!p.isPrivate, avatar: p.avatar || "", cover: p.cover || "", badges: p.badges || [] });
+    // Track visitor
+    if (!isMe && ME()) api(`/api/social/visit/${username}`, { method: "POST" }).catch(() => {});
+    setLoading(false);
+  }, [username, isMe]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function pickImage(ref: React.RefObject<HTMLInputElement>, field: "avatar" | "cover") {
+    if (!ref.current) return;
+    ref.current.onchange = (e: any) => {
+      const file = e.target.files?.[0]; if (!file) return;
+      if (file.size > 2_000_000) { setMsg("❌ Image too large (max 2MB)"); return; }
+      const reader = new FileReader();
+      reader.onload = () => setForm(f => ({ ...f, [field]: reader.result as string }));
+      reader.readAsDataURL(file);
+    };
+    ref.current.click();
+  }
+
+  async function saveProfile() {
+    const r = await api("/api/social/profile", { method: "PATCH", body: JSON.stringify(form) });
+    const d = await r.json();
+    if (d.error) setMsg("❌ " + d.error);
+    else { setMsg("✅ Profile updated!"); setEditing(false); load(); }
+  }
+
+  async function toggleFollow() {
+    const r = await api(`/api/social/follow/${username}`, { method: "POST" });
+    const d = await r.json();
+    setIsFollowing(d.following);
+    load();
+  }
+
+  async function toggleBlock() {
+    await api(`/api/social/block/${username}`, { method: "POST" });
+    setIsBlocked(b => !b);
+    load();
+  }
+
+  async function loadFollowerProfiles(type: "followers" | "following") {
+    const list = type === "followers" ? followers : following;
+    const profiles = await Promise.all(list.slice(0, 20).map(u => api(`/api/social/profile/${u}`).then(r => r.json()).catch(() => ({ username: u }))));
+    if (type === "followers") { setFollowerProfiles(profiles); setShowFollowers(true); setShowFollowing(false); }
+    else { setFollowingProfiles(profiles); setShowFollowing(true); setShowFollowers(false); }
+  }
+
+  const theme = THEMES.find(t => t.id === (profile?.theme || "rose")) || THEMES[0];
+  const likedPosts = posts.filter((p: any) => (p.likes || []).includes(ME()));
+  const mediaPosts = posts.filter((p: any) => p.image);
+
+  if (loading) return <div style={{ minHeight: "100svh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: 40 }}>🥀</div><p style={{ color: "var(--sub)", marginTop: 10 }}>Loading profile…</p></div></div>;
+
+  return (
+    <div style={{ minHeight: "100svh", background: "var(--bg)", fontFamily: "Roboto,'Noto Sans Bengali',sans-serif" }}>
+      <Header title={`@${username}`} />
+      <input ref={avatarRef} type="file" accept="image/*" style={{ display: "none" }} />
+      <input ref={coverRef} type="file" accept="image/*" style={{ display: "none" }} />
+
+      {/* Cover photo */}
+      <div style={{ position: "relative", height: 180, background: form.cover ? `url(${form.cover}) center/cover` : theme.grad, cursor: editing ? "pointer" : "default" }}
+        onClick={() => editing && pickImage(coverRef, "cover")}>
+        {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}><span style={{ fontSize: 32 }}>📷</span><span style={{ color: "#fff", fontWeight: 700, marginLeft: 8 }}>Change Cover</span></div>}
+      </div>
+
+      {/* Profile section */}
+      <div style={{ padding: "0 16px 0", position: "relative" }}>
+        {/* Avatar */}
+        <div style={{ position: "relative", display: "inline-block", marginTop: -44 }}>
+          <div style={{ width: 88, height: 88, borderRadius: "50%", background: form.avatar ? `url(${form.avatar}) center/cover` : theme.grad, border: "4px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 900, color: "#fff", cursor: editing ? "pointer" : "default", overflow: "hidden" }}
+            onClick={() => editing && pickImage(avatarRef, "avatar")}>
+            {!form.avatar && (profile?.displayName || username)[0]?.toUpperCase()}
+            {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", borderRadius: "50%" }}><span style={{ fontSize: 22 }}>📷</span></div>}
+          </div>
+          {/* Online indicator */}
+          <div style={{ position: "absolute", bottom: 4, right: 4, width: 16, height: 16, borderRadius: "50%", background: "#16a34a", border: "2px solid var(--bg)" }} />
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ float: "right", marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {isMe ? (
+            <button onClick={() => setEditing(e => !e)} style={{ padding: "8px 18px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              {editing ? "✕ Cancel" : "✏️ Edit Profile"}
+            </button>
+          ) : (
+            <>
+              <button onClick={toggleFollow} style={{ padding: "8px 20px", borderRadius: 20, border: "none", background: isFollowing ? "var(--surface)" : theme.grad, color: isFollowing ? "var(--text)" : "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", border: isFollowing ? "1.5px solid var(--border)" : "none" } as any}>
+                {isFollowing ? "✓ Following" : "+ Follow"}
+              </button>
+              <button onClick={() => nav("/messages?to=" + username)} style={{ padding: "8px 16px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>💬 Message</button>
+              <button onClick={toggleBlock} style={{ padding: "7px 12px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: isBlocked ? "#dc2626" : "var(--sub)", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>{isBlocked ? "🚫 Blocked" : "⋯"}</button>
+            </>
+          )}
+        </div>
+
+        {/* Name + badges */}
+        <div style={{ marginTop: 8, clear: "both" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{profile?.displayName || username}</span>
+            {(profile?.badges || []).map((b: string) => {
+              const badge = BADGES.find(x => x.key === b);
+              return badge ? <span key={b} title={badge.label} style={{ fontSize: 15 }}>{badge.icon}</span> : null;
+            })}
+            {profile?.isPrivate && <span style={{ fontSize: 10, padding: "2px 7px", background: "rgba(0,0,0,0.1)", borderRadius: 99, color: "var(--sub)", fontWeight: 700 }}>🔒 Private</span>}
+          </div>
+          <div style={{ fontSize: 13, color: "var(--sub)" }}>@{username}</div>
+          {profile?.bio && <p style={{ fontSize: 13, color: "var(--text)", margin: "6px 0", lineHeight: 1.55 }}>{profile.bio}</p>}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+            {profile?.location && <span style={{ fontSize: 12, color: "var(--sub)" }}>📍 {profile.location}</span>}
+            {profile?.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1d4ed8", textDecoration: "none" }}>🔗 {profile.website.replace(/^https?:\/\//, "")}</a>}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: "flex", gap: 20, marginTop: 14, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
+          <div onClick={() => loadFollowerProfiles("followers")} style={{ cursor: "pointer", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{followers.length}</div>
+            <div style={{ fontSize: 11, color: "var(--sub)" }}>Followers</div>
+          </div>
+          <div onClick={() => loadFollowerProfiles("following")} style={{ cursor: "pointer", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{following.length}</div>
+            <div style={{ fontSize: 11, color: "var(--sub)" }}>Following</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{posts.length}</div>
+            <div style={{ fontSize: 11, color: "var(--sub)" }}>Posts</div>
+          </div>
+          {isMe && visitors.length > 0 && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--purple)", fontFamily: "Lato,sans-serif" }}>{visitors.length}</div>
+              <div style={{ fontSize: 11, color: "var(--sub)" }}>Visitors</div>
+            </div>
+          )}
+        </div>
+
+        {/* Followers/Following modal */}
+        {(showFollowers || showFollowing) && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => { setShowFollowers(false); setShowFollowing(false); }}>
+            <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 380, maxHeight: "70vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: "14px 16px", fontWeight: 700, fontSize: 15, borderBottom: "1px solid var(--border)" }}>{showFollowers ? "Followers" : "Following"}</div>
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {(showFollowers ? followerProfiles : followingProfiles).map((u: any, i: number) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--border)", cursor: "pointer" }} onClick={() => { nav(`/social/${u.username || u}`); setShowFollowers(false); setShowFollowing(false); }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: u.avatar ? `url(${u.avatar}) center/cover` : "var(--purple)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16, flexShrink: 0, overflow: "hidden" }}>{!u.avatar && (u.displayName || u.username || "?")[0]?.toUpperCase()}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{u.displayName || u.username || u}</div>
+                      <div style={{ fontSize: 11, color: "var(--sub)" }}>@{u.username || u}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Profile Form */}
+      {editing && isMe && (
+        <div style={{ margin: "16px", background: "var(--surface)", borderRadius: 16, padding: 18, border: "1px solid var(--border)" }}>
+          <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>✏️ Edit Profile</h3>
+          {msg && <div style={{ padding: "8px 12px", borderRadius: 8, background: msg.startsWith("✅") ? "#dcfce7" : "#fee2e2", color: msg.startsWith("✅") ? "#166534" : "#991b1b", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Display Name</label>
+            <input value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} style={inp} placeholder="Your name" />
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Bio</label>
+            <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} rows={3} maxLength={200} style={{ ...inp, resize: "vertical" }} placeholder="Tell people about yourself…" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Location</label><input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} style={inp} placeholder="Dhaka, Bangladesh" /></div>
+              <div><label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Website</label><input value={form.website} onChange={e => setForm(f => ({ ...f, website: e.target.value }))} style={inp} placeholder="https://yoursite.com" /></div>
+            </div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Profile Theme</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {THEMES.map(t => (
+                <div key={t.id} onClick={() => setForm(f => ({ ...f, theme: t.id }))} style={{ width: 40, height: 40, borderRadius: 10, background: t.grad, cursor: "pointer", border: form.theme === t.id ? "3px solid var(--text)" : "3px solid transparent", transition: "border 150ms" }} title={t.label} />
+              ))}
+            </div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>Badges (select all that apply)</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {BADGES.map(b => (
+                <label key={b.key} style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 20, border: `2px solid ${form.badges.includes(b.key) ? "var(--purple)" : "var(--border)"}`, background: form.badges.includes(b.key) ? "rgba(124,58,237,0.1)" : "var(--bg)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.badges.includes(b.key)} onChange={e => setForm(f => ({ ...f, badges: e.target.checked ? [...f.badges, b.key] : f.badges.filter(x => x !== b.key) }))} style={{ display: "none" }} />
+                  {b.icon} {b.label}
+                </label>
+              ))}
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: "var(--bg)", border: "1px solid var(--border)" }}>
+              <input type="checkbox" checked={form.isPrivate} onChange={e => setForm(f => ({ ...f, isPrivate: e.target.checked }))} style={{ width: 16, height: 16, accentColor: "var(--purple)" }} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>🔒 Private Account</span>
+              <span style={{ fontSize: 11, color: "var(--sub)", marginLeft: "auto" }}>{form.isPrivate ? "Only followers see posts" : "Anyone can see"}</span>
+            </label>
+            <button onClick={saveProfile} style={{ padding: "12px", borderRadius: 10, border: "none", background: theme.grad, color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>💾 Save Profile</button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginTop: 4 }}>
+        {([["posts", "📝 Posts"], ["media", "🖼️ Media"], ["liked", "❤️ Liked"], ["about", "ℹ️ About"]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "12px 4px", border: "none", background: "none", fontWeight: tab === id ? 700 : 500, color: tab === id ? "var(--purple)" : "var(--sub)", fontSize: 12, cursor: "pointer", borderBottom: tab === id ? "2px solid var(--purple)" : "2px solid transparent" }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ padding: 16 }}>
+        {tab === "posts" && (
+          <>
+            {posts.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--sub)" }}><div style={{ fontSize: 36 }}>📝</div><p style={{ marginTop: 10 }}>No posts yet</p></div>}
+            {posts.map((p: any) => (
+              <div key={p.id} style={{ background: "var(--surface)", borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <p style={{ fontSize: 14, color: "var(--text)", margin: "0 0 8px", lineHeight: 1.55 }}>{p.text}</p>
+                {p.image && <img src={p.image} alt="" style={{ width: "100%", borderRadius: 10, maxHeight: 260, objectFit: "cover" }} />}
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 12, color: "var(--sub)" }}>
+                  <span>❤️ {(p.likes || []).length}</span>
+                  <span>💬 {(p.comments || []).length}</span>
+                  <span style={{ marginLeft: "auto" }}>{new Date(p.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+        {tab === "media" && (
+          <>
+            {mediaPosts.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--sub)" }}><div style={{ fontSize: 36 }}>🖼️</div><p style={{ marginTop: 10 }}>No media yet</p></div>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
+              {mediaPosts.map((p: any) => (
+                <div key={p.id} style={{ aspectRatio: "1", background: `url(${p.image}) center/cover`, borderRadius: 8, cursor: "pointer" }} />
+              ))}
+            </div>
+          </>
+        )}
+        {tab === "liked" && (
+          <>
+            {likedPosts.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--sub)" }}><div style={{ fontSize: 36 }}>❤️</div><p style={{ marginTop: 10 }}>No liked posts yet</p></div>}
+            {likedPosts.map((p: any) => (
+              <div key={p.id} style={{ background: "var(--surface)", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: "var(--sub)", marginBottom: 6 }}>by @{p.author}</div>
+                <p style={{ fontSize: 14, color: "var(--text)", margin: 0, lineHeight: 1.55 }}>{p.text?.slice(0, 120)}{p.text?.length > 120 ? "…" : ""}</p>
+              </div>
+            ))}
+          </>
+        )}
+        {tab === "about" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {[
+              { icon: "📅", label: "Joined", value: profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : "Unknown" },
+              { icon: "📍", label: "Location", value: profile?.location || "Not set" },
+              { icon: "🔗", label: "Website", value: profile?.website || "Not set" },
+              { icon: "👁️", label: "Profile Views", value: isMe ? `${visitors.length} people visited your profile` : "Private" },
+            ].map(item => (
+              <div key={item.label} style={{ display: "flex", gap: 12, padding: "10px 14px", background: "var(--surface)", borderRadius: 12 }}>
+                <span style={{ fontSize: 18 }}>{item.icon}</span>
+                <div><div style={{ fontSize: 11, color: "var(--sub)", fontWeight: 700, textTransform: "uppercase" }}>{item.label}</div><div style={{ fontSize: 13, color: "var(--text)", marginTop: 2 }}>{item.value}</div></div>
+              </div>
+            ))}
+            {isMe && visitors.length > 0 && (
+              <div style={{ background: "var(--surface)", borderRadius: 12, padding: 14 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>👁️ Recent Visitors</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {visitors.slice(0, 10).map((v: string, i: number) => (
+                    <div key={i} onClick={() => nav(`/social/${v}`)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "var(--bg)", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--purple)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900 }}>{v[0]?.toUpperCase()}</div>
+                      @{v}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -3299,13 +3299,585 @@ router.delete("/admin/roles/:id", adminAuth, (req: any, res) => {
 /* ══════════════════════════════════════════════════════════
    ENHANCED USER LOGIN — append security log
 ══════════════════════════════════════════════════════════ */
-// Patch the existing login to also log security events
-// We add a supplementary route that the frontend can call
 router.post("/user/login-log", (req: any, res) => {
   const { username, success, device } = req.body || {};
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
   if (username) appendSecurityLog(username, ip, !!success, device);
   res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   USER SETTINGS  (privacy, account, appearance)
+══════════════════════════════════════════════════════════ */
+router.get("/user/settings", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const all = rd<Record<string, any>>("user-settings.json", {});
+  res.json(all[me] || {});
+});
+
+router.patch("/user/settings", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const all = rd<Record<string, any>>("user-settings.json", {});
+  all[me] = { ...(all[me] || {}), ...req.body, username: me, updatedAt: new Date().toISOString() };
+  wr("user-settings.json", all);
+  // If birthday changed, update social profile too
+  if (req.body.birthday) {
+    const profiles = rd<any[]>("social-profiles.json", []);
+    const idx = profiles.findIndex((p: any) => p.username === me);
+    if (idx >= 0) { profiles[idx].birthday = req.body.birthday; wr("social-profiles.json", profiles); }
+    else { profiles.push({ username: me, birthday: req.body.birthday }); wr("social-profiles.json", profiles); }
+  }
+  res.json({ ok: true });
+});
+
+router.post("/user/change-password", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const { current, newPassword } = req.body || {};
+  if (!me || !current || !newPassword) return res.status(400).json({ error: "All fields required" });
+  if (newPassword.length < 6) return res.status(400).json({ error: "Password too short (min 6)" });
+  const users = rd<any[]>("users.json", []);
+  const ui = users.findIndex((u: any) => u.username === me);
+  if (ui < 0) return res.status(404).json({ error: "User not found" });
+  if (users[ui].password !== current) return res.status(401).json({ error: "Current password incorrect" });
+  users[ui].password = newPassword;
+  users[ui].passwordChangedAt = new Date().toISOString();
+  wr("users.json", users);
+  appendSecurityLog(me, (req.headers["x-forwarded-for"] as string)?.split(",")[0] || "unknown", true, "password-change");
+  res.json({ ok: true });
+});
+
+router.get("/user/export-data", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  if (!me) return res.status(401).json({ error: "Not logged in" });
+  const posts = rd<any[]>("community-posts.json", []).filter((p: any) => p.author === me);
+  const profile = rd<any[]>("social-profiles.json", []).find((p: any) => p.username === me) || {};
+  const settings = (rd<Record<string, any>>("user-settings.json", {}))[me] || {};
+  const follows = rd<any[]>("social-follows.json", []).filter((f: any) => f.follower === me || f.following === me);
+  const threads = rd<any[]>("dm-threads.json", []).filter((t: any) => t.participants.includes(me));
+  res.json({ username: me, exportedAt: new Date().toISOString(), profile, settings, posts, follows, threads });
+});
+
+/* ══════════════════════════════════════════════════════════
+   NOTIFICATIONS  (user-specific, full CRUD)
+══════════════════════════════════════════════════════════ */
+function pushNotif(toUser: string, type: string, fromUser: string, body: string, extra?: any) {
+  const all = rd<any[]>("notifs.json", []);
+  all.unshift({ id: crypto.randomUUID(), toUser, type, fromUser, body, ts: new Date().toISOString(), read: false, ...(extra || {}) });
+  wr("notifs.json", all.slice(0, 2000));
+}
+
+router.get("/notifications/mine", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("notifs.json", []);
+  const mine = all.filter((n: any) => n.toUser === me || (!n.toUser && (!n.recipients?.length || n.recipients.includes(me))));
+  res.json(mine.slice(0, 100).map((n: any) => ({
+    ...n,
+    read: n.read || n.readBy?.includes(me) || false,
+    ts: n.ts || n.createdAt || new Date().toISOString(),
+    body: n.body || n.text || n.title || "",
+  })));
+});
+
+router.patch("/notifications/:id/read", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("notifs.json", []);
+  const i = all.findIndex((n: any) => n.id === req.params.id);
+  if (i >= 0) {
+    all[i].read = true;
+    all[i].readBy = all[i].readBy || [];
+    if (!all[i].readBy.includes(me)) all[i].readBy.push(me);
+    wr("notifs.json", all);
+  }
+  res.json({ ok: true });
+});
+
+router.patch("/notifications/read-all", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("notifs.json", []);
+  all.forEach((n: any) => {
+    if (n.toUser === me || !n.toUser) {
+      n.read = true;
+      n.readBy = n.readBy || [];
+      if (!n.readBy.includes(me)) n.readBy.push(me);
+    }
+  });
+  wr("notifs.json", all);
+  res.json({ ok: true });
+});
+
+router.delete("/notifications/:id", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("notifs.json", []);
+  wr("notifs.json", all.filter((n: any) => !(n.id === req.params.id && (n.toUser === me || !n.toUser))));
+  res.json({ ok: true });
+});
+
+router.delete("/notifications/clear", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("notifs.json", []);
+  wr("notifs.json", all.filter((n: any) => n.toUser !== me));
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   STORIES  (extended: mine, archive, highlights, poll, delete)
+══════════════════════════════════════════════════════════ */
+router.get("/community/stories/mine", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  res.json(getStories().filter((s: any) => s.author === me));
+});
+
+router.get("/community/stories/archive", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("stories-archive.json", []);
+  const myStories = getStories().filter((s: any) => s.author === me);
+  // merge archive + current expired
+  const now = Date.now();
+  const expired = myStories.filter((s: any) => new Date(s.expiresAt || s.createdAt).getTime() + 86400000 < now);
+  const combined = [...all.filter((s: any) => s.author === me), ...expired];
+  const seen = new Set<string>();
+  res.json(combined.filter((s: any) => { if (seen.has(s.id)) return false; seen.add(s.id); return true; }).slice(0, 50));
+});
+
+// Patch story creation to support full sticker/text/cover upload
+router.post("/community/stories/enhanced", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const { text, bgColor, image, textColor, fontSize, sticker } = req.body || {};
+  if (!text?.trim() && !image) return res.status(400).json({ error: "text or image required" });
+  const now = new Date();
+  const story: any = {
+    id: crypto.randomUUID(), author: me,
+    text: text ? String(text).slice(0, 300) : undefined,
+    bgColor: bgColor || "#1e1b4b",
+    image: image ? String(image).slice(0, 8_000_000) : undefined,
+    textColor: textColor || "#ffffff",
+    fontSize: fontSize || 24,
+    sticker: sticker || null,
+    ts: now.toISOString(),
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 86400000).toISOString(),
+    viewers: [],
+    views: [],
+    reactions: {},
+    replies: [],
+  };
+  const stories = getStories();
+  stories.unshift(story);
+  saveStories(stories);
+  // Archive a copy
+  const archive = rd<any[]>("stories-archive.json", []);
+  archive.unshift(story);
+  wr("stories-archive.json", archive.slice(0, 500));
+  res.json(story);
+});
+
+// Override existing story POST to also support new fields
+router.patch("/community/stories/:id", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const stories = getStories();
+  const i = stories.findIndex((s: any) => s.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  if (stories[i].author !== me) return res.status(403).json({ error: "Not yours" });
+  stories[i] = { ...stories[i], ...req.body, id: req.params.id, author: me };
+  saveStories(stories);
+  res.json(stories[i]);
+});
+
+router.delete("/community/stories/:id", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const stories = getStories();
+  const s = stories.find((x: any) => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: "Not found" });
+  if (s.author !== me) return res.status(403).json({ error: "Not yours" });
+  saveStories(stories.filter((x: any) => x.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+router.post("/community/stories/:id/poll-vote", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const { option } = req.body || {};
+  if (!option) return res.status(400).json({ error: "option required" });
+  const stories = getStories();
+  const i = stories.findIndex((s: any) => s.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  const s = stories[i];
+  if (!s.sticker || s.sticker.type !== "poll") return res.status(400).json({ error: "Not a poll" });
+  s.sticker.votesA = s.sticker.votesA || 0;
+  s.sticker.votesB = s.sticker.votesB || 0;
+  s.sticker.voters = s.sticker.voters || {};
+  // Toggle vote
+  const prev = s.sticker.voters[me];
+  if (prev === option) { delete s.sticker.voters[me]; s.sticker[`votes${option}`]--; }
+  else {
+    if (prev) s.sticker[`votes${prev}`]--;
+    s.sticker.voters[me] = option;
+    s.sticker[`votes${option}`]++;
+  }
+  saveStories(stories);
+  res.json({ votesA: s.sticker.votesA, votesB: s.sticker.votesB });
+});
+
+// Story highlights
+router.get("/community/story-highlights", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("story-highlights.json", []);
+  res.json(all.filter((h: any) => h.owner === me));
+});
+
+router.post("/community/story-highlights", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const { name, icon } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  const all = rd<any[]>("story-highlights.json", []);
+  const hl = { id: crypto.randomUUID(), owner: me, name, icon: icon || "⭐", stories: [], createdAt: new Date().toISOString() };
+  all.push(hl);
+  wr("story-highlights.json", all);
+  res.json(hl);
+});
+
+router.delete("/community/story-highlights/:id", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const all = rd<any[]>("story-highlights.json", []);
+  wr("story-highlights.json", all.filter((h: any) => !(h.id === req.params.id && h.owner === me)));
+  res.json({ ok: true });
+});
+
+// (story view tracking is already handled by existing route above — patch it via middleware)
+
+/* ══════════════════════════════════════════════════════════
+   EVENTS  (create/list/RSVP/comments/delete)
+══════════════════════════════════════════════════════════ */
+router.get("/events", (req: any, res) => {
+  res.json(rd<any[]>("events.json", []));
+});
+
+router.post("/events", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const { title, description, date, endDate, location, isOnline, coverUrl, category } = req.body || {};
+  if (!title?.trim() || !date) return res.status(400).json({ error: "title and date required" });
+  const events = rd<any[]>("events.json", []);
+  const event = { id: crypto.randomUUID(), title, description: description || "", date, endDate: endDate || "", location: location || "", isOnline: !!isOnline, coverUrl: coverUrl || "", category: category || "Education", creator: me, rsvps: [], comments: [], createdAt: new Date().toISOString() };
+  events.unshift(event);
+  wr("events.json", events.slice(0, 500));
+  res.json(event);
+});
+
+router.get("/events/:id", (req: any, res) => {
+  const events = rd<any[]>("events.json", []);
+  const e = events.find((x: any) => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: "Not found" });
+  res.json(e);
+});
+
+router.post("/events/:id/rsvp", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const { status } = req.body || {};
+  if (!["going","interested","not_going"].includes(status)) return res.status(400).json({ error: "invalid status" });
+  const events = rd<any[]>("events.json", []);
+  const i = events.findIndex((e: any) => e.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  events[i].rsvps = events[i].rsvps || [];
+  const ri = events[i].rsvps.findIndex((r: any) => r.username === me);
+  if (ri >= 0) events[i].rsvps[ri].status = status;
+  else events[i].rsvps.push({ username: me, status, ts: new Date().toISOString() });
+  wr("events.json", events);
+  // Push notification to event creator
+  if (events[i].creator !== me) {
+    pushNotif(events[i].creator, "event", me, `@${me} responded "${status}" to your event "${events[i].title}"`);
+  }
+  res.json({ ok: true, status });
+});
+
+router.post("/events/:id/comments", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const { text } = req.body || {};
+  if (!text?.trim()) return res.status(400).json({ error: "text required" });
+  const events = rd<any[]>("events.json", []);
+  const i = events.findIndex((e: any) => e.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  const comment = { id: crypto.randomUUID(), author: me, text, ts: new Date().toISOString() };
+  events[i].comments = events[i].comments || [];
+  events[i].comments.push(comment);
+  wr("events.json", events);
+  res.json(comment);
+});
+
+router.delete("/events/:id", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const events = rd<any[]>("events.json", []);
+  const e = events.find((x: any) => x.id === req.params.id);
+  if (!e) return res.status(404).json({ error: "Not found" });
+  if (e.creator !== me) return res.status(403).json({ error: "Not yours" });
+  wr("events.json", events.filter((x: any) => x.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   SOCIAL PROFILE  (visitors, birthdays, block/unblock)
+══════════════════════════════════════════════════════════ */
+router.post("/social/visit/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const target = req.params.username;
+  if (!me || me === target) return res.json({ ok: true });
+  const visits = rd<Record<string, string[]>>("profile-visitors.json", {});
+  visits[target] = visits[target] || [];
+  visits[target] = visits[target].filter((v: string) => v !== me);
+  visits[target].unshift(me);
+  visits[target] = visits[target].slice(0, 50);
+  wr("profile-visitors.json", visits);
+  res.json({ ok: true });
+});
+
+router.get("/social/visitors", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const visits = rd<Record<string, string[]>>("profile-visitors.json", {});
+  res.json(visits[me] || []);
+});
+
+router.get("/social/birthdays", userAuth, (_req, res) => {
+  const profiles = rd<any[]>("social-profiles.json", []);
+  const today = new Date();
+  const upcoming = profiles
+    .filter((p: any) => p.birthday)
+    .map((p: any) => {
+      const [, month, day] = p.birthday.split("-").map(Number);
+      const thisYear = new Date(today.getFullYear(), month - 1, day);
+      if (thisYear < today) thisYear.setFullYear(today.getFullYear() + 1);
+      return { ...p, daysUntil: Math.ceil((thisYear.getTime() - today.getTime()) / 86400000) };
+    })
+    .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
+    .slice(0, 20);
+  res.json(upcoming);
+});
+
+router.post("/social/block/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const target = req.params.username;
+  if (!me || me === target) return res.status(400).json({ error: "invalid" });
+  const blocks = rd<Record<string, string[]>>("social-blocks.json", {});
+  blocks[me] = blocks[me] || [];
+  if (blocks[me].includes(target)) {
+    blocks[me] = blocks[me].filter((u: string) => u !== target);
+    wr("social-blocks.json", blocks);
+    return res.json({ blocked: false });
+  }
+  blocks[me].push(target);
+  wr("social-blocks.json", blocks);
+  // Also remove follows in both directions
+  const follows = rd<any[]>("social-follows.json", []);
+  const filtered = follows.filter((f: any) => !((f.follower === me && f.following === target) || (f.follower === target && f.following === me)));
+  wr("social-follows.json", filtered);
+  res.json({ blocked: true });
+});
+
+router.get("/social/blocked", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const blocks = rd<Record<string, string[]>>("social-blocks.json", {});
+  res.json((blocks[me] || []).map((u: string) => ({ username: u })));
+});
+
+// Patch /social/profile/:username to include block/visitor info
+router.get("/social/profile-full/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const target = req.params.username;
+  const profiles = rd<any[]>("social-profiles.json", []);
+  const profile = profiles.find((p: any) => p.username === target) || { username: target };
+  const follows = rd<any[]>("social-follows.json", []);
+  const blocks = rd<Record<string, string[]>>("social-blocks.json", {});
+  const friends = rd<Record<string, string[]>>("social-friends.json", {});
+  profile.followers = follows.filter((f: any) => f.following === target).length;
+  profile.following = follows.filter((f: any) => f.follower === target).length;
+  profile.isFollowing = follows.some((f: any) => f.follower === me && f.following === target);
+  profile.isBlocked = (blocks[me] || []).includes(target);
+  profile.isFriend = (friends[me] || []).includes(target);
+  res.json(profile);
+});
+
+/* ══════════════════════════════════════════════════════════
+   FRIENDS SYSTEM  (requests, accept, decline, remove, close)
+══════════════════════════════════════════════════════════ */
+function getFriends(): Record<string, string[]> { return rd<Record<string, string[]>>("social-friends.json", {}); }
+function saveFriends(f: Record<string, string[]>) { wr("social-friends.json", f); }
+function getRequests(): any[] { return rd<any[]>("friend-requests.json", []); }
+function saveRequests(r: any[]) { wr("friend-requests.json", r); }
+
+router.get("/social/friends/list", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const friends = getFriends();
+  const myFriends = friends[me] || [];
+  const profiles = rd<any[]>("social-profiles.json", []);
+  const result = myFriends.map((u: string) => {
+    const p = profiles.find((x: any) => x.username === u) || {};
+    return { username: u, displayName: p.displayName || u, avatar: p.avatar || "" };
+  });
+  res.json(result);
+});
+
+router.get("/social/friends/requests", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const reqs = getRequests().filter((r: any) => r.to === me && r.status === "pending");
+  const profiles = rd<any[]>("social-profiles.json", []);
+  res.json(reqs.map((r: any) => {
+    const p = profiles.find((x: any) => x.username === r.from) || {};
+    return { username: r.from, displayName: p.displayName || r.from, avatar: p.avatar || "", requestId: r.id, ts: r.ts };
+  }));
+});
+
+router.get("/social/friends/sent", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const reqs = getRequests().filter((r: any) => r.from === me && r.status === "pending");
+  res.json(reqs.map((r: any) => ({ username: r.to, requestId: r.id, ts: r.ts })));
+});
+
+router.get("/social/friends/suggestions", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const friends = getFriends();
+  const myFriends = new Set(friends[me] || []);
+  const follows = rd<any[]>("social-follows.json", []);
+  const myFollowing = new Set(follows.filter((f: any) => f.follower === me).map((f: any) => f.following));
+  const blocks = rd<Record<string, string[]>>("social-blocks.json", {});
+  const blocked = new Set(blocks[me] || []);
+  const users = rd<any[]>("users.json", []);
+  // Suggest: followers-of-followers + top users not yet friends
+  const suggestions: Record<string, number> = {};
+  myFollowing.forEach((u: string) => {
+    (friends[u] || []).forEach((v: string) => {
+      if (v !== me && !myFriends.has(v) && !blocked.has(v) && !myFollowing.has(v)) {
+        suggestions[v] = (suggestions[v] || 0) + 1;
+      }
+    });
+  });
+  const profiles = rd<any[]>("social-profiles.json", []);
+  const result = Object.entries(suggestions)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([u, mutuals]) => {
+      const p = profiles.find((x: any) => x.username === u) || {};
+      return { username: u, displayName: p.displayName || u, avatar: p.avatar || "", mutualFriends: mutuals };
+    });
+  // If not enough, fill with random users
+  if (result.length < 10) {
+    users.filter((u: any) => u.username !== me && !myFriends.has(u.username) && !blocked.has(u.username) && !result.find(r => r.username === u.username)).slice(0, 10 - result.length).forEach((u: any) => {
+      const p = profiles.find((x: any) => x.username === u.username) || {};
+      result.push({ username: u.username, displayName: p.displayName || u.username, avatar: p.avatar || "", mutualFriends: 0 });
+    });
+  }
+  res.json(result);
+});
+
+router.post("/social/friends/request/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const to = req.params.username;
+  if (!me || me === to) return res.status(400).json({ error: "invalid" });
+  const reqs = getRequests();
+  if (reqs.find((r: any) => r.from === me && r.to === to && r.status === "pending")) return res.json({ ok: true, alreadySent: true });
+  reqs.push({ id: crypto.randomUUID(), from: me, to, status: "pending", ts: new Date().toISOString() });
+  saveRequests(reqs);
+  pushNotif(to, "friend_req", me, `@${me} sent you a friend request`);
+  res.json({ ok: true });
+});
+
+router.post("/social/friends/accept/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const from = req.params.username;
+  const reqs = getRequests();
+  const ri = reqs.findIndex((r: any) => r.from === from && r.to === me && r.status === "pending");
+  if (ri < 0) return res.status(404).json({ error: "Request not found" });
+  reqs[ri].status = "accepted";
+  reqs[ri].acceptedAt = new Date().toISOString();
+  saveRequests(reqs);
+  // Add to friends both ways
+  const friends = getFriends();
+  friends[me] = friends[me] || [];
+  friends[from] = friends[from] || [];
+  if (!friends[me].includes(from)) friends[me].push(from);
+  if (!friends[from].includes(me)) friends[from].push(me);
+  saveFriends(friends);
+  // Also auto-follow each other
+  const follows = rd<any[]>("social-follows.json", []);
+  if (!follows.find((f: any) => f.follower === me && f.following === from)) follows.push({ follower: me, following: from, createdAt: new Date().toISOString() });
+  if (!follows.find((f: any) => f.follower === from && f.following === me)) follows.push({ follower: from, following: me, createdAt: new Date().toISOString() });
+  wr("social-follows.json", follows);
+  pushNotif(from, "follow", me, `@${me} accepted your friend request! You are now friends.`);
+  res.json({ ok: true });
+});
+
+router.post("/social/friends/decline/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const from = req.params.username;
+  const reqs = getRequests();
+  const ri = reqs.findIndex((r: any) => r.from === from && r.to === me && r.status === "pending");
+  if (ri >= 0) { reqs[ri].status = "declined"; saveRequests(reqs); }
+  res.json({ ok: true });
+});
+
+router.post("/social/friends/cancel/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const to = req.params.username;
+  const reqs = getRequests();
+  wr("friend-requests.json", reqs.filter((r: any) => !(r.from === me && r.to === to && r.status === "pending")));
+  res.json({ ok: true });
+});
+
+router.post("/social/friends/remove/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const target = req.params.username;
+  const friends = getFriends();
+  friends[me] = (friends[me] || []).filter((u: string) => u !== target);
+  friends[target] = (friends[target] || []).filter((u: string) => u !== me);
+  saveFriends(friends);
+  res.json({ ok: true });
+});
+
+// Close friends
+router.get("/social/close-friends", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const cf = rd<Record<string, string[]>>("close-friends.json", {});
+  res.json(cf[me] || []);
+});
+
+router.post("/social/close-friends/:username", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "";
+  const target = req.params.username;
+  const cf = rd<Record<string, string[]>>("close-friends.json", {});
+  cf[me] = cf[me] || [];
+  if (cf[me].includes(target)) {
+    cf[me] = cf[me].filter((u: string) => u !== target);
+    wr("close-friends.json", cf);
+    return res.json({ added: false });
+  }
+  cf[me].push(target);
+  wr("close-friends.json", cf);
+  res.json({ added: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   COMMUNITY POSTS  (filter by author)
+══════════════════════════════════════════════════════════ */
+router.get("/community/posts", (req: any, res) => {
+  const { author, limit = "30", page = "1" } = req.query || {};
+  let posts = rd<any[]>("community-posts.json", []);
+  if (author) posts = posts.filter((p: any) => p.author === author);
+  const lim = Math.min(parseInt(limit as string) || 30, 100);
+  const pg = Math.max(parseInt(page as string) || 1, 1);
+  res.json(posts.slice((pg - 1) * lim, pg * lim));
+});
+
+/* ══════════════════════════════════════════════════════════
+   EXPLORE / SEARCH  (users + posts + channels + groups)
+══════════════════════════════════════════════════════════ */
+router.get("/explore/search", (req: any, res) => {
+  const q = ((req.query.q as string) || "").trim().toLowerCase();
+  if (!q) return res.json({ users: [], posts: [], channels: [], groups: [] });
+  const users = rd<any[]>("users.json", []).filter((u: any) => u.username?.toLowerCase().includes(q) || u.displayName?.toLowerCase().includes(q)).slice(0, 15).map((u: any) => {
+    const profiles = rd<any[]>("social-profiles.json", []);
+    const p = profiles.find((x: any) => x.username === u.username) || {};
+    return { username: u.username, displayName: p.displayName || u.username, avatar: p.avatar || "", bio: p.bio || "" };
+  });
+  const posts = rd<any[]>("community-posts.json", []).filter((p: any) => p.text?.toLowerCase().includes(q) || p.author?.toLowerCase().includes(q)).slice(0, 10);
+  const channels = rd<any[]>("channels.json", []).filter((c: any) => c.name?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)).slice(0, 10);
+  const groups = rd<any[]>("dm-groups.json", []).filter((g: any) => g.name?.toLowerCase().includes(q)).slice(0, 10);
+  res.json({ users, posts, channels, groups });
 });
 
 export default router;
