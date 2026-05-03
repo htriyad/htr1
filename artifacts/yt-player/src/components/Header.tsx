@@ -153,7 +153,6 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
       >
         <span style={{ color: "#e05c8a", fontWeight: 900 }}>Red Rose</span>
         <span style={{ color: "var(--text)", fontWeight: 800 }}> 🥀</span>
-        <div className="uu-logo-sub" style={{ color: "var(--sub)", fontSize: 9, letterSpacing: "0.04em" }}>EXAM PORTAL</div>
       </div>
 
       <div className="uu-header-right">

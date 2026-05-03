@@ -319,7 +319,6 @@ export default function Dashboard() {
             <div className="uu-logo-text">
               <span style={{ color:"#4f8ef7", fontWeight:900 }}>HTR</span>
               <span style={{ color:"var(--text)", fontWeight:800 }}> Zone</span>
-              <div className="uu-logo-sub" style={{ fontSize:9, letterSpacing:"0.04em" }}>EXAM PORTAL</div>
             </div>
             <div className="uu-avatar" style={{ marginLeft:"auto", background:"linear-gradient(135deg,#1d4ed8,#6c7fff)" }}>H</div>
           </div>
