@@ -238,9 +238,14 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
           )}
         </div>
 
-        <div className="uu-avatar" style={{ background: "linear-gradient(135deg, #1d4ed8, #6c7fff)" }}>
+        <button
+          onClick={() => navigate(`/social/${localStorage.getItem("rr_username") || ""}`)}
+          className="uu-avatar"
+          style={{ background: "linear-gradient(135deg, #e05c8a, #7c3aed)", border: "none", cursor: "pointer" }}
+          title="My Profile"
+        >
           {(localStorage.getItem("rr_username") || "H")[0].toUpperCase()}
-        </div>
+        </button>
       </div>
     </header>
   );

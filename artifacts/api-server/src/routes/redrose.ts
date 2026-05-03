@@ -482,6 +482,33 @@ router.post("/user/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+/* POST /api/user/register — self-service signup */
+router.post("/user/register", botGuard, (req, res) => {
+  const { username, password, displayName, email } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: "username and password required" });
+  const uname = String(username).trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+  if (uname.length < 3) return res.status(400).json({ error: "Username must be at least 3 characters (letters, numbers, _)" });
+  if (uname.length > 30) return res.status(400).json({ error: "Username too long (max 30)" });
+  if (String(password).length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  const users = rd<UniversalUser[]>("users.json", []);
+  if (users.find(u => u.username === uname)) return res.status(409).json({ error: "Username already taken" });
+  const newUser: UniversalUser = {
+    id: crypto.randomUUID(),
+    username: uname,
+    password: String(password),
+    displayName: displayName ? String(displayName).slice(0, 60) : uname,
+    email: email ? String(email).slice(0, 100) : undefined,
+    createdAt: new Date().toISOString(),
+    universalAccess: false,
+    banned: false,
+  } as any;
+  users.push(newUser);
+  wr("users.json", users);
+  const token = crypto.randomUUID();
+  USER_SESSIONS.set(token, uname);
+  res.json({ token, username: uname, universalAccess: false });
+});
+
 /* ══════════════════════════════════════════════════════════
    STUDENT — VIDEOS
 ══════════════════════════════════════════════════════════ */
@@ -2206,9 +2233,9 @@ router.post("/community/posts/:id/react",userAuth,(req:any,res)=>{
   const idx=p.reactions[emoji].indexOf(u);
   if(idx>=0) p.reactions[emoji].splice(idx,1);
   else{
-    // remove user from any other emoji first
     Object.keys(p.reactions).forEach(e=>{const j=p.reactions[e].indexOf(u);if(j>=0)p.reactions[e].splice(j,1);});
     p.reactions[emoji].push(u);
+    if(p.author && p.author !== u) pushNotif(p.author,"like",u,`@${u} reacted ${emoji} to your post`);
   }
   posts[i]=p; savePosts(posts);
   res.json(p.reactions);
@@ -2224,6 +2251,7 @@ router.post("/community/posts/:id/comments",userAuth,(req:any,res)=>{
   const comment={id:crypto.randomUUID(),author:u,text:String(text).slice(0,1000),createdAt:new Date().toISOString(),reactions:{}};
   posts[i].comments.push(comment);
   savePosts(posts);
+  if(posts[i].author && posts[i].author !== u) pushNotif(posts[i].author,"comment",u,`@${u} commented: "${String(text).slice(0,80)}"`);
   res.json(comment);
 });
 

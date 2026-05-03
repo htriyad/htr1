@@ -98,5 +98,85 @@
     "path": "/discussion",
     "order": 10,
     "enabled": true
+  },
+  {
+    "id": "ms1",
+    "label": "Community",
+    "icon": "💬",
+    "bg": "#e0f7fa",
+    "chevron": "#0097a7",
+    "path": "/community",
+    "order": 12,
+    "enabled": true
+  },
+  {
+    "id": "ms2",
+    "label": "Messages",
+    "icon": "✉️",
+    "bg": "#fce4ec",
+    "chevron": "#e91e63",
+    "path": "/messages",
+    "order": 13,
+    "enabled": true
+  },
+  {
+    "id": "ms3",
+    "label": "Friends",
+    "icon": "👥",
+    "bg": "#e8f5e9",
+    "chevron": "#388e3c",
+    "path": "/friends",
+    "order": 14,
+    "enabled": true
+  },
+  {
+    "id": "ms4",
+    "label": "Stories",
+    "icon": "✨",
+    "bg": "#fff8e1",
+    "chevron": "#f9a825",
+    "path": "/stories",
+    "order": 15,
+    "enabled": true
+  },
+  {
+    "id": "ms5",
+    "label": "Events",
+    "icon": "📅",
+    "bg": "#ede7f6",
+    "chevron": "#7b1fa2",
+    "path": "/events",
+    "order": 16,
+    "enabled": true
+  },
+  {
+    "id": "ms6",
+    "label": "Explore",
+    "icon": "🔍",
+    "bg": "#e3f2fd",
+    "chevron": "#1976d2",
+    "path": "/explore",
+    "order": 17,
+    "enabled": true
+  },
+  {
+    "id": "ms7",
+    "label": "My Profile",
+    "icon": "👤",
+    "bg": "#fbe9e7",
+    "chevron": "#e64a19",
+    "path": "/profile",
+    "order": 18,
+    "enabled": true
+  },
+  {
+    "id": "ms8",
+    "label": "Settings",
+    "icon": "⚙️",
+    "bg": "#eceff1",
+    "chevron": "#546e7a",
+    "path": "/settings",
+    "order": 19,
+    "enabled": true
   }
 ]

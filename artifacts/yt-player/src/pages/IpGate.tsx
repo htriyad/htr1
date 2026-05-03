@@ -59,12 +59,15 @@ function generateDeviceFingerprint(): string {
 }
 
 export default function IpGate({ ip, vpnDetected, banned }: Props) {
-  const [view, setView]       = useState<"gate"|"login">(banned ? "login" : "gate");
+  const [view, setView]       = useState<"gate"|"login"|"signup">(banned ? "login" : "gate");
   const [fullName, setFullName] = useState("");
   const [sent, setSent]       = useState(false);
   const [sendErr, setSendErr] = useState("");
   const [username, setUname]  = useState("");
   const [password, setPass]   = useState("");
+  const [displayName, setDName] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [signupErr, setSignupErr] = useState("");
   const [loginErr, setLoginErr] = useState("");
   const [loading, setLoad]    = useState(false);
   const [deviceInfo]          = useState<DeviceInfo>(() => detectDevice());
@@ -87,6 +90,30 @@ export default function IpGate({ ip, vpnDetected, banned }: Props) {
       if (!r.ok) { setSendErr(d.error || "Failed to send"); return; }
       setSent(true);
     } catch { setSendErr("Connection error. Try again."); }
+    finally { setLoad(false); }
+  }
+
+  async function signup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) return;
+    if (password !== confirmPass) { setSignupErr("Passwords do not match"); return; }
+    if (password.length < 6) { setSignupErr("Password must be at least 6 characters"); return; }
+    setLoad(true); setSignupErr("");
+    try {
+      const r = await fetch("/api/user/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password, displayName: displayName.trim() || username.trim() }),
+      });
+      const d = await r.json();
+      if (d.token) {
+        localStorage.setItem(USER_TOKEN_KEY, d.token);
+        localStorage.setItem(USER_NAME_KEY, d.username);
+        window.location.reload();
+      } else {
+        setSignupErr(d.error || "Registration failed");
+      }
+    } catch { setSignupErr("Connection error. Try again."); }
     finally { setLoad(false); }
   }
 
@@ -141,10 +168,14 @@ export default function IpGate({ ip, vpnDetected, banned }: Props) {
         <div style={{ background:"var(--surface)", borderRadius:20, padding:24, width:"100%", maxWidth:440, boxShadow:"0 8px 32px rgba(0,0,0,0.12)" }}>
           {/* Tab toggle */}
           <div style={{ display:"flex", borderRadius:12, overflow:"hidden", border:"1.5px solid var(--border)", marginBottom:22 }}>
-            {(["gate","login"] as const).map(v => (
-              <button key={v} onClick={() => { setView(v); setLoginErr(""); setSendErr(""); }}
-                style={{ flex:1, padding:"11px 0", border:"none", fontWeight:700, fontSize:13, cursor:"pointer", background:view===v?"var(--purple)":"transparent", color:view===v?"#fff":"var(--sub)", fontFamily:"Roboto,sans-serif", transition:"background 200ms, color 200ms" }}>
-                {v==="gate" ? "📨 Request Access" : "🔑 Student Login"}
+            {([
+              { v:"gate",   label:"📨 Request" },
+              { v:"signup", label:"✍️ Sign Up" },
+              { v:"login",  label:"🔑 Login" },
+            ] as const).map(({ v, label }) => (
+              <button key={v} onClick={() => { setView(v); setLoginErr(""); setSendErr(""); setSignupErr(""); }}
+                style={{ flex:1, padding:"11px 0", border:"none", fontWeight:700, fontSize:12, cursor:"pointer", background:view===v?"var(--purple)":"transparent", color:view===v?"#fff":"var(--sub)", fontFamily:"Roboto,sans-serif", transition:"background 200ms, color 200ms" }}>
+                {label}
               </button>
             ))}
           </div>
@@ -222,6 +253,32 @@ export default function IpGate({ ip, vpnDetected, banned }: Props) {
                 Refresh Page
               </button>
             </div>
+          )}
+
+          {/* SIGN UP VIEW */}
+          {view === "signup" && (
+            <form onSubmit={signup} style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              <div>
+                <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", marginBottom:4, fontFamily:"Lato,sans-serif" }}>Create Account ✍️</h2>
+                <p style={{ fontSize:13, color:"var(--sub)" }}>Join Red Rose🥀 — Free for all Bangladeshi students.</p>
+              </div>
+              <input value={displayName} onChange={e => setDName(e.target.value)} placeholder="Full Name (e.g. Rahim Ahmed)" style={inp} maxLength={60} />
+              <input value={username} onChange={e => setUname(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,""))} placeholder="Username (e.g. rahim_ssc25)" autoComplete="username" style={inp} maxLength={30} />
+              <input type="password" value={password} onChange={e => setPass(e.target.value)} placeholder="Password (min 6 characters)" autoComplete="new-password" style={inp} />
+              <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Confirm Password" autoComplete="new-password" style={inp} />
+              {signupErr && (
+                <div style={{ background:"#fff0f0", border:"1px solid #fca5a5", borderRadius:8, padding:"8px 12px", fontSize:13, color:"#dc2626" }}>
+                  {signupErr}
+                </div>
+              )}
+              <button type="submit" disabled={loading || !username.trim() || !password.trim() || !confirmPass.trim()}
+                style={{ padding:13, borderRadius:12, border:"none", background:!username.trim()||!password.trim()||loading?"var(--border)":"#16a34a", color:"#fff", fontWeight:700, fontSize:15, cursor:"pointer", fontFamily:"Roboto,sans-serif" }}>
+                {loading ? "Creating account..." : "Create Account →"}
+              </button>
+              <p style={{ fontSize:11, color:"var(--sub)", textAlign:"center" }}>
+                By signing up you agree to use the platform respectfully.
+              </p>
+            </form>
           )}
 
           {/* STUDENT LOGIN VIEW */}

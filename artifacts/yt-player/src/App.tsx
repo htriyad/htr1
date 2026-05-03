@@ -45,6 +45,7 @@ import Friends from "./pages/Friends";
 import Notifications from "./pages/Notifications";
 import UserSettings from "./pages/UserSettings";
 import FloatingMusic from "./components/FloatingMusic";
+import BottomNav from "./components/BottomNav";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -208,6 +209,7 @@ export default function App() {
         </div>
       )}
 
+      <div style={{ paddingBottom: 60 }}>
       <Switch>
         <Route path="/"                component={Dashboard} />
         <Route path="/past-classes"    component={PastClasses} />
@@ -257,6 +259,8 @@ export default function App() {
         <Route path="/settings"          component={UserSettings} />
         <Route><Dashboard /></Route>
       </Switch>
+      </div>
+      <BottomNav />
       <FloatingMusic />
     </>
   );

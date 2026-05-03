@@ -6,5 +6,14 @@
     "note": "htr",
     "createdAt": "2026-04-23T08:54:22.926Z",
     "universalAccess": false
+  },
+  {
+    "id": "70f04a30-d8b4-4e50-b5e0-2c510467153c",
+    "username": "test_student",
+    "password": "pass1234",
+    "displayName": "Test Student",
+    "createdAt": "2026-05-03T11:04:20.367Z",
+    "universalAccess": false,
+    "banned": false
   }
 ]
