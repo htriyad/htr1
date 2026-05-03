@@ -46,6 +46,7 @@ import Notifications from "./pages/Notifications";
 import UserSettings from "./pages/UserSettings";
 import FloatingMusic from "./components/FloatingMusic";
 import BottomNav from "./components/BottomNav";
+import { RealtimeProvider } from "./context/RealtimeContext";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -186,7 +187,7 @@ export default function App() {
   if (status === "blocked") return <IpGate ip={myIp} vpnDetected={vpnDetected} banned={banned} />;
 
   return (
-    <>
+    <RealtimeProvider>
       {/* DevTools Alert Overlay */}
       {devtoolsOpen && (
         <div style={{
@@ -262,6 +263,6 @@ export default function App() {
       </div>
       <BottomNav />
       <FloatingMusic />
-    </>
+    </RealtimeProvider>
   );
 }

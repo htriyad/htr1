@@ -1,5 +1,24 @@
 [
   {
+    "id": "1a242054-c61b-40b7-8a15-1e83646938b7",
+    "toUser": "test_student",
+    "type": "like",
+    "fromUser": "test_user2",
+    "body": "@test_user2 reacted ❤️ to your post",
+    "ts": "2026-05-03T11:23:51.213Z",
+    "read": false
+  },
+  {
+    "id": "d80d2cdd-4d34-4688-b6c8-84c7e4a57c7e",
+    "title": "👤 test_user2 started following you",
+    "body": "",
+    "createdAt": "2026-05-03T11:22:45.342Z",
+    "recipients": [
+      "test_student"
+    ],
+    "readBy": []
+  },
+  {
     "id": "9f025bd8-07f3-42d0-b3b8-97eb7028ce4d",
     "title": "👤 test_student started following you",
     "body": "",

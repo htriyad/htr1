@@ -15,5 +15,14 @@
     "createdAt": "2026-05-03T11:04:20.367Z",
     "universalAccess": false,
     "banned": false
+  },
+  {
+    "id": "c3d29bf6-f1db-4237-b91e-2231e1756b13",
+    "username": "test_user2",
+    "password": "pass5678",
+    "displayName": "test_user2",
+    "createdAt": "2026-05-03T11:22:44.168Z",
+    "universalAccess": false,
+    "banned": false
   }
 ]

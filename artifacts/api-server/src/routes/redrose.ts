@@ -2,6 +2,7 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { addSseClient, removeSseClient, pushEvent } from "../lib/sseHub";
 
 const router = Router();
 
@@ -2370,12 +2371,11 @@ router.post("/dm/threads/:id/messages",userAuth,(req:any,res)=>{
   threads[ti].lastAt=msg.ts;
   threads[ti].updatedAt=msg.ts;
   saveThreads(threads);
-  // notify recipient
+  // notify recipient in real-time
   const other=threads[ti].participants.find(p=>p!==u);
   if(other){
-    const notifs=rd<Notification[]>("notifs.json",[]);
-    notifs.unshift({id:crypto.randomUUID(),title:`💬 ${u} sent you a message`,body:threads[ti].lastMsg||"",createdAt:msg.ts,recipients:[other],readBy:[]});
-    wr("notifs.json",notifs.slice(0,300));
+    pushNotif(other,"message",u,`${u}: ${threads[ti].lastMsg||""}`);
+    pushEvent(other,{type:"new_message",threadId:req.params.id,msg});
   }
   res.json(msg);
 });
@@ -3415,9 +3415,11 @@ router.get("/user/export-data", userAuth, (req: any, res) => {
 ══════════════════════════════════════════════════════════ */
 function pushNotif(toUser: string, type: string, fromUser: string, body: string, extra?: any) {
   if (!toUser || toUser === fromUser) return;
+  const notif = { id: crypto.randomUUID(), toUser, type, fromUser, body, ts: new Date().toISOString(), read: false, ...(extra || {}) };
   const all = rd<any[]>("notifs.json", []);
-  all.unshift({ id: crypto.randomUUID(), toUser, type, fromUser, body, ts: new Date().toISOString(), read: false, ...(extra || {}) });
+  all.unshift(notif);
   wr("notifs.json", all.slice(0, 2000));
+  pushEvent(toUser, { type: "notification", payload: notif });
 }
 
 function notifyMentions(text: string, fromUser: string) {
@@ -3944,6 +3946,34 @@ router.get("/explore/search", (req: any, res) => {
   const channels = rd<any[]>("channels.json", []).filter((c: any) => c.name?.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)).slice(0, 10);
   const groups = rd<any[]>("dm-groups.json", []).filter((g: any) => g.name?.toLowerCase().includes(q)).slice(0, 10);
   res.json({ users, posts, channels, groups });
+});
+
+/* ══════════════════════════════════════════════════════════
+   SERVER-SENT EVENTS  — real-time push to clients
+══════════════════════════════════════════════════════════ */
+router.get("/sse", (req: any, res) => {
+  const user = getLoggedInUser(req);
+  const me = user?.username || (req.headers["x-username"] as string) || "";
+  if (!me) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.write(`:connected user=${me}\n\n`);
+
+  addSseClient(me, res);
+
+  const hb = setInterval(() => {
+    try { res.write(`:hb\n\n`); } catch { clearInterval(hb); }
+  }, 25_000);
+
+  req.on("close", () => {
+    clearInterval(hb);
+    removeSseClient(me, res);
+  });
 });
 
 export default router;

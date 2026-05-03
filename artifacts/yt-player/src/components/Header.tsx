@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Menu, X, Bell, ArrowLeft, Sun, Moon } from "lucide-react";
+import { useRealtime } from "../context/RealtimeContext";
 
 interface HeaderProps {
   showBack?: boolean;
@@ -74,6 +75,7 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const popRef = useRef<HTMLDivElement | null>(null);
+  const { unreadNotifs, decrementNotifs, clearNotifs, onEvent } = useRealtime();
 
   async function load() {
     try {
@@ -84,28 +86,15 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
     } catch {}
   }
 
-  const prevUnread = useRef(0);
   useEffect(() => {
     load();
-    const t = setInterval(async () => {
-      try {
-        const r = await fetch("/api/notifications", { headers: authHeaders() });
-        if (!r.ok) return;
-        const d = await r.json();
-        if (!Array.isArray(d)) return;
-        setNotifs(d);
-        const newUnread = d.filter((n: Notif) => !n.read).length;
-        if (newUnread > prevUnread.current && prevUnread.current >= 0) {
-          if ("vibrate" in navigator) navigator.vibrate(80);
-        }
-        prevUnread.current = newUnread;
-      } catch {}
-    }, 5_000);
-    return () => clearInterval(t);
-  }, []);
+    // Refresh list whenever a new notification arrives via SSE
+    return onEvent("notification", () => load());
+  }, [onEvent]);
 
   useEffect(() => {
     if (!open) return;
+    load();
     function handler(e: MouseEvent) {
       if (popRef.current && !popRef.current.contains(e.target as Node)) setOpen(false);
     }
@@ -113,10 +102,11 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const unread = notifs.filter(n => !n.read).length;
+  const unread = unreadNotifs;
 
   async function markRead(id: string) {
     setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
+    decrementNotifs(1);
     try {
       await fetch(`/api/notifications/${id}/read`, {
         method: "POST",
@@ -126,6 +116,7 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
   }
   async function markAllRead() {
     setNotifs(ns => ns.map(n => ({ ...n, read: true })));
+    clearNotifs();
     try {
       await fetch("/api/notifications/read-all", {
         method: "POST",
