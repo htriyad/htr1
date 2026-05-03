@@ -3949,6 +3949,52 @@ router.get("/explore/search", (req: any, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════
+   ONLINE PRESENCE  (/api/presence/*)
+══════════════════════════════════════════════════════════ */
+const PRESENCE_MAP = new Map<string, number>(); // username -> last ping ms
+
+router.post("/presence/ping", (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string);
+  if (!me) { res.status(401).json({ error: "Unauthorized" }); return; }
+  PRESENCE_MAP.set(me, Date.now());
+  res.json({ ok: true });
+});
+
+router.get("/presence/online", (_req: any, res) => {
+  const now = Date.now(); const cutoff = 90_000;
+  const online = [...PRESENCE_MAP.entries()]
+    .filter(([, ts]) => now - ts < cutoff)
+    .map(([u]) => u);
+  res.json(online);
+});
+
+/* ══════════════════════════════════════════════════════════
+   TYPING INDICATORS (SSE-based)
+══════════════════════════════════════════════════════════ */
+router.post("/dm/threads/:id/typing", (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string);
+  if (!me) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const threads = rd<any[]>("dm-threads.json", []);
+  const t = threads.find((x: any) => x.id === req.params.id);
+  if (!t) { res.status(404).json({ error: "Not found" }); return; }
+  const other = (t.participants as string[]).find((p: string) => p !== me);
+  if (other) pushEvent(other, { type: "typing", threadId: req.params.id, username: me });
+  res.json({ ok: true });
+});
+
+router.post("/groups/:id/typing", (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string);
+  if (!me) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const groups = rd<any[]>("dm-groups.json", []);
+  const g = groups.find((x: any) => x.id === req.params.id);
+  if (!g) { res.status(404).json({ error: "Not found" }); return; }
+  (g.members as string[]).filter((m: string) => m !== me).forEach((member: string) => {
+    pushEvent(member, { type: "group_typing", groupId: req.params.id, username: me });
+  });
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
    SERVER-SENT EVENTS  — real-time push to clients
 ══════════════════════════════════════════════════════════ */
 router.get("/sse", (req: any, res) => {

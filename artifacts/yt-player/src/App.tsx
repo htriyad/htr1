@@ -46,6 +46,7 @@ import Notifications from "./pages/Notifications";
 import UserSettings from "./pages/UserSettings";
 import FloatingMusic from "./components/FloatingMusic";
 import BottomNav from "./components/BottomNav";
+import NotificationToast from "./components/NotificationToast";
 import { RealtimeProvider } from "./context/RealtimeContext";
 import "./index.css";
 
@@ -263,6 +264,7 @@ export default function App() {
       </div>
       <BottomNav />
       <FloatingMusic />
+      <NotificationToast />
     </RealtimeProvider>
   );
 }

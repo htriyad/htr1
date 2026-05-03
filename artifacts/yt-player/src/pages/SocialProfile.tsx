@@ -118,8 +118,8 @@ export default function SocialProfile() {
   }
 
   const theme = THEMES.find(t => t.id === (profile?.theme || "rose")) || THEMES[0];
-  const likedPosts = posts.filter((p: any) => (p.likes || []).includes(ME()));
-  const mediaPosts = posts.filter((p: any) => p.image);
+  const likedPosts = posts.filter((p: any) => (p.likes || []).includes(ME()) || Object.values(p.reactions || {}).some((arr: any) => arr.includes(ME())));
+  const mediaPosts = posts.filter((p: any) => p.imageData || p.image);
 
   if (loading) return <div style={{ minHeight: "100svh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: 40 }}>🥀</div><p style={{ color: "var(--sub)", marginTop: 10 }}>Loading profile…</p></div></div>;
 
@@ -130,37 +130,52 @@ export default function SocialProfile() {
       <input ref={coverRef} type="file" accept="image/*" style={{ display: "none" }} />
 
       {/* Cover photo */}
-      <div style={{ position: "relative", height: 180, background: form.cover ? `url(${form.cover}) center/cover` : theme.grad, cursor: editing ? "pointer" : "default" }}
+      <div style={{ position: "relative", height: 220, background: form.cover ? `url(${form.cover}) center/cover` : theme.grad, cursor: editing ? "pointer" : "default", overflow: "hidden" }}
         onClick={() => editing && pickImage(coverRef, "cover")}>
-        {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}><span style={{ fontSize: 32 }}>📷</span><span style={{ color: "#fff", fontWeight: 700, marginLeft: 8 }}>Change Cover</span></div>}
+        {/* Bottom gradient overlay */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 80, background: "linear-gradient(transparent, rgba(0,0,0,0.35))", pointerEvents: "none" }} />
+        {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)", gap: 8 }}>
+          <span style={{ fontSize: 28 }}>📷</span><span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>Change Cover</span>
+        </div>}
       </div>
 
       {/* Profile section */}
       <div style={{ padding: "0 16px 0", position: "relative" }}>
-        {/* Avatar */}
-        <div style={{ position: "relative", display: "inline-block", marginTop: -44 }}>
-          <div style={{ width: 88, height: 88, borderRadius: "50%", background: form.avatar ? `url(${form.avatar}) center/cover` : theme.grad, border: "4px solid var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, fontWeight: 900, color: "#fff", cursor: editing ? "pointer" : "default", overflow: "hidden" }}
-            onClick={() => editing && pickImage(avatarRef, "avatar")}>
-            {!form.avatar && (profile?.displayName || username)[0]?.toUpperCase()}
-            {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", borderRadius: "50%" }}><span style={{ fontSize: 22 }}>📷</span></div>}
+        {/* Avatar with gradient ring */}
+        <div style={{ position: "relative", display: "inline-block", marginTop: -52 }}>
+          <div style={{
+            width: 100, height: 100, borderRadius: "50%", padding: 3,
+            background: "linear-gradient(135deg,#f79e1b 0%,#f77e27 20%,#d7237c 50%,#9c1aac 75%,#5f15b8 100%)",
+            cursor: editing ? "pointer" : "default",
+          }} onClick={() => editing && pickImage(avatarRef, "avatar")}>
+            <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "var(--bg)", padding: 2.5, boxSizing: "border-box" }}>
+              <div style={{
+                width: "100%", height: "100%", borderRadius: "50%",
+                background: form.avatar ? `url(${form.avatar}) center/cover` : theme.grad,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 38, fontWeight: 900, color: "#fff", overflow: "hidden", position: "relative",
+              }}>
+                {!form.avatar && (profile?.displayName || username)[0]?.toUpperCase()}
+                {editing && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", borderRadius: "50%" }}><span style={{ fontSize: 22 }}>📷</span></div>}
+              </div>
+            </div>
           </div>
-          {/* Online indicator */}
-          <div style={{ position: "absolute", bottom: 4, right: 4, width: 16, height: 16, borderRadius: "50%", background: "#16a34a", border: "2px solid var(--bg)" }} />
+          <div style={{ position: "absolute", bottom: 5, right: 5, width: 18, height: 18, borderRadius: "50%", background: "#22c55e", border: "2px solid var(--bg)", animation: "onlinePulse 2.5s ease-in-out infinite" }} />
         </div>
 
         {/* Action buttons */}
-        <div style={{ float: "right", marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ float: "right", marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {isMe ? (
             <button onClick={() => setEditing(e => !e)} style={{ padding: "8px 18px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              {editing ? "✕ Cancel" : "✏️ Edit Profile"}
+              {editing ? "✕ Cancel" : "✏️ Edit"}
             </button>
           ) : (
             <>
-              <button onClick={toggleFollow} style={{ padding: "8px 20px", borderRadius: 20, border: "none", background: isFollowing ? "var(--surface)" : theme.grad, color: isFollowing ? "var(--text)" : "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", border: isFollowing ? "1.5px solid var(--border)" : "none" } as any}>
+              <button onClick={toggleFollow} style={{ padding: "9px 22px", borderRadius: 20, border: "none", background: isFollowing ? "var(--surface)" : theme.grad, color: isFollowing ? "var(--text)" : "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer", border: isFollowing ? "1.5px solid var(--border)" : "none" } as any}>
                 {isFollowing ? "✓ Following" : "+ Follow"}
               </button>
-              <button onClick={() => nav("/messages?to=" + username)} style={{ padding: "8px 16px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>💬 Message</button>
-              <button onClick={toggleBlock} style={{ padding: "7px 12px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: isBlocked ? "#dc2626" : "var(--sub)", fontWeight: 600, fontSize: 12, cursor: "pointer" }}>{isBlocked ? "🚫 Blocked" : "⋯"}</button>
+              <button onClick={() => nav("/messages?to=" + username)} style={{ padding: "9px 16px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>💬</button>
+              <button onClick={toggleBlock} style={{ padding: "8px 12px", borderRadius: 20, border: "1.5px solid var(--border)", background: "var(--surface)", color: isBlocked ? "#dc2626" : "var(--sub)", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>{isBlocked ? "🚫" : "⋯"}</button>
             </>
           )}
         </div>
@@ -171,38 +186,54 @@ export default function SocialProfile() {
             <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{profile?.displayName || username}</span>
             {(profile?.badges || []).map((b: string) => {
               const badge = BADGES.find(x => x.key === b);
-              return badge ? <span key={b} title={badge.label} style={{ fontSize: 15 }}>{badge.icon}</span> : null;
+              return badge ? <span key={b} title={badge.label} style={{ fontSize: 16 }}>{badge.icon}</span> : null;
             })}
-            {profile?.isPrivate && <span style={{ fontSize: 10, padding: "2px 7px", background: "rgba(0,0,0,0.1)", borderRadius: 99, color: "var(--sub)", fontWeight: 700 }}>🔒 Private</span>}
+            {profile?.isPrivate && <span style={{ fontSize: 10, padding: "2px 7px", background: "rgba(0,0,0,0.12)", borderRadius: 99, color: "var(--sub)", fontWeight: 700 }}>🔒 Private</span>}
           </div>
-          <div style={{ fontSize: 13, color: "var(--sub)" }}>@{username}</div>
-          {profile?.bio && <p style={{ fontSize: 13, color: "var(--text)", margin: "6px 0", lineHeight: 1.55 }}>{profile.bio}</p>}
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: "var(--sub)", marginBottom: 4 }}>@{username}</div>
+          {profile?.bio && <p style={{ fontSize: 13.5, color: "var(--text)", margin: "5px 0 6px", lineHeight: 1.6 }}>{profile.bio}</p>}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
             {profile?.location && <span style={{ fontSize: 12, color: "var(--sub)" }}>📍 {profile.location}</span>}
-            {profile?.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#1d4ed8", textDecoration: "none" }}>🔗 {profile.website.replace(/^https?:\/\//, "")}</a>}
+            {profile?.website && <a href={profile.website} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>🔗 {profile.website.replace(/^https?:\/\//, "").split("/")[0]}</a>}
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ display: "flex", gap: 20, marginTop: 14, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
-          <div onClick={() => loadFollowerProfiles("followers")} style={{ cursor: "pointer", textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{followers.length}</div>
-            <div style={{ fontSize: 11, color: "var(--sub)" }}>Followers</div>
-          </div>
-          <div onClick={() => loadFollowerProfiles("following")} style={{ cursor: "pointer", textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{following.length}</div>
-            <div style={{ fontSize: 11, color: "var(--sub)" }}>Following</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", fontFamily: "Lato,sans-serif" }}>{posts.length}</div>
-            <div style={{ fontSize: 11, color: "var(--sub)" }}>Posts</div>
-          </div>
-          {isMe && visitors.length > 0 && (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--purple)", fontFamily: "Lato,sans-serif" }}>{visitors.length}</div>
-              <div style={{ fontSize: 11, color: "var(--sub)" }}>Visitors</div>
+        {/* Stats — Instagram-style */}
+        <div style={{ display: "flex", marginTop: 14, borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+          {[
+            { label: "Posts",     value: posts.length,      action: undefined },
+            { label: "Followers", value: followers.length,  action: () => loadFollowerProfiles("followers") },
+            { label: "Following", value: following.length,  action: () => loadFollowerProfiles("following") },
+            ...(isMe && visitors.length > 0 ? [{ label: "Visitors", value: visitors.length, action: undefined }] : []),
+          ].map((s, i, arr) => (
+            <div key={s.label} onClick={s.action} style={{
+              flex: 1, textAlign: "center", padding: "12px 4px", cursor: s.action ? "pointer" : "default",
+              borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none",
+            }}>
+              <div style={{ fontSize: 20, fontWeight: 900, color: s.label === "Visitors" ? "var(--purple)" : "var(--text)", fontFamily: "Lato,sans-serif", lineHeight: 1.1 }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 3, letterSpacing: 0.2 }}>{s.label}</div>
             </div>
-          )}
+          ))}
+        </div>
+
+        {/* Story Highlights */}
+        <div style={{ borderBottom: "1px solid var(--border)", padding: "14px 0 10px" }}>
+          <div style={{ display: "flex", gap: 16, overflowX: "auto", scrollbarWidth: "none" }}>
+            {isMe && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0, cursor: "pointer" }}>
+                <div style={{ width: 58, height: 58, borderRadius: "50%", border: "1.5px dashed var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "var(--sub)" }}>+</div>
+                <span style={{ fontSize: 10, color: "var(--sub)", whiteSpace: "nowrap" }}>New</span>
+              </div>
+            )}
+            {["📚 Study", "💡 Tips", "🎯 BCS", "📝 SSC"].map((h, i) => (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0, cursor: "pointer" }}>
+                <div style={{ width: 58, height: 58, borderRadius: "50%", background: theme.grad, border: "2px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, overflow: "hidden" }}>
+                  {h.split(" ")[0]}
+                </div>
+                <span style={{ fontSize: 10, color: "var(--text)", whiteSpace: "nowrap", maxWidth: 60, overflow: "hidden", textOverflow: "ellipsis" }}>{h.split(" ")[1]}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Followers/Following modal */}
@@ -280,7 +311,7 @@ export default function SocialProfile() {
             {posts.map((p: any) => (
               <div key={p.id} style={{ background: "var(--surface)", borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
                 <p style={{ fontSize: 14, color: "var(--text)", margin: "0 0 8px", lineHeight: 1.55 }}>{p.text}</p>
-                {p.image && <img src={p.image} alt="" style={{ width: "100%", borderRadius: 10, maxHeight: 260, objectFit: "cover" }} />}
+                {(p.imageData || p.image) && <img src={p.imageData || p.image} alt="" style={{ width: "100%", borderRadius: 10, maxHeight: 260, objectFit: "cover" }} />}
                 <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 12, color: "var(--sub)" }}>
                   <span>❤️ {(p.likes || []).length}</span>
                   <span>💬 {(p.comments || []).length}</span>
@@ -295,7 +326,12 @@ export default function SocialProfile() {
             {mediaPosts.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "var(--sub)" }}><div style={{ fontSize: 36 }}>🖼️</div><p style={{ marginTop: 10 }}>No media yet</p></div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 }}>
               {mediaPosts.map((p: any) => (
-                <div key={p.id} style={{ aspectRatio: "1", background: `url(${p.image}) center/cover`, borderRadius: 8, cursor: "pointer" }} />
+                <div key={p.id} onClick={() => nav(`/community#${p.id}`)}
+                  style={{ aspectRatio: "1", borderRadius: 8, cursor: "pointer", overflow: "hidden", background: "var(--surface)", position: "relative" }}>
+                  {(p.imageData || p.image)
+                    ? <img src={p.imageData || p.image} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>📝</div>}
+                </div>
               ))}
             </div>
           </>

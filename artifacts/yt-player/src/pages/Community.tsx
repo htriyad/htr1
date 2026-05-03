@@ -176,27 +176,47 @@ function StoriesBar({ stories, me, onNew, onReload }: { stories:Story[]; me:stri
   for (const s of stories) { if (!authorMap.has(s.author)) authorMap.set(s.author,s); }
   const grouped = Array.from(authorMap.values());
   function openStory(author: string) { const i=grouped.findIndex(s=>s.author===author); if(i>=0)setViewer({open:true,idx:i}); }
+
+  const myInitial = me[0]?.toUpperCase() || "?";
+  const myColor = avatarColor(me);
+
   return (
     <>
-      <div style={{ display:"flex",gap:12,overflowX:"auto",padding:"4px 16px 4px",scrollbarWidth:"none" }}>
-        <button onClick={onNew} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0,background:"none",border:"none",cursor:"pointer" }}>
-          <div style={{ width:64,height:64,borderRadius:20,background:"var(--surface)",border:"2px dashed var(--border)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,position:"relative" }}>
-            <div style={{ fontSize:22 }}>+</div>
-            <div style={{ position:"absolute",bottom:-2,right:-2,width:22,height:22,borderRadius:"50%",background:"var(--purple)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:900 }}>+</div>
+      <div style={{ display:"flex",gap:14,overflowX:"auto",padding:"6px 16px 8px",scrollbarWidth:"none" }}>
+        {/* Add Story */}
+        <button onClick={onNew} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+          <div style={{ position:"relative",width:66,height:66 }}>
+            <div style={{ width:66,height:66,borderRadius:"50%",background:myColor,border:"2px solid var(--border)",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:"#fff" }}>
+              {myInitial}
+            </div>
+            <div style={{ position:"absolute",bottom:0,right:0,width:22,height:22,borderRadius:"50%",background:"var(--purple)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid var(--bg)" }}>+</div>
           </div>
           <span style={{ fontSize:10,fontWeight:700,color:"var(--sub)",whiteSpace:"nowrap" }}>Add Story</span>
         </button>
+
         {grouped.map(s=>{
           const hasViewed = s.views.includes(me); const isMe = s.author===me;
           return (
             <button key={s.id} onClick={()=>openStory(s.author)}
-              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0,background:"none",border:"none",cursor:"pointer" }}>
-              <div style={{ width:64,height:64,borderRadius:20,background:s.bgColor,border:`3px solid ${hasViewed?"var(--border)":"var(--purple)"}`,overflow:"hidden",position:"relative",flexShrink:0 }}>
-                {s.imageData ? <img src={s.imageData} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }}/> :
-                  <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:"#fff" }}>{s.author[0]?.toUpperCase()}</div>}
-                {isMe && <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.15)" }}/>}
+              style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:0 }}>
+              {/* Gradient ring */}
+              <div style={{
+                width:70, height:70, borderRadius:"50%",
+                background: hasViewed
+                  ? "var(--border)"
+                  : "linear-gradient(135deg,#f79e1b 0%,#f77e27 20%,#d7237c 50%,#9c1aac 75%,#5f15b8 100%)",
+                padding:2.5, flexShrink:0,
+              }}>
+                <div style={{ width:"100%",height:"100%",borderRadius:"50%",background:"var(--bg)",padding:2,boxSizing:"border-box" }}>
+                  <div style={{ width:"100%",height:"100%",borderRadius:"50%",background:s.bgColor,overflow:"hidden",position:"relative" }}>
+                    {s.imageData
+                      ? <img src={s.imageData} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+                      : <div style={{ width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:"#fff" }}>{s.author[0]?.toUpperCase()}</div>}
+                    {isMe && <div style={{ position:"absolute",inset:0,background:"rgba(0,0,0,0.1)" }}/>}
+                  </div>
+                </div>
               </div>
-              <span style={{ fontSize:10,fontWeight:700,color:"var(--text)",maxWidth:64,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+              <span style={{ fontSize:10,fontWeight:700,color:hasViewed?"var(--sub)":"var(--text)",maxWidth:68,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                 {isMe?"Your Story":s.author}
               </span>
             </button>
