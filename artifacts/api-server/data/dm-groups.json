@@ -1,0 +1,19 @@
+[
+  {
+    "id": "3b883982-684b-47b5-8f54-15030352b1a7",
+    "name": "gg",
+    "description": "",
+    "members": [
+      "guest"
+    ],
+    "admins": [
+      "guest"
+    ],
+    "createdBy": "guest",
+    "createdAt": "2026-05-03T10:42:56.891Z",
+    "lastMsg": null,
+    "lastAt": null,
+    "imageData": null,
+    "pinned": false
+  }
+]

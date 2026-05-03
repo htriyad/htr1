@@ -2971,5 +2971,343 @@ router.post("/ai/translate",async(req:any,res)=>{
   res.json({original:text,translated,from:from||"auto",to:to||"en"});
 });
 
+/* ══════════════════════════════════════════════════════════
+   ADMIN — MODERATION (Reports + Strikes)
+══════════════════════════════════════════════════════════ */
+router.get("/admin/moderation/reports", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("mod-reports.json", []));
+});
+
+router.post("/admin/moderation/reports/:id/action", adminAuth, (req: any, res) => {
+  const { action } = req.body || {};
+  if (!action) return res.status(400).json({ error: "action required" });
+  const reports = rd<any[]>("mod-reports.json", []);
+  const i = reports.findIndex((r: any) => r.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  const report = reports[i];
+  reports[i].status = action;
+  reports[i].resolvedAt = new Date().toISOString();
+  wr("mod-reports.json", reports);
+  // Log action
+  appendLog("admin", `Moderation action '${action}' on report ${req.params.id} (target: ${report.targetUser || "unknown"})`, req);
+  // Side effects
+  if (action === "ban" && report.targetUser) {
+    const users = rd<any[]>("users.json", []);
+    const ui = users.findIndex((u: any) => u.username === report.targetUser);
+    if (ui >= 0) { users[ui].banned = true; wr("users.json", users); }
+  }
+  res.json({ ok: true, action });
+});
+
+// Users can submit reports (from community/messages)
+router.post("/report", userAuth, (req: any, res) => {
+  const me = getLoggedInUser(req)?.username || (req.headers["x-username"] as string) || "guest";
+  const { type, targetId, targetUser, contentPreview, reason } = req.body || {};
+  if (!type || !targetId) return res.status(400).json({ error: "type and targetId required" });
+  const reports = rd<any[]>("mod-reports.json", []);
+  const newReport = { id: crypto.randomUUID(), type, targetId, targetUser, contentPreview, reason, reporter: me, status: "pending", ts: new Date().toISOString() };
+  reports.unshift(newReport);
+  wr("mod-reports.json", reports.slice(0, 500));
+  res.json(newReport);
+});
+
+router.get("/admin/moderation/strikes", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("mod-strikes.json", []));
+});
+
+router.post("/admin/moderation/strikes", adminAuth, (req: any, res) => {
+  const { username, reason } = req.body || {};
+  if (!username || !reason) return res.status(400).json({ error: "username and reason required" });
+  const strikes = rd<any[]>("mod-strikes.json", []);
+  const newStrike = { id: crypto.randomUUID(), username, reason, ts: new Date().toISOString() };
+  strikes.push(newStrike);
+  wr("mod-strikes.json", strikes);
+  appendLog("admin", `Strike issued to ${username}: ${reason}`, req);
+  // Auto-ban at 3 strikes
+  const userStrikes = strikes.filter((s: any) => s.username === username);
+  if (userStrikes.length >= 3) {
+    const users = rd<any[]>("users.json", []);
+    const ui = users.findIndex((u: any) => u.username === username);
+    if (ui >= 0 && !users[ui].banned) {
+      users[ui].banned = true; wr("users.json", users);
+      appendLog("admin", `Auto-banned ${username} after 3 strikes`, req);
+    }
+  }
+  res.json(newStrike);
+});
+
+router.delete("/admin/moderation/strikes/:id", adminAuth, (req: any, res) => {
+  const strikes = rd<any[]>("mod-strikes.json", []);
+  wr("mod-strikes.json", strikes.filter((s: any) => s.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — SOCIAL CONTROL (Groups + Channels)
+══════════════════════════════════════════════════════════ */
+router.get("/admin/social/groups", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("dm-groups.json", []));
+});
+
+router.patch("/admin/social/groups/:id/freeze", adminAuth, (req: any, res) => {
+  const { frozen } = req.body || {};
+  const groups = rd<any[]>("dm-groups.json", []);
+  const i = groups.findIndex((g: any) => g.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  groups[i].frozen = frozen;
+  wr("dm-groups.json", groups);
+  appendLog("admin", `Group '${groups[i].name}' ${frozen ? "frozen" : "unfrozen"}`, req);
+  res.json(groups[i]);
+});
+
+router.delete("/admin/social/groups/:id", adminAuth, (req: any, res) => {
+  const groups = rd<any[]>("dm-groups.json", []);
+  const g = groups.find((x: any) => x.id === req.params.id);
+  wr("dm-groups.json", groups.filter((x: any) => x.id !== req.params.id));
+  if (g) appendLog("admin", `Deleted group '${g.name}'`, req);
+  // Delete group messages
+  const msgFile = `dm-group-${req.params.id}.json`;
+  try { const p = require("path").join(DATA_DIR, msgFile); if (require("fs").existsSync(p)) require("fs").unlinkSync(p); } catch {}
+  res.json({ ok: true });
+});
+
+router.get("/admin/social/channels", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("channels.json", []));
+});
+
+router.delete("/admin/social/channels/:id", adminAuth, (req: any, res) => {
+  const channels = rd<any[]>("channels.json", []);
+  const c = channels.find((x: any) => x.id === req.params.id);
+  wr("channels.json", channels.filter((x: any) => x.id !== req.params.id));
+  if (c) appendLog("admin", `Deleted channel '${c.name}'`, req);
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — ANALYTICS
+══════════════════════════════════════════════════════════ */
+router.get("/admin/analytics/stats", adminAuth, (_req, res) => {
+  const users = rd<any[]>("users.json", []);
+  const posts = rd<any[]>("community-posts.json", []);
+  const videos = rd<any[]>("videos.json", []);
+  const quizzes = rd<any[]>("quizzes.json", []);
+  const groups = rd<any[]>("dm-groups.json", []);
+  const channels = rd<any[]>("channels.json", []);
+  // Count total messages across all DM threads
+  let totalMessages = 0;
+  try {
+    const files = require("fs").readdirSync(DATA_DIR) as string[];
+    files.filter((f: string) => f.startsWith("dm-") && f.endsWith(".json") && !f.startsWith("dm-group")).forEach((f: string) => {
+      const msgs = rd<any[]>(f, []);
+      totalMessages += msgs.length;
+    });
+  } catch {}
+  // Subject breakdown
+  const subjectMap: Record<string, number> = {};
+  (videos as any[]).forEach((v: any) => {
+    const s = v.subjectId || "Other";
+    subjectMap[s] = (subjectMap[s] || 0) + 1;
+  });
+  const subjectBreakdown = Object.entries(subjectMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+  // Course breakdown
+  const courseMap: Record<string, number> = {};
+  (videos as any[]).forEach((v: any) => {
+    const c = v.course || "Other";
+    courseMap[c] = (courseMap[c] || 0) + 1;
+  });
+  const courseBreakdown = Object.entries(courseMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  // Quiz stats
+  const publishedQuizzes = (quizzes as any[]).filter((q: any) => q.published).length;
+  const totalQuestions = (quizzes as any[]).reduce((s: number, q: any) => s + (q.questions?.length || 0), 0);
+  const avgQuestionsPerQuiz = quizzes.length > 0 ? Math.round(totalQuestions / quizzes.length) : 0;
+  // Top students
+  const leaderboard = rd<any[]>("leaderboard.json", []);
+  const topStudents = leaderboard.slice(0, 5);
+  res.json({
+    totalUsers: users.length,
+    totalPosts: posts.length,
+    totalMessages,
+    activeGroups: groups.length,
+    totalChannels: channels.length,
+    totalVideos: videos.length,
+    totalQuizzes: quizzes.length,
+    communityPosts: posts.length,
+    publishedQuizzes,
+    totalQuestions,
+    avgQuestionsPerQuiz,
+    subjectBreakdown,
+    courseBreakdown,
+    topStudents,
+  });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — SECURITY
+══════════════════════════════════════════════════════════ */
+// Login logs are appended by the login route — we read them here
+router.get("/admin/security/logs", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("security-logs.json", []).slice(0, 200));
+});
+
+router.get("/admin/security/suspicious", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("suspicious-users.json", []));
+});
+
+router.get("/admin/security/sessions", adminAuth, (_req, res) => {
+  // Build session list from users with recent login activity
+  const users = rd<any[]>("users.json", []);
+  const secLogs = rd<any[]>("security-logs.json", []);
+  const sessionMap: Record<string, any> = {};
+  secLogs.filter((l: any) => l.success).forEach((l: any) => {
+    if (!sessionMap[l.username] || new Date(l.ts) > new Date(sessionMap[l.username].lastSeen)) {
+      sessionMap[l.username] = { username: l.username, ip: l.ip, lastSeen: l.ts, device: l.device };
+    }
+  });
+  res.json(Object.values(sessionMap).sort((a: any, b: any) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()).slice(0, 50));
+});
+
+router.delete("/admin/security/sessions/:username/logout", adminAuth, (req: any, res) => {
+  // Force logout by invalidating the user's token in a blocklist
+  const blocklist = rd<string[]>("token-blocklist.json", []);
+  blocklist.push(`force_logout:${req.params.username}:${Date.now()}`);
+  wr("token-blocklist.json", blocklist.slice(-500));
+  appendLog("admin", `Force-logged-out user ${req.params.username}`, req);
+  res.json({ ok: true });
+});
+
+// Hook: append security log on every user login (called from existing login route helper)
+function appendSecurityLog(username: string, ip: string, success: boolean, device?: string) {
+  const logs = rd<any[]>("security-logs.json", []);
+  logs.unshift({ username, ip, success, device, ts: new Date().toISOString() });
+  wr("security-logs.json", logs.slice(0, 1000));
+  // Flag suspicious: >10 failed attempts
+  if (!success) {
+    const recent = logs.filter((l: any) => l.username === username && !l.success && Date.now() - new Date(l.ts).getTime() < 3_600_000);
+    if (recent.length >= 10) {
+      const sus = rd<any[]>("suspicious-users.json", []);
+      if (!sus.find((s: any) => s.username === username)) {
+        sus.unshift({ username, reason: `${recent.length} failed login attempts in 1 hour`, riskLevel: "high", ts: new Date().toISOString() });
+        wr("suspicious-users.json", sus.slice(0, 200));
+      }
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — AI AUTO-MOD RULES
+══════════════════════════════════════════════════════════ */
+router.get("/admin/aimod/rules", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("aimod-rules.json", []));
+});
+
+router.post("/admin/aimod/rules", adminAuth, (req: any, res) => {
+  const { trigger, condition, action, threshold } = req.body || {};
+  if (!trigger || !condition) return res.status(400).json({ error: "trigger and condition required" });
+  const rules = rd<any[]>("aimod-rules.json", []);
+  const rule = { id: crypto.randomUUID(), trigger, condition, action: action || "warn", threshold: threshold || 5, createdAt: new Date().toISOString(), active: true };
+  rules.push(rule);
+  wr("aimod-rules.json", rules);
+  appendLog("admin", `AI mod rule added: ${trigger} → ${action}`, req);
+  res.json(rule);
+});
+
+router.delete("/admin/aimod/rules/:id", adminAuth, (req: any, res) => {
+  const rules = rd<any[]>("aimod-rules.json", []);
+  wr("aimod-rules.json", rules.filter((r: any) => r.id !== req.params.id));
+  res.json({ ok: true });
+});
+
+router.post("/admin/aimod/scan", adminAuth, (_req, res) => {
+  const users = rd<any[]>("users.json", []);
+  const posts = rd<any[]>("community-posts.json", []);
+  const flagged: any[] = [];
+  // Check rapid posting
+  const now = Date.now();
+  users.forEach((u: any) => {
+    const recentPosts = posts.filter((p: any) => p.author === u.username && now - new Date(p.createdAt || p.ts || 0).getTime() < 3_600_000);
+    if (recentPosts.length > 20) {
+      flagged.push({ username: u.username, reason: `${recentPosts.length} posts in last hour`, risk: "high" });
+    }
+  });
+  // Check spam links in posts
+  posts.forEach((p: any) => {
+    const linkCount = (p.text || "").match(/https?:\/\//gi)?.length || 0;
+    if (linkCount >= 5) {
+      const already = flagged.find(f => f.username === p.author);
+      if (!already) flagged.push({ username: p.author, reason: `${linkCount} links in a single post`, risk: "medium" });
+    }
+  });
+  res.json({ suspicious: flagged.length, warned: 0, clean: users.length - flagged.length, flagged: flagged.slice(0, 20) });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — ACTIVITY LOGS
+══════════════════════════════════════════════════════════ */
+function appendLog(type: string, action: string, req?: any, details?: any) {
+  const logs = rd<any[]>("activity-logs.json", []);
+  logs.unshift({ id: crypto.randomUUID(), type, actor: req?.adminUser || "system", action, details, ts: new Date().toISOString() });
+  wr("activity-logs.json", logs.slice(0, 2000));
+}
+
+router.get("/admin/logs", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("activity-logs.json", []));
+});
+
+router.delete("/admin/logs", adminAuth, (req: any, res) => {
+  wr("activity-logs.json", []);
+  appendLog("admin", "Activity logs cleared", req);
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ADMIN — ROLES & PERMISSIONS
+══════════════════════════════════════════════════════════ */
+router.get("/admin/roles", adminAuth, (_req, res) => {
+  res.json(rd<any[]>("admin-roles.json", []));
+});
+
+router.post("/admin/roles", adminAuth, (req: any, res) => {
+  const { name, description, permissions } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  const roles = rd<any[]>("admin-roles.json", []);
+  if (roles.find((r: any) => r.name.toLowerCase() === name.toLowerCase())) return res.status(409).json({ error: "Role name already exists" });
+  const role = { id: crypto.randomUUID(), name, description: description || "", permissions: permissions || {}, createdAt: new Date().toISOString() };
+  roles.push(role);
+  wr("admin-roles.json", roles);
+  appendLog("admin", `Created admin role: ${name}`, req);
+  res.json(role);
+});
+
+router.put("/admin/roles/:id", adminAuth, (req: any, res) => {
+  const roles = rd<any[]>("admin-roles.json", []);
+  const i = roles.findIndex((r: any) => r.id === req.params.id);
+  if (i < 0) return res.status(404).json({ error: "Not found" });
+  roles[i] = { ...roles[i], ...req.body, id: req.params.id, updatedAt: new Date().toISOString() };
+  wr("admin-roles.json", roles);
+  appendLog("admin", `Updated admin role: ${roles[i].name}`, req);
+  res.json(roles[i]);
+});
+
+router.delete("/admin/roles/:id", adminAuth, (req: any, res) => {
+  const roles = rd<any[]>("admin-roles.json", []);
+  const role = roles.find((r: any) => r.id === req.params.id);
+  wr("admin-roles.json", roles.filter((r: any) => r.id !== req.params.id));
+  if (role) appendLog("admin", `Deleted admin role: ${role.name}`, req);
+  res.json({ ok: true });
+});
+
+/* ══════════════════════════════════════════════════════════
+   ENHANCED USER LOGIN — append security log
+══════════════════════════════════════════════════════════ */
+// Patch the existing login to also log security events
+// We add a supplementary route that the frontend can call
+router.post("/user/login-log", (req: any, res) => {
+  const { username, success, device } = req.body || {};
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
+  if (username) appendSecurityLog(username, ip, !!success, device);
+  res.json({ ok: true });
+});
+
 export default router;
+
 

@@ -15,7 +15,9 @@
     "bgColor": "linear-gradient(135deg,#0ea5e9,#38bdf8)",
     "createdAt": "2026-05-03T09:59:01.927Z",
     "expiresAt": "2026-05-04T09:59:01.927Z",
-    "views": []
+    "views": [
+      "guest"
+    ]
   },
   {
     "id": "a280ee52-9e5f-42bf-9fa8-28b8ffb5d04d",

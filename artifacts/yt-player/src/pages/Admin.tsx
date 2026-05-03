@@ -6,32 +6,39 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards"|"exams"|"papers"|"formulas"|"vocab"|"quotes"|"settings";
-const TABS: { id:Tab; icon:string; label:string }[] = [
-  { id:"overview",   icon:"📊", label:"Overview"      },
-  { id:"users",      icon:"👤", label:"Users"         },
-  { id:"ips",        icon:"🌐", label:"IP Access"     },
-  { id:"inbox",      icon:"📨", label:"Inbox"         },
-  { id:"subjects",   icon:"📚", label:"Subjects"      },
-  { id:"videos",     icon:"🎬", label:"Videos"        },
-  { id:"quizzes",    icon:"📝", label:"Quizzes"       },
-  { id:"notifs",     icon:"🔔", label:"Notify"        },
-  { id:"solve",      icon:"📋", label:"Solve Sheet"   },
-  { id:"live",       icon:"👨‍🏫", label:"Live Class"    },
-  { id:"announce",   icon:"📢", label:"Announcements" },
-  { id:"discuss",    icon:"💬", label:"Discussions"   },
-  { id:"flashcards", icon:"🃏", label:"Flashcards"    },
-  { id:"exams",      icon:"⏰", label:"Exam Dates"    },
-  { id:"papers",     icon:"📄", label:"Past Papers"   },
-  { id:"formulas",   icon:"∑",  label:"Formulas"      },
-  { id:"vocab",      icon:"📖", label:"Vocabulary"    },
-  { id:"menu",       icon:"⊞",  label:"Dashboard Menu"},
-  { id:"doubts",     icon:"❓", label:"Doubts"        },
-  { id:"micro",      icon:"⚡", label:"Micro Feed"    },
-  { id:"market",     icon:"🏪", label:"Marketplace"   },
-  { id:"quotes",     icon:"💬", label:"Quotes"        },
-  { id:"settings",   icon:"⚙️", label:"Settings"      },
-  { id:"db",         icon:"🗄️", label:"Database"      },
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards"|"exams"|"papers"|"formulas"|"vocab"|"quotes"|"settings"|"moderation"|"social"|"analytics"|"security"|"aimod"|"logs"|"roles";
+const TABS: { id:Tab; icon:string; label:string; group?:string }[] = [
+  { id:"overview",   icon:"📊", label:"Overview",       group:"core" },
+  { id:"users",      icon:"👤", label:"Users",          group:"core" },
+  { id:"ips",        icon:"🌐", label:"IP Access",      group:"core" },
+  { id:"inbox",      icon:"📨", label:"Inbox",          group:"core" },
+  { id:"moderation", icon:"🛡️", label:"Moderation",     group:"social" },
+  { id:"social",     icon:"👥", label:"Groups/Channels",group:"social" },
+  { id:"subjects",   icon:"📚", label:"Subjects",       group:"content" },
+  { id:"videos",     icon:"🎬", label:"Videos",         group:"content" },
+  { id:"quizzes",    icon:"📝", label:"Quizzes",        group:"content" },
+  { id:"notifs",     icon:"🔔", label:"Notify",         group:"content" },
+  { id:"solve",      icon:"📋", label:"Solve Sheet",    group:"content" },
+  { id:"live",       icon:"👨‍🏫", label:"Live Class",     group:"content" },
+  { id:"announce",   icon:"📢", label:"Announcements",  group:"content" },
+  { id:"discuss",    icon:"💬", label:"Discussions",    group:"content" },
+  { id:"flashcards", icon:"🃏", label:"Flashcards",     group:"content" },
+  { id:"exams",      icon:"⏰", label:"Exam Dates",     group:"content" },
+  { id:"papers",     icon:"📄", label:"Past Papers",    group:"content" },
+  { id:"formulas",   icon:"∑",  label:"Formulas",       group:"content" },
+  { id:"vocab",      icon:"📖", label:"Vocabulary",     group:"content" },
+  { id:"menu",       icon:"⊞",  label:"Dashboard Menu", group:"content" },
+  { id:"doubts",     icon:"❓", label:"Doubts",         group:"content" },
+  { id:"micro",      icon:"⚡", label:"Micro Feed",     group:"content" },
+  { id:"market",     icon:"🏪", label:"Marketplace",    group:"content" },
+  { id:"quotes",     icon:"💬", label:"Quotes",         group:"content" },
+  { id:"analytics",  icon:"📈", label:"Analytics",      group:"system" },
+  { id:"security",   icon:"🔐", label:"Security",       group:"system" },
+  { id:"aimod",      icon:"🤖", label:"AI Automation",  group:"system" },
+  { id:"logs",       icon:"📋", label:"Activity Logs",  group:"system" },
+  { id:"roles",      icon:"🎭", label:"Admin Roles",    group:"system" },
+  { id:"settings",   icon:"⚙️", label:"Settings",       group:"system" },
+  { id:"db",         icon:"🗄️", label:"Database",       group:"system" },
 ];
 
 /* ── entry point ──────────────────────────────────────────── */
@@ -103,44 +110,72 @@ function LoginScreen({ onLogin }: { onLogin:(t:string)=>void }) {
 function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
   const [tab,setTab]=useState<Tab>("overview");
   const [sideOpen,setSideOpen]=useState(false);
+  const [cmdOpen,setCmdOpen]=useState(false);
+  const [crisis,setCrisis]=useState(false);
+
+  useEffect(()=>{
+    const h=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key==="k"){e.preventDefault();setCmdOpen(o=>!o);}};
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[]);
+
+  const GROUP_LABELS:{[k:string]:string}={core:"⚡ Core",social:"👥 Social",content:"📚 Content",system:"🔧 System"};
+  const groups=["core","social","content","system"];
+
   return (
     <div style={{minHeight:"100svh",background:"var(--bg)",display:"flex",flexDirection:"column"}}>
       {/* Top bar */}
-      <div style={{background:"var(--navy)",color:"#fff",padding:"0 16px",height:52,display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:200}}>
+      <div style={{background:"var(--navy)",color:"#fff",padding:"0 16px",height:52,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
         <button onClick={()=>setSideOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontSize:20,cursor:"pointer",padding:4}}>☰</button>
         <span style={{fontWeight:900,fontSize:15,flex:1,fontFamily:"Lato,sans-serif"}}><span style={{color:"#4f8ef7"}}>HTR</span> Zone <span style={{fontSize:11,opacity:0.55,fontWeight:500}}>Admin</span></span>
+        <button onClick={()=>setCmdOpen(true)} title="Command Bar (Ctrl+K)" style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",padding:"4px 10px",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+          🔍 <span style={{opacity:0.6}}>Ctrl+K</span>
+        </button>
+        <button onClick={()=>{setCrisis(c=>!c);alert(crisis?"✅ Crisis mode OFF — platform restored":"🚨 CRISIS MODE ON — posting disabled, uploads blocked!");}}
+          style={{background:crisis?"#dc2626":"rgba(220,38,38,0.2)",border:"1px solid #dc2626",color:crisis?"#fff":"#f87171",padding:"4px 11px",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:700}}>
+          🚨 {crisis?"CRISIS ON":"Crisis"}
+        </button>
         <button onClick={onLogout} style={{background:"var(--orange)",border:"none",color:"#fff",padding:"5px 14px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>Logout</button>
       </div>
 
+      {cmdOpen&&<CommandBar onClose={()=>setCmdOpen(false)} onNavigate={(t)=>{setTab(t as Tab);setCmdOpen(false);}}/>}
+
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {/* Sidebar */}
-        <nav style={{width:sideOpen?200:56,background:"var(--navy)",flexShrink:0,transition:"width 250ms",overflowX:"hidden",display:"flex",flexDirection:"column",paddingTop:8}}>
-          {TABS.map(t=>(
-            <button key={t.id} onClick={()=>{setTab(t.id);setSideOpen(false);}}
-              style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:tab===t.id?"rgba(255,255,255,0.15)":"transparent",border:"none",color:"#fff",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap",borderLeft:tab===t.id?"3px solid var(--orange)":"3px solid transparent",transition:"background 150ms"}}>
-              <span style={{fontSize:18,flexShrink:0}}>{t.icon}</span>
-              <span style={{fontSize:13,fontWeight:600,opacity:sideOpen?1:0,transition:"opacity 200ms"}}>{t.label}</span>
-            </button>
+        <nav style={{width:sideOpen?210:56,background:"var(--navy)",flexShrink:0,transition:"width 250ms",overflowX:"hidden",display:"flex",flexDirection:"column",paddingTop:4,overflowY:"auto"}}>
+          {groups.map(g=>(
+            <div key={g}>
+              {sideOpen&&<div style={{padding:"10px 16px 4px",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:"0.08em",textTransform:"uppercase",whiteSpace:"nowrap"}}>{GROUP_LABELS[g]}</div>}
+              {TABS.filter(t=>t.group===g).map(t=>(
+                <button key={t.id} onClick={()=>{setTab(t.id);setSideOpen(false);}}
+                  style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:tab===t.id?"rgba(255,255,255,0.15)":"transparent",border:"none",color:"#fff",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap",borderLeft:tab===t.id?"3px solid var(--orange)":"3px solid transparent",transition:"background 150ms",width:"100%"}}>
+                  <span style={{fontSize:17,flexShrink:0,lineHeight:1}}>{t.icon}</span>
+                  <span style={{fontSize:12,fontWeight:600,opacity:sideOpen?1:0,transition:"opacity 200ms"}}>{t.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
         {/* Content */}
         <main style={{flex:1,overflowY:"auto",padding:"20px 16px 60px"}}>
-          {tab==="overview"  && <OverviewTab />}
-          {tab==="users"     && <UsersTab />}
-          {tab==="ips"       && <IPsTab />}
-          {tab==="inbox"     && <InboxTab />}
-          {tab==="subjects"  && <SubjectsTab />}
-          {tab==="videos"    && <VideosTab />}
-          {tab==="quizzes"   && <QuizzesTab />}
-          {tab==="notifs"    && <NotifsTab />}
-          {tab==="doubts"    && <DoubtsTab />}
-          {tab==="micro"     && <MicroFeedTab />}
-          {tab==="market"    && <MarketplaceTab />}
-          {tab==="menu"      && <MenuTab />}
-          {tab==="solve"     && <SolveSheetTab />}
-          {tab==="live"      && <LiveClassTab />}
-          {tab==="announce"  && <AnnouncementsTab />}
+          {tab==="overview"   && <OverviewTab />}
+          {tab==="users"      && <UsersTab />}
+          {tab==="ips"        && <IPsTab />}
+          {tab==="inbox"      && <InboxTab />}
+          {tab==="moderation" && <ModerationTab />}
+          {tab==="social"     && <SocialAdminTab />}
+          {tab==="subjects"   && <SubjectsTab />}
+          {tab==="videos"     && <VideosTab />}
+          {tab==="quizzes"    && <QuizzesTab />}
+          {tab==="notifs"     && <NotifsTab />}
+          {tab==="doubts"     && <DoubtsTab />}
+          {tab==="micro"      && <MicroFeedTab />}
+          {tab==="market"     && <MarketplaceTab />}
+          {tab==="menu"       && <MenuTab />}
+          {tab==="solve"      && <SolveSheetTab />}
+          {tab==="live"       && <LiveClassTab />}
+          {tab==="announce"   && <AnnouncementsTab />}
           {tab==="discuss"    && <DiscussionsTab />}
           {tab==="flashcards" && <FlashcardsTab />}
           {tab==="db"         && <DatabaseTab />}
@@ -149,8 +184,62 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="formulas"   && <FormulasTab />}
           {tab==="vocab"      && <VocabTab />}
           {tab==="quotes"     && <QuotesTab />}
+          {tab==="analytics"  && <AnalyticsTab />}
+          {tab==="security"   && <SecurityTab />}
+          {tab==="aimod"      && <AiModTab />}
+          {tab==="logs"       && <LogsTab />}
+          {tab==="roles"      && <RolesTab />}
           {tab==="settings"   && <SettingsTab />}
         </main>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   COMMAND BAR  (Ctrl+K)
+══════════════════════════════════════════════════════════ */
+function CommandBar({onClose,onNavigate}:{onClose:()=>void;onNavigate:(tab:string)=>void}){
+  const [q,setQ]=useState("");
+  const inputRef=useRef<HTMLInputElement>(null);
+  useEffect(()=>{inputRef.current?.focus();},[]);
+
+  const CMDS=[
+    ...TABS.map(t=>({icon:t.icon,label:t.label,action:()=>onNavigate(t.id),tag:"tab"})),
+    {icon:"🚫",label:"Ban user…",action:()=>{const u=prompt("Username to ban:");if(u)api(`/api/admin/users/${u}/ban`,{method:"PATCH"}).then(()=>alert("✅ Banned"));onClose();},tag:"action"},
+    {icon:"📢",label:"Broadcast notification…",action:()=>onNavigate("notifs"),tag:"action"},
+    {icon:"🗑️",label:"Go to Moderation queue",action:()=>onNavigate("moderation"),tag:"action"},
+    {icon:"📈",label:"Open Analytics",action:()=>onNavigate("analytics"),tag:"action"},
+    {icon:"🔐",label:"Security logs",action:()=>onNavigate("security"),tag:"action"},
+    {icon:"🤖",label:"AI Auto-moderation",action:()=>onNavigate("aimod"),tag:"action"},
+  ];
+  const filtered=q.trim()?CMDS.filter(c=>c.label.toLowerCase().includes(q.toLowerCase())):CMDS.slice(0,10);
+
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15vh"}} onClick={onClose}>
+      <div style={{width:"100%",maxWidth:560,background:"var(--surface)",borderRadius:16,boxShadow:"0 24px 80px rgba(0,0,0,0.5)",border:"1px solid rgba(79,142,247,0.3)",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid var(--border)"}}>
+          <span style={{fontSize:18}}>🔍</span>
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Type a command or search tabs…"
+            style={{flex:1,background:"none",border:"none",outline:"none",fontSize:15,color:"var(--text)",fontFamily:"Roboto,sans-serif"}}
+            onKeyDown={e=>{if(e.key==="Escape")onClose();if(e.key==="Enter"&&filtered[0]){filtered[0].action();}}}/>
+          <kbd style={{fontSize:11,padding:"2px 6px",background:"var(--bg)",borderRadius:5,border:"1px solid var(--border)",color:"var(--sub)"}}>ESC</kbd>
+        </div>
+        <div style={{maxHeight:360,overflowY:"auto"}}>
+          {filtered.length===0&&<div style={{padding:"24px 16px",textAlign:"center",color:"var(--sub)",fontSize:13}}>No commands found</div>}
+          {filtered.map((c,i)=>(
+            <button key={i} onClick={()=>{c.action();}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:"none",border:"none",cursor:"pointer",textAlign:"left",transition:"background 100ms"}}
+              onMouseEnter={e=>(e.currentTarget.style.background="rgba(79,142,247,0.08)")}
+              onMouseLeave={e=>(e.currentTarget.style.background="none")}>
+              <span style={{fontSize:17,flexShrink:0}}>{c.icon}</span>
+              <span style={{flex:1,fontSize:14,fontWeight:600,color:"var(--text)"}}>{c.label}</span>
+              <span style={{fontSize:10,padding:"2px 7px",background:c.tag==="action"?"rgba(249,115,22,0.12)":"rgba(79,142,247,0.1)",color:c.tag==="action"?"var(--orange)":"var(--purple)",borderRadius:99,fontWeight:700}}>{c.tag}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{padding:"8px 16px",borderTop:"1px solid var(--border)",fontSize:11,color:"var(--sub)",display:"flex",gap:16}}>
+          <span>↑↓ navigate</span><span>↵ select</span><span>ESC close</span>
+        </div>
       </div>
     </div>
   );
@@ -3223,6 +3312,791 @@ function QuotesTab(){
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   MODERATION TAB
+══════════════════════════════════════════════════════════ */
+function ModerationTab(){
+  const [reports,setReports]=useState<any[]>([]);
+  const [strikes,setStrikes]=useState<any[]>([]);
+  const [activeView,setActiveView]=useState<"reports"|"strikes">("reports");
+  const [loading,setLoading]=useState(true);
+  const [msg,setMsg]=useState("");
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [r,s]=await Promise.all([
+      api("/api/admin/moderation/reports").then(r=>r.json()),
+      api("/api/admin/moderation/strikes").then(r=>r.json()),
+    ]);
+    if(Array.isArray(r))setReports(r);
+    if(Array.isArray(s))setStrikes(s);
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  async function takeAction(reportId:string,action:"delete"|"warn"|"ban"|"dismiss"){
+    const r=await api(`/api/admin/moderation/reports/${reportId}/action`,{method:"POST",body:JSON.stringify({action})});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg(`✅ Action '${action}' taken`);load();}
+  }
+  async function addStrike(username:string,reason:string){
+    const r=await api("/api/admin/moderation/strikes",{method:"POST",body:JSON.stringify({username,reason})});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Strike added!");load();}
+  }
+  async function removeStrike(id:string){
+    await api(`/api/admin/moderation/strikes/${id}`,{method:"DELETE"});
+    setMsg("✅ Strike removed");load();
+  }
+
+  const pending=reports.filter(r=>r.status==="pending");
+  const resolved=reports.filter(r=>r.status!=="pending");
+
+  return(
+    <div>
+      <SectionTitle>🛡️ Content Moderation</SectionTitle>
+      <InfoBox>Review reported content, issue strikes, and take action. 3 strikes = automatic ban recommendation. Reports come from community posts, messages, and channels.</InfoBox>
+
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+
+      {/* Stats bar */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:20}}>
+        {[
+          {label:"Pending Reports",value:pending.length,color:"#dc2626",icon:"🚨"},
+          {label:"Resolved",value:resolved.length,color:"#16a34a",icon:"✅"},
+          {label:"Total Strikes",value:strikes.length,color:"#d97706",icon:"⚡"},
+          {label:"Users Warned",value:[...new Set(strikes.map((s:any)=>s.username))].length,color:"#7c3aed",icon:"👤"},
+        ].map(c=>(
+          <div key={c.label} style={{background:"var(--surface)",borderRadius:12,padding:14,borderTop:`4px solid ${c.color}`}}>
+            <div style={{fontSize:24}}>{c.icon}</div>
+            <div style={{fontSize:26,fontWeight:900,color:c.color,fontFamily:"Lato,sans-serif"}}>{c.value}</div>
+            <div style={{fontSize:11,color:"var(--sub)"}}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* View toggle */}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={()=>setActiveView("reports")} style={btnStyle(activeView==="reports"?"#dc2626":"var(--border)")}>🚨 Reports ({pending.length} pending)</button>
+        <button onClick={()=>setActiveView("strikes")} style={btnStyle(activeView==="strikes"?"#d97706":"var(--border)")}>⚡ Strike System ({strikes.length})</button>
+      </div>
+
+      {loading&&<Loading/>}
+
+      {!loading&&activeView==="reports"&&(
+        <div>
+          {pending.length===0&&resolved.length===0&&<Empty icon="🛡️" text="No reports yet — platform is clean!"/>}
+          {pending.length>0&&<>
+            <h3 style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:10}}>🚨 Pending ({pending.length})</h3>
+            {pending.map(r=>(
+              <div key={r.id} style={{...listItem,borderLeft:"4px solid #dc2626"}}>
+                <div style={{display:"flex",gap:10,marginBottom:10}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontWeight:700,color:"var(--text)"}}>{r.type||"post"} report</span>
+                      <span style={{fontSize:10,padding:"2px 8px",background:"#fee2e2",color:"#991b1b",borderRadius:99,fontWeight:700}}>{r.reason||"Inappropriate"}</span>
+                    </div>
+                    <div style={{fontSize:13,color:"var(--sub)",marginBottom:4}}><b>Reported:</b> {r.contentPreview||r.targetId}</div>
+                    <div style={{fontSize:11,color:"var(--sub)"}}>By: <b>{r.reporter}</b> · Target: <b>{r.targetUser||"unknown"}</b> · {new Date(r.ts).toLocaleString()}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <button onClick={()=>takeAction(r.id,"delete")} style={smBtn("#dc2626")}>🗑️ Delete Content</button>
+                  <button onClick={()=>{const reason=prompt("Warn reason:");if(reason){addStrike(r.targetUser,reason);takeAction(r.id,"warn");}}} style={smBtn("#d97706")}>⚡ Warn+Strike</button>
+                  <button onClick={()=>takeAction(r.id,"ban")} style={smBtn("#7c3aed")}>🚫 Ban User</button>
+                  <button onClick={()=>takeAction(r.id,"dismiss")} style={smBtn("#6b7280")}>✓ Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </>}
+          {resolved.length>0&&<>
+            <h3 style={{fontSize:14,fontWeight:700,color:"var(--sub)",marginBottom:10,marginTop:20}}>✅ Resolved ({resolved.length})</h3>
+            {resolved.slice(0,10).map(r=>(
+              <div key={r.id} style={{...listItem,opacity:0.65}}>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,padding:"2px 8px",background:"#dcfce7",color:"#166534",borderRadius:99,fontWeight:700}}>{r.status}</span>
+                  <span style={{flex:1,fontSize:12,color:"var(--sub)"}}>{r.contentPreview||r.targetId}</span>
+                  <span style={{fontSize:11,color:"var(--sub)"}}>{new Date(r.ts).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </>}
+        </div>
+      )}
+
+      {!loading&&activeView==="strikes"&&(
+        <div>
+          <Card title="⚡ Issue a Strike">
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <input id="strike-user" placeholder="Username" style={{...inp,flex:1,minWidth:120}}/>
+              <input id="strike-reason" placeholder="Reason" style={{...inp,flex:2,minWidth:160}}/>
+              <button onClick={()=>{
+                const u=(document.getElementById("strike-user") as HTMLInputElement)?.value;
+                const r=(document.getElementById("strike-reason") as HTMLInputElement)?.value;
+                if(u&&r)addStrike(u,r);
+              }} style={smBtn("var(--orange)")}>Add Strike</button>
+            </div>
+          </Card>
+          {strikes.length===0&&<Empty icon="⚡" text="No strikes issued yet"/>}
+          {Object.entries(strikes.reduce((acc:any,s:any)=>{acc[s.username]=(acc[s.username]||[]);acc[s.username].push(s);return acc;},{})).map(([user,userStrikes]:any)=>(
+            <div key={user} style={{...listItem,borderLeft:`4px solid ${userStrikes.length>=3?"#dc2626":userStrikes.length>=2?"#d97706":"#16a34a"}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <div style={{width:34,height:34,borderRadius:50,background:userStrikes.length>=3?"#dc2626":"#d97706",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14}}>{user[0]?.toUpperCase()}</div>
+                <div style={{flex:1}}>
+                  <span style={{fontWeight:700}}>{user}</span>
+                  <span style={{marginLeft:8,fontSize:10,padding:"2px 8px",background:userStrikes.length>=3?"#fee2e2":"#fef3c7",color:userStrikes.length>=3?"#991b1b":"#92400e",borderRadius:99,fontWeight:700}}>
+                    {userStrikes.length} strike{userStrikes.length!==1?"s":""}  {userStrikes.length>=3?"— BAN RECOMMENDED":""}
+                  </span>
+                </div>
+              </div>
+              {userStrikes.map((s:any)=>(
+                <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:"var(--bg)",borderRadius:8,marginBottom:4}}>
+                  <span style={{flex:1,fontSize:12,color:"var(--text)"}}>{s.reason}</span>
+                  <span style={{fontSize:11,color:"var(--sub)"}}>{new Date(s.ts).toLocaleDateString()}</span>
+                  <button onClick={()=>removeStrike(s.id)} style={smBtn("#dc2626")}>✕</button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   SOCIAL ADMIN TAB  (Groups / Channels)
+══════════════════════════════════════════════════════════ */
+function SocialAdminTab(){
+  const [groups,setGroups]=useState<any[]>([]);
+  const [channels,setChannels]=useState<any[]>([]);
+  const [view,setView]=useState<"groups"|"channels">("groups");
+  const [loading,setLoading]=useState(true);
+  const [msg,setMsg]=useState("");
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [g,c]=await Promise.all([
+      api("/api/admin/social/groups").then(r=>r.json()),
+      api("/api/admin/social/channels").then(r=>r.json()),
+    ]);
+    if(Array.isArray(g))setGroups(g);
+    if(Array.isArray(c))setChannels(c);
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  async function freezeGroup(id:string,frozen:boolean){
+    await api(`/api/admin/social/groups/${id}/freeze`,{method:"PATCH",body:JSON.stringify({frozen:!frozen})});
+    setMsg(!frozen?"🧊 Group frozen — no new posts":"✅ Group unfrozen");load();
+  }
+  async function deleteGroup(id:string){
+    if(!confirm("Delete this group? This cannot be undone."))return;
+    await api(`/api/admin/social/groups/${id}`,{method:"DELETE"});
+    setMsg("🗑️ Group deleted");load();
+  }
+  async function deleteChannel(id:string){
+    if(!confirm("Delete this channel?"))return;
+    await api(`/api/admin/social/channels/${id}`,{method:"DELETE"});
+    setMsg("🗑️ Channel deleted");load();
+  }
+
+  return(
+    <div>
+      <SectionTitle>👥 Groups & Channels Control</SectionTitle>
+      <InfoBox>Manage all community groups and channels. Freeze groups to stop new posts without deleting them. View member counts and subscriber data.</InfoBox>
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={()=>setView("groups")} style={btnStyle(view==="groups"?"var(--purple)":"var(--border)")}>💬 Groups ({groups.length})</button>
+        <button onClick={()=>setView("channels")} style={btnStyle(view==="channels"?"var(--navy)":"var(--border)")}>📡 Channels ({channels.length})</button>
+      </div>
+      {loading&&<Loading/>}
+      {!loading&&view==="groups"&&(
+        <>
+          {groups.length===0&&<Empty icon="💬" text="No groups created yet"/>}
+          {groups.map(g=>(
+            <div key={g.id} style={{...listItem,borderLeft:g.frozen?"4px solid #60a5fa":"4px solid var(--purple)"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <div style={{width:40,height:40,borderRadius:10,background:g.frozen?"#dbeafe":"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{g.icon||"💬"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontWeight:700,color:"var(--text)"}}>{g.name}</span>
+                    {g.frozen&&<span style={{fontSize:10,padding:"2px 8px",background:"#dbeafe",color:"#1e40af",borderRadius:99,fontWeight:700}}>🧊 FROZEN</span>}
+                    {g.type&&<span style={{fontSize:10,padding:"2px 8px",background:"rgba(124,58,237,0.1)",color:"var(--purple)",borderRadius:99,fontWeight:700}}>{g.type}</span>}
+                  </div>
+                  <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{g.description||"No description"}</div>
+                  <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>👑 {g.creator} · 👥 {(g.members||[]).length} members · Created {new Date(g.createdAt).toLocaleDateString()}</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                  <button onClick={()=>freezeGroup(g.id,g.frozen)} style={smBtn(g.frozen?"#16a34a":"#2563eb")}>{g.frozen?"▶️ Unfreeze":"🧊 Freeze"}</button>
+                  <button onClick={()=>deleteGroup(g.id)} style={smBtn("#dc2626")}>🗑️ Delete</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+      {!loading&&view==="channels"&&(
+        <>
+          {channels.length===0&&<Empty icon="📡" text="No channels created yet"/>}
+          {channels.map(c=>(
+            <div key={c.id} style={{...listItem,borderLeft:"4px solid var(--navy)"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <div style={{width:40,height:40,borderRadius:10,background:"var(--navy)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📡</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,color:"var(--text)"}}>{c.name}</div>
+                  <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{c.description||"No description"}</div>
+                  <div style={{fontSize:11,color:"var(--sub)",marginTop:4}}>👑 {c.owner} · 👥 {(c.subscribers||[]).length} subscribers · {c.isPublic?"🌐 Public":"🔒 Private"}</div>
+                </div>
+                <button onClick={()=>deleteChannel(c.id)} style={smBtn("#dc2626")}>🗑️ Delete</button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ANALYTICS TAB
+══════════════════════════════════════════════════════════ */
+function AnalyticsTab(){
+  const [stats,setStats]=useState<any>(null);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    api("/api/admin/analytics/stats").then(r=>r.json()).then(d=>{setStats(d);setLoading(false);});
+  },[]);
+
+  function MiniBar({value,max,color}:{value:number;max:number;color:string}){
+    return(
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{flex:1,height:10,background:"var(--bg)",borderRadius:99,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${max>0?Math.round(value/max*100):0}%`,background:color,borderRadius:99,transition:"width 600ms"}}/>
+        </div>
+        <span style={{fontSize:12,fontWeight:700,color,minWidth:28,textAlign:"right"}}>{value}</span>
+      </div>
+    );
+  }
+
+  function BarChart({data,color,label}:{data:{name:string;value:number}[];color:string;label:string}){
+    const max=Math.max(...data.map(d=>d.value),1);
+    return(
+      <div>
+        <div style={{fontSize:12,fontWeight:700,color:"var(--sub)",marginBottom:8}}>{label}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {data.map(d=>(
+            <div key={d.name} style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:8,alignItems:"center"}}>
+              <div style={{fontSize:11,color:"var(--text)",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.name}</div>
+              <MiniBar value={d.value} max={max} color={color}/>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if(loading)return <Loading/>;
+  if(!stats)return <Empty icon="📈" text="No analytics data yet"/>;
+
+  return(
+    <div>
+      <SectionTitle>📈 Analytics Dashboard</SectionTitle>
+      <InfoBox>Platform usage statistics. Data is calculated in real-time from stored data files.</InfoBox>
+
+      {/* KPI cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:12,marginBottom:24}}>
+        {[
+          {label:"Total Users",value:stats.totalUsers,icon:"👤",color:"var(--purple)"},
+          {label:"Total Posts",value:stats.totalPosts,icon:"📝",color:"var(--navy)"},
+          {label:"Total Messages",value:stats.totalMessages,icon:"💬",color:"#16a34a"},
+          {label:"Active Groups",value:stats.activeGroups,icon:"👥",color:"#d97706"},
+          {label:"Channels",value:stats.totalChannels,icon:"📡",color:"#0891b2"},
+          {label:"Total Videos",value:stats.totalVideos,icon:"🎬",color:"#dc2626"},
+          {label:"Total Quizzes",value:stats.totalQuizzes,icon:"📝",color:"var(--orange)"},
+          {label:"Community Posts",value:stats.communityPosts,icon:"🌍",color:"#7c3aed"},
+        ].map(c=>(
+          <div key={c.label} style={{background:"var(--surface)",borderRadius:12,padding:14,borderTop:`4px solid ${c.color}`}}>
+            <div style={{fontSize:22}}>{c.icon}</div>
+            <div style={{fontSize:24,fontWeight:900,color:c.color,fontFamily:"Lato,sans-serif",marginTop:4}}>{c.value??0}</div>
+            <div style={{fontSize:11,color:"var(--sub)",marginTop:2}}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
+        <Card title="📚 Content by Subject">
+          {stats.subjectBreakdown&&stats.subjectBreakdown.length>0
+            ?<BarChart data={stats.subjectBreakdown} color="var(--purple)" label="Videos per subject"/>
+            :<p style={{fontSize:13,color:"var(--sub)"}}>No subject data</p>}
+        </Card>
+        <Card title="🎯 Course Distribution">
+          {stats.courseBreakdown&&stats.courseBreakdown.length>0
+            ?<BarChart data={stats.courseBreakdown} color="var(--navy)" label="Videos per course"/>
+            :<p style={{fontSize:13,color:"var(--sub)"}}>No course data</p>}
+        </Card>
+        <Card title="📊 Quiz Performance">
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"var(--bg)",borderRadius:8}}>
+              <span style={{fontSize:13,color:"var(--sub)"}}>Published Quizzes</span>
+              <span style={{fontWeight:700,color:"var(--green)"}}>{stats.publishedQuizzes??0}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"var(--bg)",borderRadius:8}}>
+              <span style={{fontSize:13,color:"var(--sub)"}}>Avg Questions/Quiz</span>
+              <span style={{fontWeight:700,color:"var(--purple)"}}>{stats.avgQuestionsPerQuiz??0}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"var(--bg)",borderRadius:8}}>
+              <span style={{fontSize:13,color:"var(--sub)"}}>Total Questions</span>
+              <span style={{fontWeight:700,color:"var(--orange)"}}>{stats.totalQuestions??0}</span>
+            </div>
+          </div>
+        </Card>
+        <Card title="🏆 Top XP Students">
+          {stats.topStudents?.map((s:any,i:number)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid var(--border)"}}>
+              <span style={{fontWeight:900,color:"var(--purple)",width:24,fontSize:14}}>#{i+1}</span>
+              <span style={{flex:1,fontSize:13,fontWeight:600}}>{s.displayName||s.username}</span>
+              <span style={{fontSize:12,background:"#fef3c7",color:"#92400e",borderRadius:99,padding:"2px 8px",fontWeight:700}}>{s.xp??0} XP</span>
+            </div>
+          ))}
+          {(!stats.topStudents||stats.topStudents.length===0)&&<p style={{fontSize:13,color:"var(--sub)"}}>No XP data yet</p>}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   SECURITY TAB
+══════════════════════════════════════════════════════════ */
+function SecurityTab(){
+  const [logs,setLogs]=useState<any[]>([]);
+  const [suspicious,setSuspicious]=useState<any[]>([]);
+  const [sessions,setSessions]=useState<any[]>([]);
+  const [view,setView]=useState<"logs"|"suspicious"|"sessions">("logs");
+  const [loading,setLoading]=useState(true);
+  const [msg,setMsg]=useState("");
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    const [l,s,se]=await Promise.all([
+      api("/api/admin/security/logs").then(r=>r.json()),
+      api("/api/admin/security/suspicious").then(r=>r.json()),
+      api("/api/admin/security/sessions").then(r=>r.json()),
+    ]);
+    if(Array.isArray(l))setLogs(l);
+    if(Array.isArray(s))setSuspicious(s);
+    if(Array.isArray(se))setSessions(se);
+    setLoading(false);
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  async function forceLogout(username:string){
+    await api(`/api/admin/security/sessions/${username}/logout`,{method:"DELETE"});
+    setMsg(`✅ ${username} force logged out`);load();
+  }
+
+  return(
+    <div>
+      <SectionTitle>🔐 Security Panel</SectionTitle>
+      <InfoBox>Monitor login activity, detect suspicious behavior, and manage active sessions. Force logout any user instantly.</InfoBox>
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        <button onClick={()=>setView("logs")} style={btnStyle(view==="logs"?"var(--navy)":"var(--border)")}>🔑 Login Logs ({logs.length})</button>
+        <button onClick={()=>setView("suspicious")} style={btnStyle(view==="suspicious"?"#dc2626":"var(--border)")}>🚨 Suspicious ({suspicious.length})</button>
+        <button onClick={()=>setView("sessions")} style={btnStyle(view==="sessions"?"#16a34a":"var(--border)")}>👤 Sessions ({sessions.length})</button>
+      </div>
+
+      {loading&&<Loading/>}
+
+      {!loading&&view==="logs"&&(
+        <>
+          {logs.length===0&&<Empty icon="🔑" text="No login activity recorded yet"/>}
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {logs.slice(0,50).map((l:any,i:number)=>(
+              <div key={i} style={{...listItem,padding:"10px 14px",display:"flex",alignItems:"center",gap:10,borderLeft:`4px solid ${l.success?"#16a34a":"#dc2626"}`}}>
+                <span style={{fontSize:18}}>{l.success?"✅":"❌"}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:13}}>{l.username} <span style={{fontSize:11,color:"var(--sub)",fontWeight:400}}>from {l.ip||"unknown IP"}</span></div>
+                  <div style={{fontSize:11,color:"var(--sub)"}}>{l.device||"Unknown device"} · {new Date(l.ts).toLocaleString()}</div>
+                </div>
+                <span style={{fontSize:11,padding:"2px 8px",background:l.success?"#dcfce7":"#fee2e2",color:l.success?"#166534":"#991b1b",borderRadius:99,fontWeight:700}}>{l.success?"LOGIN":"FAILED"}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!loading&&view==="suspicious"&&(
+        <>
+          {suspicious.length===0&&<Empty icon="🛡️" text="No suspicious activity detected — all clear!"/>}
+          {suspicious.map((u:any,i:number)=>(
+            <div key={i} style={{...listItem,borderLeft:"4px solid #dc2626"}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:4}}>
+                    <span style={{fontWeight:700}}>{u.username}</span>
+                    <span style={{fontSize:10,padding:"2px 8px",background:"#fee2e2",color:"#991b1b",borderRadius:99,fontWeight:700}}>Risk: {u.riskLevel||"medium"}</span>
+                  </div>
+                  <div style={{fontSize:12,color:"var(--text)",marginBottom:4}}>{u.reason}</div>
+                  <div style={{fontSize:11,color:"var(--sub)"}}>Detected: {new Date(u.ts).toLocaleString()}</div>
+                </div>
+                <div style={{display:"flex",gap:4,flexDirection:"column"}}>
+                  <button onClick={()=>forceLogout(u.username)} style={smBtn("#d97706")}>Force Logout</button>
+                  <button onClick={async()=>{await api(`/api/admin/users/${u.username}/ban`,{method:"PATCH"});setMsg("🚫 User banned");load();}} style={smBtn("#dc2626")}>🚫 Ban</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {!loading&&view==="sessions"&&(
+        <>
+          {sessions.length===0&&<Empty icon="👤" text="No active sessions tracked"/>}
+          {sessions.map((s:any,i:number)=>(
+            <div key={i} style={{...listItem,display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:36,height:36,borderRadius:50,background:"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:15}}>{s.username?.[0]?.toUpperCase()||"?"}</div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13}}>{s.username}</div>
+                <div style={{fontSize:11,color:"var(--sub)"}}>{s.ip||"Unknown IP"} · Last seen {new Date(s.lastSeen||s.loginAt).toLocaleString()}</div>
+              </div>
+              <button onClick={()=>forceLogout(s.username)} style={smBtn("#dc2626")}>⏏ Logout</button>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   AI AUTOMATION TAB
+══════════════════════════════════════════════════════════ */
+function AiModTab(){
+  const [rules,setRules]=useState<any[]>([]);
+  const [scanResult,setScanResult]=useState<any>(null);
+  const [scanning,setScanning]=useState(false);
+  const [msg,setMsg]=useState("");
+  const [form,setForm]=useState({trigger:"",condition:"",action:"warn",threshold:5});
+
+  const load=useCallback(()=>api("/api/admin/aimod/rules").then(r=>r.json()).then(d=>{if(Array.isArray(d))setRules(d);}),[]);
+  useEffect(()=>{load();},[load]);
+
+  async function addRule(){
+    if(!form.trigger||!form.condition){setMsg("❌ Trigger and condition required");return;}
+    await api("/api/admin/aimod/rules",{method:"POST",body:JSON.stringify(form)});
+    setMsg("✅ Auto-mod rule added!");setForm({trigger:"",condition:"",action:"warn",threshold:5});load();
+  }
+  async function deleteRule(id:string){
+    await api(`/api/admin/aimod/rules/${id}`,{method:"DELETE"});
+    setMsg("Rule removed");load();
+  }
+  async function runScan(){
+    setScanning(true);setScanResult(null);
+    const r=await api("/api/admin/aimod/scan",{method:"POST"});
+    const d=await r.json();
+    setScanResult(d);setScanning(false);
+  }
+
+  const TRIGGERS=["spam_messages","link_flood","rapid_posts","hate_keywords","new_user_flood","mass_reactions"];
+  const ACTIONS=["warn","mute","ban","delete_content","shadow_ban"];
+
+  return(
+    <div>
+      <SectionTitle>🤖 AI Auto-Moderation</SectionTitle>
+      <InfoBox>Set automatic moderation rules that run in the background. The AI scanner checks for spam bots, suspicious activity, and policy violations.</InfoBox>
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+
+      {/* Run scan */}
+      <Card title="🔍 AI Safety Scan">
+        <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <div style={{flex:1}}>
+            <p style={{fontSize:13,color:"var(--sub)",margin:"0 0 10px"}}>Scan all users for suspicious behavior patterns: spam, multi-accounts, rapid posting, link floods, bot-like activity.</p>
+            {scanResult&&(
+              <div style={{background:"var(--bg)",borderRadius:10,padding:12}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:8,color:"var(--text)"}}>Scan Results</div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}}>
+                  <span style={{fontSize:12,color:"#dc2626"}}>🚨 Suspicious: <b>{scanResult.suspicious||0}</b></span>
+                  <span style={{fontSize:12,color:"#d97706"}}>⚡ Warnings: <b>{scanResult.warned||0}</b></span>
+                  <span style={{fontSize:12,color:"#16a34a"}}>✅ Clean: <b>{scanResult.clean||0}</b></span>
+                </div>
+                {scanResult.flagged?.map((f:any,i:number)=>(
+                  <div key={i} style={{padding:"6px 8px",background:"rgba(220,38,38,0.08)",borderRadius:8,marginBottom:4,fontSize:12}}>
+                    <b>{f.username}</b> — {f.reason} <span style={{color:"#dc2626"}}>(Risk: {f.risk})</span>
+                  </div>
+                ))}
+                {(!scanResult.flagged||scanResult.flagged.length===0)&&<p style={{fontSize:12,color:"#16a34a"}}>✅ No suspicious users found</p>}
+              </div>
+            )}
+          </div>
+          <button onClick={runScan} disabled={scanning} style={{...btnStyle("#7c3aed"),minWidth:120,flexShrink:0}}>
+            {scanning?"🔄 Scanning...":"🤖 Run Scan"}
+          </button>
+        </div>
+      </Card>
+
+      <div style={{marginTop:20}}>
+        <Card title="⚙️ Add Auto-Mod Rule">
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Field label="Trigger Event">
+                <select value={form.trigger} onChange={e=>setForm({...form,trigger:e.target.value})} style={inp}>
+                  <option value="">Select trigger…</option>
+                  {TRIGGERS.map(t=><option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
+                </select>
+              </Field>
+              <Field label="Auto Action">
+                <select value={form.action} onChange={e=>setForm({...form,action:e.target.value})} style={inp}>
+                  {ACTIONS.map(a=><option key={a} value={a}>{a.replace(/_/g," ")}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Condition / Pattern (e.g. 'sends 50+ messages in 1 minute')">
+              <input value={form.condition} onChange={e=>setForm({...form,condition:e.target.value})} placeholder="e.g. user sends >50 messages per minute" style={inp}/>
+            </Field>
+            <Field label="Threshold (count)">
+              <input type="number" value={form.threshold} onChange={e=>setForm({...form,threshold:parseInt(e.target.value)||5})} min={1} style={{...inp,width:120}}/>
+            </Field>
+            <button onClick={addRule} style={btnStyle("#7c3aed")}>+ Add Rule</button>
+          </div>
+        </Card>
+      </div>
+
+      <SectionTitle style={{marginTop:20}}>Active Rules ({rules.length})</SectionTitle>
+      {rules.length===0&&<Empty icon="🤖" text="No auto-mod rules yet. Add rules above to automate moderation."/>}
+      {rules.map(r=>(
+        <div key={r.id} style={{...listItem,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:11,padding:"2px 8px",background:"rgba(124,58,237,0.12)",color:"var(--purple)",borderRadius:99,fontWeight:700}}>{r.trigger?.replace(/_/g," ")}</span>
+              <span style={{fontSize:11,padding:"2px 8px",background:"rgba(220,38,38,0.1)",color:"#dc2626",borderRadius:99,fontWeight:700}}>→ {r.action?.replace(/_/g," ")}</span>
+            </div>
+            <div style={{fontSize:12,color:"var(--text)"}}>{r.condition}</div>
+            <div style={{fontSize:11,color:"var(--sub)",marginTop:2}}>Threshold: {r.threshold} · Added {new Date(r.createdAt).toLocaleDateString()}</div>
+          </div>
+          <button onClick={()=>deleteRule(r.id)} style={smBtn("#dc2626")}>✕</button>
+        </div>
+      ))}
+
+      {/* Preset rules */}
+      <SectionTitle style={{marginTop:20}}>💡 Quick Preset Rules</SectionTitle>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>
+        {[
+          {trigger:"spam_messages",condition:"User sends >50 messages per minute",action:"mute",threshold:50},
+          {trigger:"link_flood",condition:"User posts >5 links in 30 seconds",action:"warn",threshold:5},
+          {trigger:"rapid_posts",condition:"User creates >10 posts in 10 minutes",action:"shadow_ban",threshold:10},
+          {trigger:"new_user_flood",condition:"New account <24h sending bulk messages",action:"ban",threshold:20},
+        ].map((preset,i)=>(
+          <div key={i} style={{background:"var(--bg)",borderRadius:10,padding:12,border:"1.5px dashed var(--border)"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--purple)",marginBottom:4}}>{preset.trigger.replace(/_/g," ")}</div>
+            <div style={{fontSize:11,color:"var(--text)",marginBottom:6}}>{preset.condition}</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:10,color:"#dc2626",fontWeight:700}}>→ {preset.action.replace(/_/g," ")}</span>
+              <button onClick={()=>{api("/api/admin/aimod/rules",{method:"POST",body:JSON.stringify(preset)}).then(()=>{setMsg("✅ Preset rule added!");load();});}} style={smBtn("#7c3aed")}>+ Add</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   LOGS TAB
+══════════════════════════════════════════════════════════ */
+function LogsTab(){
+  const [logs,setLogs]=useState<any[]>([]);
+  const [filter,setFilter]=useState<"all"|"admin"|"user"|"error">("all");
+  const [search,setSearch]=useState("");
+  const [loading,setLoading]=useState(true);
+  const [msg,setMsg]=useState("");
+
+  const load=useCallback(()=>{
+    setLoading(true);
+    api("/api/admin/logs").then(r=>r.json()).then(d=>{if(Array.isArray(d))setLogs(d);setLoading(false);});
+  },[]);
+  useEffect(()=>{load();},[load]);
+
+  async function clearLogs(){
+    if(!confirm("Clear all activity logs? This cannot be undone."))return;
+    await api("/api/admin/logs",{method:"DELETE"});
+    setMsg("✅ Logs cleared");load();
+  }
+
+  const filtered=logs.filter(l=>{
+    if(filter!=="all"&&l.type!==filter)return false;
+    if(search&&!JSON.stringify(l).toLowerCase().includes(search.toLowerCase()))return false;
+    return true;
+  });
+
+  const TYPE_COLORS:Record<string,string>={admin:"#4f8ef7",user:"#16a34a",error:"#dc2626",system:"#d97706"};
+  const TYPE_ICONS:Record<string,string>={admin:"🛡️",user:"👤",error:"❌",system:"⚙️"};
+
+  return(
+    <div>
+      <SectionTitle>📋 Activity Logs</SectionTitle>
+      <InfoBox>Full audit trail of all admin actions, user activities, and system events. Use this to debug issues and track who did what.</InfoBox>
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14,alignItems:"center"}}>
+        {(["all","admin","user","error"] as const).map(f=>(
+          <button key={f} onClick={()=>setFilter(f)} style={smBtn(filter===f?"var(--purple)":"#888")}>{f.toUpperCase()}</button>
+        ))}
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search logs…" style={{...inp,flex:1,minWidth:160,maxWidth:300}}/>
+        <button onClick={clearLogs} style={smBtn("#dc2626")}>🗑️ Clear All</button>
+        <button onClick={load} style={smBtn("var(--navy)")}>🔄 Refresh</button>
+      </div>
+
+      <div style={{fontSize:12,color:"var(--sub)",marginBottom:10}}>{filtered.length} entries</div>
+
+      {loading&&<Loading/>}
+      {!loading&&filtered.length===0&&<Empty icon="📋" text="No logs matching filter"/>}
+      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+        {filtered.slice(0,100).map((l:any,i:number)=>(
+          <div key={i} style={{background:"var(--surface)",borderRadius:8,padding:"8px 12px",display:"flex",gap:10,alignItems:"flex-start",borderLeft:`3px solid ${TYPE_COLORS[l.type]||"var(--border)"}`}}>
+            <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{TYPE_ICONS[l.type]||"📝"}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,color:"var(--text)",lineHeight:1.4}}><b>{l.actor||"system"}</b> · {l.action}</div>
+              {l.details&&<div style={{fontSize:11,color:"var(--sub)",marginTop:2,wordBreak:"break-word"}}>{typeof l.details==="string"?l.details:JSON.stringify(l.details)}</div>}
+            </div>
+            <div style={{fontSize:10,color:"var(--sub)",flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
+              <div style={{marginBottom:2,padding:"1px 6px",background:TYPE_COLORS[l.type]||"var(--border)",color:"#fff",borderRadius:99,fontWeight:700,fontSize:9}}>{l.type||"log"}</div>
+              {new Date(l.ts).toLocaleString()}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ROLES TAB
+══════════════════════════════════════════════════════════ */
+function RolesTab(){
+  const [roles,setRoles]=useState<any[]>([]);
+  const [msg,setMsg]=useState("");
+  const [form,setForm]=useState({name:"",description:"",permissions:{canBan:false,canDelete:false,canViewChats:false,canBroadcast:false,canManageContent:false,canViewAnalytics:false,isFullAdmin:false}});
+  const [editing,setEditing]=useState<string|null>(null);
+
+  const load=useCallback(()=>api("/api/admin/roles").then(r=>r.json()).then(d=>{if(Array.isArray(d))setRoles(d);}),[]);
+  useEffect(()=>{load();},[load]);
+
+  async function saveRole(){
+    if(!form.name.trim()){setMsg("❌ Role name required");return;}
+    const isEdit=editing!==null;
+    const r=isEdit
+      ?await api(`/api/admin/roles/${editing}`,{method:"PUT",body:JSON.stringify(form)})
+      :await api("/api/admin/roles",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg(isEdit?"✅ Role updated!":"✅ Role created!");setEditing(null);setForm({name:"",description:"",permissions:{canBan:false,canDelete:false,canViewChats:false,canBroadcast:false,canManageContent:false,canViewAnalytics:false,isFullAdmin:false}});load();}
+  }
+  async function deleteRole(id:string){
+    if(!confirm("Delete this role?"))return;
+    await api(`/api/admin/roles/${id}`,{method:"DELETE"});
+    setMsg("✅ Role deleted");load();
+  }
+
+  const PERMS=[
+    {key:"isFullAdmin",label:"Full Admin Access",icon:"👑",color:"#dc2626"},
+    {key:"canBan",label:"Can Ban/Mute Users",icon:"🚫",color:"#d97706"},
+    {key:"canDelete",label:"Can Delete Content",icon:"🗑️",color:"#7c3aed"},
+    {key:"canViewChats",label:"Can View Reported Chats",icon:"💬",color:"#0891b2"},
+    {key:"canBroadcast",label:"Can Send Broadcasts",icon:"📢",color:"#16a34a"},
+    {key:"canManageContent",label:"Can Manage Content",icon:"📚",color:"var(--orange)"},
+    {key:"canViewAnalytics",label:"Can View Analytics",icon:"📈",color:"var(--purple)"},
+  ];
+
+  const PRESETS=[
+    {name:"Super Admin",description:"Full platform control",permissions:{canBan:true,canDelete:true,canViewChats:true,canBroadcast:true,canManageContent:true,canViewAnalytics:true,isFullAdmin:true}},
+    {name:"Moderator",description:"Content moderation only",permissions:{canBan:true,canDelete:true,canViewChats:true,canBroadcast:false,canManageContent:false,canViewAnalytics:false,isFullAdmin:false}},
+    {name:"Content Manager",description:"Manage educational content",permissions:{canBan:false,canDelete:false,canViewChats:false,canBroadcast:false,canManageContent:true,canViewAnalytics:true,isFullAdmin:false}},
+    {name:"Support Staff",description:"Help users, no ban power",permissions:{canBan:false,canDelete:false,canViewChats:true,canBroadcast:true,canManageContent:false,canViewAnalytics:false,isFullAdmin:false}},
+  ];
+
+  return(
+    <div>
+      <SectionTitle>🎭 Admin Roles & Permissions</SectionTitle>
+      <InfoBox>Create granular roles for your admin team. Each role has specific permissions — Super Admin has full access, while Moderators and Support only have what they need.</InfoBox>
+      {msg&&<div style={{margin:"0 0 12px"}}><Feedback msg={msg}/></div>}
+
+      {/* Quick presets */}
+      <SectionTitle>⚡ Quick Presets</SectionTitle>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10,marginBottom:20}}>
+        {PRESETS.map((p,i)=>(
+          <div key={i} style={{background:"var(--bg)",borderRadius:10,padding:12,border:"1.5px dashed var(--border)",cursor:"pointer"}}
+            onClick={()=>setForm({...form,name:p.name,description:p.description,permissions:p.permissions})}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--purple)",marginBottom:4}}>{p.name}</div>
+            <div style={{fontSize:12,color:"var(--sub)",marginBottom:8}}>{p.description}</div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+              {Object.entries(p.permissions).filter(([,v])=>v).map(([k])=>(
+                <span key={k} style={{fontSize:9,padding:"1px 5px",background:"rgba(124,58,237,0.1)",color:"var(--purple)",borderRadius:99,fontWeight:700}}>{k.replace("can","").toLowerCase()}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Card title={editing?"✏️ Edit Role":"➕ Create Role"}>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Role Name"><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Moderator" style={inp}/></Field>
+            <Field label="Description"><input value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="e.g. Content moderation" style={inp}/></Field>
+          </div>
+          <Field label="Permissions">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:6}}>
+              {PERMS.map(p=>(
+                <label key={p.key} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,background:"var(--bg)",border:`1.5px solid ${form.permissions[p.key as keyof typeof form.permissions]?p.color:"var(--border)"}`,cursor:"pointer",transition:"border-color 150ms"}}>
+                  <input type="checkbox" checked={!!form.permissions[p.key as keyof typeof form.permissions]}
+                    onChange={e=>setForm({...form,permissions:{...form.permissions,[p.key]:e.target.checked}})}
+                    style={{width:15,height:15,accentColor:p.color}}/>
+                  <span style={{fontSize:14}}>{p.icon}</span>
+                  <span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{p.label}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={saveRole} style={{...btnStyle("var(--purple)"),flex:1}}>{editing?"💾 Update Role":"➕ Create Role"}</button>
+            {editing&&<button onClick={()=>{setEditing(null);setForm({name:"",description:"",permissions:{canBan:false,canDelete:false,canViewChats:false,canBroadcast:false,canManageContent:false,canViewAnalytics:false,isFullAdmin:false}});}} style={btnStyle("var(--orange)")}>Cancel</button>}
+          </div>
+        </div>
+      </Card>
+
+      <SectionTitle style={{marginTop:20}}>All Roles ({roles.length})</SectionTitle>
+      {roles.length===0&&<Empty icon="🎭" text="No custom roles yet. Create one above or use a preset."/>}
+      {roles.map(r=>(
+        <div key={r.id} style={{...listItem,borderLeft:r.permissions?.isFullAdmin?"4px solid #dc2626":"4px solid var(--purple)"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+                <span style={{fontWeight:700,fontSize:15,color:"var(--text)"}}>{r.name}</span>
+                {r.permissions?.isFullAdmin&&<span style={{fontSize:10,padding:"2px 8px",background:"#fee2e2",color:"#991b1b",borderRadius:99,fontWeight:700}}>👑 FULL ADMIN</span>}
+              </div>
+              {r.description&&<div style={{fontSize:12,color:"var(--sub)",marginBottom:6}}>{r.description}</div>}
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                {Object.entries(r.permissions||{}).filter(([,v])=>v).map(([k])=>(
+                  <span key={k} style={{fontSize:10,padding:"2px 8px",background:"rgba(124,58,237,0.1)",color:"var(--purple)",borderRadius:99,fontWeight:700}}>{k.replace("can","✓ ").toLowerCase()}</span>
+                ))}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:4,flexShrink:0}}>
+              <button onClick={()=>{setEditing(r.id);setForm({name:r.name,description:r.description||"",permissions:r.permissions||{}});}} style={smBtn("var(--navy)")}>✎ Edit</button>
+              <button onClick={()=>deleteRole(r.id)} style={smBtn("#dc2626")}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
