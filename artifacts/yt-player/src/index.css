@@ -2187,3 +2187,85 @@ input, button, select, textarea, label {
 /* Eye-theme overrides */
 .eye-theme .fractal-intro-card,.eye-theme .why-seed-card,.eye-theme .why-node,.eye-theme .dna-input-card,.eye-theme .dna-question-card,.eye-theme .spore-create-card,.eye-theme .spore-card { background:#1e1c14; }
 .eye-theme .fractal-tabs,.eye-theme .why-answer-panel { background:#1e1c14; }
+
+/* ═══════════════════════════════════════════
+   TYPING INDICATOR ANIMATION
+═══════════════════════════════════════════ */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30%           { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════
+   CHANNEL / EXPLORE / SOCIAL UTILITIES
+═══════════════════════════════════════════ */
+.rr-pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(108,127,255,0.12);
+  color: var(--purple);
+  display: inline-block;
+}
+.rr-card {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.rr-tag {
+  cursor: pointer;
+  color: var(--purple);
+  font-weight: 700;
+}
+.rr-mention {
+  cursor: pointer;
+  color: #0ea5e9;
+  font-weight: 700;
+}
+.rr-hashtag-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rr-hashtag-btn.active {
+  border-color: var(--purple);
+  background: rgba(108,127,255,0.12);
+  color: var(--purple);
+}
+.rr-audience-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--sub);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rr-bookmark-btn {
+  padding: 9px 0;
+  flex: 1;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--sub);
+  font-weight: 600;
+  font-size: 14px;
+}
+.rr-bookmark-btn.active { color: #f59e0b; }

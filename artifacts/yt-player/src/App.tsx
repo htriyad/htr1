@@ -34,6 +34,8 @@ import FocusRoom from "./pages/FocusRoom";
 import StudyRoom from "./pages/StudyRoom";
 import Community from "./pages/Community";
 import Messages from "./pages/Messages";
+import Channels from "./pages/Channels";
+import Explore from "./pages/Explore";
 import ModLogin from "./pages/ModLogin";
 import ModPanel from "./pages/ModPanel";
 import FloatingMusic from "./components/FloatingMusic";
@@ -235,6 +237,8 @@ export default function App() {
         <Route path="/community"         component={Community} />
         <Route path="/messages/:threadId" component={Messages} />
         <Route path="/messages"          component={Messages} />
+        <Route path="/channels"          component={Channels} />
+        <Route path="/explore"           component={Explore} />
         <Route path="/mod-login"         component={ModLogin} />
         <Route path="/mod"               component={ModPanel} />
         <Route path="/admin"           component={Admin} />

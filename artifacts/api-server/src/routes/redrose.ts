@@ -2418,5 +2418,558 @@ router.delete("/calls/:id",userAuth,(req:any,res)=>{
   res.json({ok:true});
 });
 
+/* ══════════════════════════════════════════════════════════
+   ONLINE STATUS & TYPING INDICATORS
+══════════════════════════════════════════════════════════ */
+router.post("/online",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const online=rd<Record<string,number>>("online.json",{});
+  online[me]=Date.now(); wr("online.json",online);
+  res.json({ok:true});
+});
+router.get("/online",(_req,res)=>{
+  const online=rd<Record<string,number>>("online.json",{});
+  const now=Date.now(); const result:Record<string,number>={};
+  for(const[u,ts] of Object.entries(online)){if(now-ts<120000)result[u]=ts;}
+  res.json(result);
+});
+router.post("/dm/typing",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{context}=req.body||{};
+  if(!context)return res.status(400).json({error:"context required"});
+  const typing=rd<Record<string,Record<string,number>>>("typing.json",{});
+  if(!typing[context])typing[context]={};
+  typing[context][me]=Date.now(); wr("typing.json",typing);
+  res.json({ok:true});
+});
+router.delete("/dm/typing",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{context}=req.body||{};
+  if(!context)return res.status(400).json({error:"context required"});
+  const typing=rd<Record<string,Record<string,number>>>("typing.json",{});
+  if(typing[context])delete typing[context][me];
+  wr("typing.json",typing); res.json({ok:true});
+});
+router.get("/dm/typing/:context",(_req:any,res)=>{
+  const typing=rd<Record<string,Record<string,number>>>("typing.json",{});
+  const ctx=typing[_req.params.context]||{};
+  const now=Date.now();
+  const active=Object.entries(ctx).filter(([,ts])=>now-(ts as number)<4000).map(([u])=>u);
+  res.json(active);
+});
+
+/* ══════════════════════════════════════════════════════════
+   ENHANCED DM (reactions, delete, read receipts, polls)
+══════════════════════════════════════════════════════════ */
+router.post("/dm/threads/:id/messages/:msgId/react",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{emoji}=req.body||{};
+  const t=getThreads().find(x=>x.id===req.params.id);
+  if(!t||!t.participants.includes(me))return res.status(403).json({error:"Forbidden"});
+  const msgs=getDMMessages(req.params.id) as any[];
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!msgs[i].reactions)msgs[i].reactions={};
+  if(!msgs[i].reactions[emoji])msgs[i].reactions[emoji]=[];
+  const idx=msgs[i].reactions[emoji].indexOf(me);
+  if(idx>=0)msgs[i].reactions[emoji].splice(idx,1);
+  else msgs[i].reactions[emoji].push(me);
+  saveDMMessages(req.params.id,msgs); res.json(msgs[i].reactions);
+});
+router.delete("/dm/threads/:id/messages/:msgId",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{forAll}=req.body||{};
+  const t=getThreads().find(x=>x.id===req.params.id);
+  if(!t||!t.participants.includes(me))return res.status(403).json({error:"Forbidden"});
+  const msgs=getDMMessages(req.params.id) as any[];
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(forAll&&msgs[i].author===me){msgs[i].text="🚫 This message was deleted";delete msgs[i].imageData;delete msgs[i].audioData;delete msgs[i].fileData;msgs[i].deleted=true;}
+  else{if(!msgs[i].deletedFor)msgs[i].deletedFor=[];msgs[i].deletedFor.push(me);}
+  saveDMMessages(req.params.id,msgs); res.json({ok:true});
+});
+router.post("/dm/threads/:id/read",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const t=getThreads().find(x=>x.id===req.params.id);
+  if(!t||!t.participants.includes(me))return res.status(403).json({error:"Forbidden"});
+  const msgs=getDMMessages(req.params.id) as any[];
+  msgs.forEach(m=>{if(!m.readBy)m.readBy=[];if(!m.readBy.includes(me))m.readBy.push(me);});
+  saveDMMessages(req.params.id,msgs); res.json({ok:true});
+});
+router.post("/dm/threads/:id/messages/:msgId/vote",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{optionIndex}=req.body||{};
+  const msgs=getDMMessages(req.params.id) as any[];
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0||!msgs[i].poll)return res.status(404).json({error:"Not found"});
+  const poll=msgs[i].poll;
+  if(!poll.allowMultiple)poll.options.forEach((o:any)=>{o.votes=(o.votes||[]).filter((v:string)=>v!==me);});
+  const opt=poll.options[optionIndex];
+  if(!opt)return res.status(400).json({error:"Invalid option"});
+  if(!opt.votes)opt.votes=[];
+  const vi=opt.votes.indexOf(me);
+  if(vi>=0)opt.votes.splice(vi,1);else opt.votes.push(me);
+  msgs[i].poll=poll; saveDMMessages(req.params.id,msgs); res.json(poll);
+});
+router.patch("/dm/threads/:id/pinned",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const threads=getThreads();
+  const i=threads.findIndex(x=>x.id===req.params.id);
+  if(i<0||!threads[i].participants.includes(me))return res.status(403).json({error:"Forbidden"});
+  (threads[i] as any).pinned=!(threads[i] as any).pinned;
+  saveThreads(threads); res.json({pinned:(threads[i] as any).pinned});
+});
+
+/* ══════════════════════════════════════════════════════════
+   GROUP CHATS
+══════════════════════════════════════════════════════════ */
+function getGroups():any[]{return rd<any[]>("dm-groups.json",[]);}
+function saveGroups(g:any[]){wr("dm-groups.json",g);}
+function getGroupMsgs(gid:string):any[]{return rd<any[]>(`dm-group-${gid}.json`,[]);}
+function saveGroupMsgs(gid:string,msgs:any[]){wr(`dm-group-${gid}.json`,msgs.slice(-1000));}
+
+router.get("/groups",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  res.json(getGroups().filter(g=>g.members.includes(me)).sort((a:any,b:any)=>(b.lastAt||b.createdAt).localeCompare(a.lastAt||a.createdAt)));
+});
+router.post("/groups",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{name,members,description}=req.body||{};
+  if(!name?.trim())return res.status(400).json({error:"name required"});
+  const allMembers=Array.from(new Set([me,...(members||[])]));
+  const group={id:crypto.randomUUID(),name:String(name).trim(),description:String(description||""),
+    members:allMembers,admins:[me],createdBy:me,createdAt:new Date().toISOString(),
+    lastMsg:null,lastAt:null,imageData:null,pinned:false};
+  const groups=getGroups();groups.push(group);saveGroups(groups);
+  const msgs=getGroupMsgs(group.id);
+  msgs.push({id:crypto.randomUUID(),groupId:group.id,author:"system",text:`${me} created the group "${name}"`,type:"system",ts:new Date().toISOString(),reactions:{},readBy:[],deletedFor:[]});
+  saveGroupMsgs(group.id,msgs);
+  res.json(group);
+});
+router.get("/groups/:id",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const group=getGroups().find(g=>g.id===req.params.id);
+  if(!group)return res.status(404).json({error:"Not found"});
+  if(!group.members.includes(me))return res.status(403).json({error:"Not a member"});
+  res.json(group);
+});
+router.patch("/groups/:id",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const groups=getGroups();
+  const i=groups.findIndex(g=>g.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!groups[i].admins.includes(me))return res.status(403).json({error:"Not admin"});
+  const{name,description,imageData}=req.body||{};
+  if(name)groups[i].name=String(name).trim();
+  if(description!==undefined)groups[i].description=String(description);
+  if(imageData!==undefined)groups[i].imageData=imageData;
+  saveGroups(groups); res.json(groups[i]);
+});
+router.post("/groups/:id/members",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const groups=getGroups();
+  const i=groups.findIndex(g=>g.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!groups[i].admins.includes(me))return res.status(403).json({error:"Not admin"});
+  const{username}=req.body||{};
+  if(!username||groups[i].members.includes(username))return res.json(groups[i]);
+  groups[i].members.push(username); saveGroups(groups);
+  const msgs=getGroupMsgs(req.params.id);
+  msgs.push({id:crypto.randomUUID(),groupId:req.params.id,author:"system",text:`${me} added ${username}`,type:"system",ts:new Date().toISOString(),reactions:{},readBy:[],deletedFor:[]});
+  saveGroupMsgs(req.params.id,msgs); res.json(groups[i]);
+});
+router.delete("/groups/:id/members/:username",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const groups=getGroups();
+  const i=groups.findIndex(g=>g.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!groups[i].admins.includes(me)&&me!==req.params.username)return res.status(403).json({error:"Forbidden"});
+  groups[i].members=groups[i].members.filter((m:string)=>m!==req.params.username);
+  groups[i].admins=groups[i].admins.filter((m:string)=>m!==req.params.username);
+  saveGroups(groups); res.json({ok:true});
+});
+router.get("/groups/:id/messages",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const group=getGroups().find(g=>g.id===req.params.id);
+  if(!group||!group.members.includes(me))return res.status(403).json({error:"Not a member"});
+  const since=(req.query as any).since;
+  let msgs=getGroupMsgs(req.params.id);
+  if(since)msgs=msgs.filter(m=>m.ts>since);
+  res.json(msgs.slice(-200));
+});
+router.post("/groups/:id/messages",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const groups=getGroups();
+  const gi=groups.findIndex(g=>g.id===req.params.id);
+  if(gi<0)return res.status(404).json({error:"Not found"});
+  if(!groups[gi].members.includes(me))return res.status(403).json({error:"Not a member"});
+  const{text,audioData,imageData,fileData,fileName,replyTo,forwardedFrom,poll,sticker}=req.body||{};
+  const msg={id:crypto.randomUUID(),groupId:req.params.id,author:me,
+    text:text?String(text).slice(0,5000):undefined,
+    audioData:audioData?String(audioData).slice(0,8_000_000):undefined,
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    fileData:fileData?String(fileData).slice(0,20_000_000):undefined,
+    fileName:fileName?String(fileName).slice(0,200):undefined,
+    replyTo,forwardedFrom,poll:poll||undefined,sticker:sticker||undefined,
+    reactions:{},deletedFor:[],readBy:[me],ts:new Date().toISOString()};
+  const msgs=getGroupMsgs(req.params.id);msgs.push(msg);
+  saveGroupMsgs(req.params.id,msgs);
+  groups[gi].lastMsg=sticker||text||fileName||"📎";groups[gi].lastAt=msg.ts;
+  saveGroups(groups); res.json(msg);
+});
+router.post("/groups/:id/messages/:msgId/react",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{emoji}=req.body||{};
+  const msgs=getGroupMsgs(req.params.id);
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!msgs[i].reactions)msgs[i].reactions={};
+  if(!msgs[i].reactions[emoji])msgs[i].reactions[emoji]=[];
+  const idx=msgs[i].reactions[emoji].indexOf(me);
+  if(idx>=0)msgs[i].reactions[emoji].splice(idx,1);else msgs[i].reactions[emoji].push(me);
+  saveGroupMsgs(req.params.id,msgs); res.json(msgs[i].reactions);
+});
+router.post("/groups/:id/read",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const msgs=getGroupMsgs(req.params.id);
+  msgs.forEach(m=>{if(!m.readBy)m.readBy=[];if(!m.readBy.includes(me))m.readBy.push(me);});
+  saveGroupMsgs(req.params.id,msgs); res.json({ok:true});
+});
+router.delete("/groups/:id/messages/:msgId",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{forAll}=req.body||{};
+  const msgs=getGroupMsgs(req.params.id);
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(forAll&&msgs[i].author===me){msgs[i].text="🚫 This message was deleted";delete msgs[i].imageData;delete msgs[i].audioData;delete msgs[i].fileData;msgs[i].deleted=true;}
+  else{if(!msgs[i].deletedFor)msgs[i].deletedFor=[];msgs[i].deletedFor.push(me);}
+  saveGroupMsgs(req.params.id,msgs); res.json({ok:true});
+});
+router.patch("/groups/:id/messages/:msgId/pin",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const group=getGroups().find(g=>g.id===req.params.id);
+  if(!group||!group.admins.includes(me))return res.status(403).json({error:"Not admin"});
+  const msgs=getGroupMsgs(req.params.id);
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  msgs[i].pinned=!msgs[i].pinned;saveGroupMsgs(req.params.id,msgs);
+  res.json({ok:true,pinned:msgs[i].pinned});
+});
+router.post("/groups/:id/messages/:msgId/vote",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{optionIndex}=req.body||{};
+  const msgs=getGroupMsgs(req.params.id);
+  const i=msgs.findIndex(m=>m.id===req.params.msgId);
+  if(i<0||!msgs[i].poll)return res.status(404).json({error:"Not found"});
+  const poll=msgs[i].poll;
+  if(!poll.allowMultiple)poll.options.forEach((o:any)=>{o.votes=(o.votes||[]).filter((v:string)=>v!==me);});
+  const opt=poll.options[optionIndex];
+  if(!opt)return res.status(400).json({error:"Invalid option"});
+  if(!opt.votes)opt.votes=[];
+  const vi=opt.votes.indexOf(me);
+  if(vi>=0)opt.votes.splice(vi,1);else opt.votes.push(me);
+  msgs[i].poll=poll;saveGroupMsgs(req.params.id,msgs); res.json(poll);
+});
+
+/* ══════════════════════════════════════════════════════════
+   CHANNELS (Telegram-style broadcast)
+══════════════════════════════════════════════════════════ */
+function getChannels():any[]{return rd<any[]>("channels.json",[]);}
+function saveChannels(c:any[]){wr("channels.json",c);}
+function getChannelPosts(cid:string):any[]{return rd<any[]>(`channel-${cid}.json`,[]);}
+function saveChannelPosts(cid:string,posts:any[]){wr(`channel-${cid}.json`,posts.slice(-500));}
+
+router.get("/channels",(_req,res)=>{
+  res.json(getChannels().sort((a:any,b:any)=>(b.createdAt||"").localeCompare(a.createdAt||"")));
+});
+router.post("/channels",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{name,description,category}=req.body||{};
+  if(!name?.trim())return res.status(400).json({error:"name required"});
+  const ch={id:crypto.randomUUID(),name:String(name).trim(),description:String(description||""),
+    category:String(category||"General"),owner:me,admins:[me],subscribers:[me],
+    createdAt:new Date().toISOString(),postCount:0,imageData:null};
+  const channels=getChannels();channels.push(ch);saveChannels(channels);
+  res.json(ch);
+});
+router.get("/channels/:id",(_req,res)=>{
+  const ch=getChannels().find(c=>c.id===_req.params.id);
+  if(!ch)return res.status(404).json({error:"Not found"});
+  res.json({...ch,posts:getChannelPosts(_req.params.id).slice(-50)});
+});
+router.patch("/channels/:id",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const channels=getChannels();
+  const i=channels.findIndex(c=>c.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!channels[i].admins.includes(me))return res.status(403).json({error:"Not admin"});
+  const{name,description,imageData}=req.body||{};
+  if(name)channels[i].name=String(name).trim();
+  if(description!==undefined)channels[i].description=String(description);
+  if(imageData!==undefined)channels[i].imageData=imageData;
+  saveChannels(channels); res.json(channels[i]);
+});
+router.post("/channels/:id/subscribe",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const channels=getChannels();
+  const i=channels.findIndex(c=>c.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  const idx=channels[i].subscribers.indexOf(me);
+  if(idx>=0)channels[i].subscribers.splice(idx,1);else channels[i].subscribers.push(me);
+  saveChannels(channels);
+  res.json({subscribed:channels[i].subscribers.includes(me),count:channels[i].subscribers.length});
+});
+router.get("/channels/:id/posts",(_req,res)=>{
+  const since=(_req.query as any).since;
+  let posts=getChannelPosts(_req.params.id);
+  if(since)posts=posts.filter(p=>p.ts>since);
+  res.json(posts.slice(-100));
+});
+router.post("/channels/:id/posts",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const channels=getChannels();
+  const i=channels.findIndex(c=>c.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!channels[i].admins.includes(me))return res.status(403).json({error:"Not admin"});
+  const{text,imageData,fileData,fileName,poll}=req.body||{};
+  if(!text?.trim()&&!imageData&&!fileData)return res.status(400).json({error:"Content required"});
+  const post={id:crypto.randomUUID(),channelId:req.params.id,author:me,
+    text:text?String(text).slice(0,5000):undefined,
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    fileData:fileData?String(fileData).slice(0,20_000_000):undefined,
+    fileName:fileName?String(fileName).slice(0,200):undefined,
+    poll:poll||undefined,reactions:{},views:[me],ts:new Date().toISOString()};
+  const posts=getChannelPosts(req.params.id);posts.unshift(post);
+  saveChannelPosts(req.params.id,posts);
+  channels[i].postCount=(channels[i].postCount||0)+1;saveChannels(channels);
+  res.json(post);
+});
+router.post("/channels/:id/posts/:postId/react",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{emoji}=req.body||{};
+  const posts=getChannelPosts(req.params.id);
+  const i=posts.findIndex(p=>p.id===req.params.postId);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!posts[i].reactions)posts[i].reactions={};
+  if(!posts[i].reactions[emoji])posts[i].reactions[emoji]=[];
+  const idx=posts[i].reactions[emoji].indexOf(me);
+  if(idx>=0)posts[i].reactions[emoji].splice(idx,1);else posts[i].reactions[emoji].push(me);
+  if(!posts[i].views.includes(me))posts[i].views.push(me);
+  saveChannelPosts(req.params.id,posts); res.json(posts[i].reactions);
+});
+
+/* ══════════════════════════════════════════════════════════
+   SOCIAL PROFILES & FOLLOW SYSTEM
+══════════════════════════════════════════════════════════ */
+function getSocialProfiles():any[]{return rd<any[]>("social-profiles.json",[]);}
+function getFollows():any[]{return rd<any[]>("social-follows.json",[]);}
+function saveFollows(f:any[]){wr("social-follows.json",f);}
+
+router.get("/social/profile/:username",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const profiles=getSocialProfiles();
+  const profile=profiles.find(p=>p.username===req.params.username)||{username:req.params.username,createdAt:new Date().toISOString()};
+  const follows=getFollows();
+  const followers=follows.filter((f:any)=>f.following===req.params.username).length;
+  const following=follows.filter((f:any)=>f.follower===req.params.username).length;
+  const isFollowing=follows.some((f:any)=>f.follower===me&&f.following===req.params.username);
+  const posts=getPosts().filter(p=>p.author===req.params.username).slice(0,20);
+  res.json({...profile,followers,following,isFollowing,posts});
+});
+router.patch("/social/profile",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const profiles=getSocialProfiles();
+  const i=profiles.findIndex(p=>p.username===me);
+  const existing=i>=0?profiles[i]:{username:me,createdAt:new Date().toISOString()};
+  const{bio,profilePhoto,coverPhoto,links,isPrivate,website,location}=req.body||{};
+  if(bio!==undefined)existing.bio=String(bio).slice(0,500);
+  if(profilePhoto!==undefined)existing.profilePhoto=profilePhoto;
+  if(coverPhoto!==undefined)existing.coverPhoto=coverPhoto;
+  if(links!==undefined)existing.links=Array.isArray(links)?links.slice(0,5):[];
+  if(isPrivate!==undefined)existing.isPrivate=Boolean(isPrivate);
+  if(website!==undefined)existing.website=String(website).slice(0,200);
+  if(location!==undefined)existing.location=String(location).slice(0,100);
+  if(i>=0)profiles[i]=existing;else profiles.push(existing);
+  wr("social-profiles.json",profiles); res.json(existing);
+});
+router.post("/social/follow/:username",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const target=req.params.username;
+  if(me===target)return res.status(400).json({error:"Cannot follow yourself"});
+  const follows=getFollows();
+  const existing=follows.findIndex((f:any)=>f.follower===me&&f.following===target);
+  if(existing>=0){follows.splice(existing,1);saveFollows(follows);return res.json({following:false});}
+  follows.push({follower:me,following:target,createdAt:new Date().toISOString()});
+  saveFollows(follows);
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  notifs.unshift({id:crypto.randomUUID(),title:`👤 ${me} started following you`,body:"",createdAt:new Date().toISOString(),recipients:[target],readBy:[]});
+  wr("notifs.json",notifs.slice(0,300));
+  res.json({following:true});
+});
+router.get("/social/followers/:username",(_req,res)=>{
+  const follows=getFollows();
+  res.json(follows.filter((f:any)=>f.following===_req.params.username).map((f:any)=>f.follower));
+});
+router.get("/social/following/:username",(_req,res)=>{
+  const follows=getFollows();
+  res.json(follows.filter((f:any)=>f.follower===_req.params.username).map((f:any)=>f.following));
+});
+router.get("/social/suggested",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const follows=getFollows();
+  const myFollowing=follows.filter((f:any)=>f.follower===me).map((f:any)=>f.following);
+  const users=rd<any[]>("users.json",[]);
+  const suggested=users.filter(u=>(u.username||u.name)!==me&&!myFollowing.includes(u.username||u.name))
+    .slice(0,12).map(u=>({username:u.username||u.name}));
+  res.json(suggested);
+});
+
+/* ══════════════════════════════════════════════════════════
+   COMMUNITY ENHANCEMENTS (polls, bookmarks, hashtags)
+══════════════════════════════════════════════════════════ */
+router.post("/community/posts/:id/vote",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{optionIndex}=req.body||{};
+  const posts=getPosts() as any[];
+  const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0||!posts[i].poll)return res.status(404).json({error:"Not found"});
+  const poll=posts[i].poll;
+  if(poll.closed)return res.status(400).json({error:"Poll closed"});
+  if(!poll.allowMultiple)poll.options.forEach((o:any)=>{o.votes=(o.votes||[]).filter((v:string)=>v!==me);});
+  const opt=poll.options[optionIndex];
+  if(!opt)return res.status(400).json({error:"Invalid option"});
+  if(!opt.votes)opt.votes=[];
+  const vi=opt.votes.indexOf(me);
+  if(vi>=0)opt.votes.splice(vi,1);else opt.votes.push(me);
+  posts[i].poll=poll;savePosts(posts);
+  res.json({...posts[i],poll});
+});
+router.get("/bookmarks",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const bookmarks=rd<Record<string,string[]>>("bookmarks.json",{});
+  const myBookmarks=bookmarks[me]||[];
+  const posts=getPosts();
+  res.json(posts.filter(p=>myBookmarks.includes(p.id)));
+});
+router.post("/community/posts/:id/bookmark",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const bookmarks=rd<Record<string,string[]>>("bookmarks.json",{});
+  if(!bookmarks[me])bookmarks[me]=[];
+  const idx=bookmarks[me].indexOf(req.params.id);
+  if(idx>=0)bookmarks[me].splice(idx,1);else bookmarks[me].push(req.params.id);
+  wr("bookmarks.json",bookmarks);
+  res.json({bookmarked:bookmarks[me].includes(req.params.id)});
+});
+
+/* Update post creation to support polls, quote posts, audience */
+router.post("/community/posts/enhanced",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{text,imageData,videoUrl,subject,poll,quotePost,audience,type}=req.body||{};
+  if(!text?.trim()&&!imageData&&!videoUrl&&!poll&&!quotePost)return res.status(400).json({error:"Content required"});
+  const post:any={
+    id:crypto.randomUUID(),author:u,
+    text:String(text||"").slice(0,2000),
+    imageData:imageData?String(imageData).slice(0,8_000_000):undefined,
+    videoUrl:videoUrl?String(videoUrl).slice(0,500):undefined,
+    subject:subject?String(subject).slice(0,60):undefined,
+    poll:poll||undefined,quotePost:quotePost||undefined,
+    audience:audience||"public",type:type||"text",
+    createdAt:new Date().toISOString(),reactions:{},comments:[]
+  };
+  const posts=getPosts() as any[];posts.unshift(post);savePosts(posts.slice(0,1000));
+  res.json(post);
+});
+
+/* ══════════════════════════════════════════════════════════
+   EXPLORE / DISCOVERY
+══════════════════════════════════════════════════════════ */
+router.get("/explore/trending",(_req,res)=>{
+  const posts=getPosts() as any[];
+  const tagCounts:Record<string,number>={};
+  posts.forEach(p=>{
+    const tags=(p.text||"").match(/#[\w\u0980-\u09FF]+/g)||[];
+    tags.forEach((t:string)=>{tagCounts[t]=(tagCounts[t]||0)+1;});
+  });
+  const trending=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([tag,count])=>({tag,count}));
+  const popular=posts.slice(0,20).map(p=>({id:p.id,author:p.author,text:(p.text||"").slice(0,100),reactions:Object.values(p.reactions||{}).reduce((s:number,a:any)=>s+a.length,0)}))
+    .sort((a:any,b:any)=>b.reactions-a.reactions).slice(0,10);
+  res.json({trending,popular});
+});
+router.get("/explore/search",(req:any,res)=>{
+  const q=String((req.query as any).q||"").toLowerCase().trim();
+  if(!q)return res.json({posts:[],users:[],channels:[],groups:[]});
+  const posts=(getPosts() as any[]).filter(p=>(p.text||"").toLowerCase().includes(q)||(p.author||"").toLowerCase().includes(q)).slice(0,20);
+  const users=rd<any[]>("users.json",[]).filter(u=>(u.username||u.name||"").toLowerCase().includes(q)).slice(0,10).map(u=>({username:u.username||u.name}));
+  const channels=getChannels().filter(c=>c.name.toLowerCase().includes(q)||c.description?.toLowerCase().includes(q)).slice(0,10);
+  const groups=getGroups().filter(g=>g.name.toLowerCase().includes(g.description?.toLowerCase().includes(q))).slice(0,10);
+  res.json({posts,users,channels,groups});
+});
+
+/* ══════════════════════════════════════════════════════════
+   STORY ENHANCEMENTS
+══════════════════════════════════════════════════════════ */
+router.post("/community/stories/:id/react",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{emoji}=req.body||{};
+  const stories=rd<any[]>("community-stories.json",[]);
+  const i=stories.findIndex(s=>s.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!stories[i].reactions)stories[i].reactions={};
+  if(!stories[i].reactions[emoji])stories[i].reactions[emoji]=[];
+  const idx=stories[i].reactions[emoji].indexOf(me);
+  if(idx>=0)stories[i].reactions[emoji].splice(idx,1);else stories[i].reactions[emoji].push(me);
+  wr("community-stories.json",stories); res.json(stories[i].reactions);
+});
+router.post("/community/stories/:id/reply",userAuth,(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{text}=req.body||{};
+  if(!text?.trim())return res.status(400).json({error:"text required"});
+  const stories=rd<any[]>("community-stories.json",[]);
+  const i=stories.findIndex(s=>s.id===req.params.id);
+  if(i<0)return res.status(404).json({error:"Not found"});
+  if(!stories[i].replies)stories[i].replies=[];
+  const reply={id:crypto.randomUUID(),author:me,text:String(text).slice(0,500),ts:new Date().toISOString()};
+  stories[i].replies.push(reply);
+  wr("community-stories.json",stories);
+  // Notify story author
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  notifs.unshift({id:crypto.randomUUID(),title:`💬 ${me} replied to your story`,body:String(text).slice(0,80),createdAt:new Date().toISOString(),recipients:[stories[i].author],readBy:[]});
+  wr("notifs.json",notifs.slice(0,300));
+  res.json(reply);
+});
+
+/* ══════════════════════════════════════════════════════════
+   AI FEATURES (smart reply, translation)
+══════════════════════════════════════════════════════════ */
+router.post("/ai/smart-reply",userAuth,(req:any,res)=>{
+  const{text,context}=req.body||{};
+  if(!text)return res.status(400).json({error:"text required"});
+  const t=String(text).toLowerCase();
+  let replies:string[]=[];
+  if(t.includes("?"))replies=["আমি জানি না","এটা জানার চেষ্টা করছি","একটু পরে জানাবো","ধন্যবাদ প্রশ্নের জন্য"];
+  else if(t.includes("ধন্যবাদ")||t.includes("thanks"))replies=["স্বাগতম!","কোনো ব্যাপার না 😊","আমার সাহায্য করতে পেরে ভালো লাগলো","যেকোনো সময় বলুন"];
+  else if(t.includes("কেমন")||t.includes("how are"))replies=["ভালো আছি, তুমি?","আলহামদুলিল্লাহ 😊","ভালো! পড়াশোনা কেমন?","ঠিক আছি, ধন্যবাদ"];
+  else if(t.includes("পড়")||t.includes("study")||t.includes("exam"))replies=["শুভকামনা! 📚","কঠোর পরিশ্রম করো 💪","বিশ্বাস রাখো নিজের উপর ⭐","তুমি পারবে! 🔥"];
+  else replies=["👍","ঠিক বলেছো!","হ্যাঁ","বুঝলাম","ধন্যবাদ!","😊"];
+  const extra=context==="education"?["খুব ভালো প্রশ্ন!","এটা আমিও জানতে চাই","শেয়ার করার জন্য ধন্যবাদ"]:[];
+  res.json([...replies,...extra].slice(0,6));
+});
+router.post("/ai/translate",async(req:any,res)=>{
+  const{text,from,to}=req.body||{};
+  if(!text)return res.status(400).json({error:"text required"});
+  // Simple word-based translation for common educational terms
+  const bnToEn:Record<string,string>={
+    "পদার্থবিজ্ঞান":"Physics","রসায়ন":"Chemistry","জীববিজ্ঞান":"Biology",
+    "গণিত":"Mathematics","ইংরেজি":"English","বাংলা":"Bangla",
+    "পরীক্ষা":"Exam","প্রশ্ন":"Question","উত্তর":"Answer",
+    "অধ্যায়":"Chapter","বই":"Book","শিক্ষক":"Teacher","ছাত্র":"Student",
+  };
+  const enToBn:Record<string,string>=Object.fromEntries(Object.entries(bnToEn).map(([k,v])=>[v.toLowerCase(),k]));
+  const dict=from==="bn"?bnToEn:enToBn;
+  let translated=String(text);
+  Object.entries(dict).forEach(([word,tr])=>{translated=translated.replace(new RegExp(word,"gi"),tr);});
+  res.json({original:text,translated,from:from||"auto",to:to||"en"});
+});
+
 export default router;
 
