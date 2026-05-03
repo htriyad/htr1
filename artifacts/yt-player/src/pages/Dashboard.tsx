@@ -30,6 +30,8 @@ interface SearchResult {
   sheets: { id:string; title:string; subject:string; exam:string }[];
   discussions: { id:string; title:string; body:string }[];
 }
+interface ExamDate { id:string; title:string; exam:string; date:string; color:string; }
+interface Gamer    { xp:number; level:number; streak:number; totalExams:number; totalCorrect:number; totalAnswers:number; }
 
 const SIDEBAR_ITEMS = [
   { label: "Dashboard",        icon: "⊞",  path: "/" },
@@ -98,6 +100,14 @@ export default function Dashboard() {
   const searchRef                         = useRef<HTMLDivElement>(null);
   const searchTimer                       = useRef<ReturnType<typeof setTimeout>|null>(null);
   const now                               = useNow();
+  const [examDates, setExamDates]         = useState<ExamDate[]>([]);
+  const [gamer, setGamer]                 = useState<Gamer|null>(null);
+  const [quote, setQuote]                 = useState<{text:string;author:string}|null>(null);
+  const [goalTarget, setGoalTarget]       = useState<number>(()=>Number(localStorage.getItem("rr_daily_goal_q")||20));
+  const [goalDone, setGoalDone]           = useState<number>(()=>Number(localStorage.getItem(`rr_goal_done_${new Date().toDateString()}`)||0));
+  const [quoteVisible, setQuoteVisible]   = useState(true);
+  const [editingGoal, setEditingGoal]     = useState(false);
+  const [goalInput, setGoalInput]         = useState("");
 
   // Load stored challenge state
   useEffect(() => {
@@ -127,6 +137,24 @@ export default function Dashboard() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && d.id) setChallenge(d); })
       .catch(() => {});
+
+    fetch("/api/exam-dates")
+      .then(r=>r.json())
+      .then(d=>{ if(Array.isArray(d)) setExamDates(d); })
+      .catch(()=>{});
+
+    const username = localStorage.getItem("rr_username")||"";
+    if (username) {
+      fetch("/api/gamification/me", { headers:{"x-username":username} })
+        .then(r=>r.json())
+        .then(d=>{ if(d&&(d.level||d.xp>=0)) setGamer(d); })
+        .catch(()=>{});
+    }
+
+    fetch("/api/motivational-quote")
+      .then(r=>r.json())
+      .then(d=>{ if(d&&d.text) setQuote(d); })
+      .catch(()=>{});
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -288,6 +316,78 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* ── QUICK STATS BAR ───────────────────────── */}
+        {gamer !== null && (
+          <div className="dash-stats-bar" onClick={()=>navigate("/analytics")} style={{cursor:"pointer"}}>
+            <div className="dash-stat-chip" style={{borderColor:"#dc2626"}}>
+              <span className="dash-stat-icon">{(gamer.streak||0)>=7?"🔥":"📅"}</span>
+              <span className="dash-stat-val">{gamer.streak||0}</span>
+              <span className="dash-stat-lbl">day streak</span>
+            </div>
+            <div className="dash-stat-chip" style={{borderColor:"#d97706"}}>
+              <span className="dash-stat-icon">⚡</span>
+              <span className="dash-stat-val">{gamer.xp||0}</span>
+              <span className="dash-stat-lbl">XP</span>
+            </div>
+            <div className="dash-stat-chip" style={{borderColor:"var(--green)"}}>
+              <span className="dash-stat-icon">🎯</span>
+              <span className="dash-stat-val">{gamer.totalAnswers>0?Math.round((gamer.totalCorrect/gamer.totalAnswers)*100):0}%</span>
+              <span className="dash-stat-lbl">accuracy</span>
+            </div>
+            <div className="dash-stat-chip" style={{borderColor:"var(--purple)"}}>
+              <span className="dash-stat-icon">📊</span>
+              <span className="dash-stat-val">Lv.{gamer.level||1}</span>
+              <span className="dash-stat-lbl">level</span>
+            </div>
+            <div className="dash-stat-chip" style={{borderColor:"#2563eb"}}>
+              <span className="dash-stat-icon">📝</span>
+              <span className="dash-stat-val">{gamer.totalExams||0}</span>
+              <span className="dash-stat-lbl">exams</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── EXAM COUNTDOWN ROW ────────────────────── */}
+        {examDates.filter(e=>new Date(e.date).getTime()>now).length > 0 && (
+          <div style={{padding:"10px 0 0 14px"}}>
+            <div style={{fontSize:10,fontWeight:800,color:"var(--sub)",letterSpacing:"0.1em",marginBottom:7}}>📅 UPCOMING EXAMS</div>
+            <div style={{display:"flex",gap:8,overflowX:"auto",paddingRight:14,paddingBottom:4}}>
+              {examDates
+                .filter(e=>new Date(e.date).getTime()>now)
+                .sort((a,b)=>new Date(a.date).getTime()-new Date(b.date).getTime())
+                .slice(0,6)
+                .map(e=>{
+                  const ms=new Date(e.date).getTime()-now;
+                  const days=Math.floor(ms/86400000);
+                  const hrs=Math.floor((ms%86400000)/3600000);
+                  const urgent=days<=7;
+                  return (
+                    <div key={e.id} onClick={()=>navigate("/planner")}
+                      style={{flexShrink:0,background:"var(--surface)",borderRadius:12,padding:"10px 14px",border:`2px solid ${e.color||"#dc2626"}`,cursor:"pointer",textAlign:"center",minWidth:90,boxShadow:urgent?`0 2px 12px ${e.color||"#dc2626"}33`:"none"}}>
+                      <div style={{fontSize:10,fontWeight:800,color:e.color||"#dc2626",letterSpacing:"0.07em",marginBottom:3}}>{e.exam}</div>
+                      <div style={{fontSize:22,fontWeight:900,color:"var(--text)",fontFamily:"Lato,sans-serif",lineHeight:1}}>
+                        {days>0?`${days}d`:`${hrs}h`}
+                      </div>
+                      <div style={{fontSize:9,color:"var(--sub)",marginTop:3,maxWidth:80,lineHeight:1.3}}>{e.title.slice(0,18)}</div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {/* ── MOTIVATIONAL QUOTE ────────────────────── */}
+        {quote && quoteVisible && (
+          <div style={{margin:"10px 14px 0",padding:"10px 14px",borderRadius:12,background:"linear-gradient(135deg,rgba(108,127,255,0.08),rgba(79,98,232,0.06))",border:"1px solid rgba(108,127,255,0.18)",display:"flex",gap:10,alignItems:"center"}}>
+            <span style={{fontSize:18,flexShrink:0}}>💬</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:"var(--text)",lineHeight:1.5}}>{quote.text}</div>
+              <div style={{fontSize:10,color:"var(--sub)",marginTop:2}}>— {quote.author}</div>
+            </div>
+            <button onClick={()=>setQuoteVisible(false)} style={{background:"none",border:"none",color:"var(--sub)",cursor:"pointer",fontSize:14,flexShrink:0,padding:0}}>✕</button>
+          </div>
+        )}
+
         {/* ── ANNOUNCEMENTS ─────────────────────────── */}
         {visibleAnnouncements.map(ann => {
           const c = ANNOUNCE_COLORS[ann.type] || ANNOUNCE_COLORS.info;
@@ -388,6 +488,53 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ── STUDY GOAL RING ───────────────────────── */}
+        <div style={{margin:"12px 14px 0",background:"var(--surface)",borderRadius:14,padding:"14px 16px",border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:14}}>
+          {(() => {
+            const pct = Math.min(1, goalTarget>0?goalDone/goalTarget:0);
+            const r=28; const circ=2*Math.PI*r;
+            const done = goalDone>=goalTarget && goalTarget>0;
+            return (
+              <>
+                <div style={{position:"relative",width:70,height:70,flexShrink:0}}>
+                  <svg width={70} height={70} viewBox="0 0 70 70">
+                    <circle cx={35} cy={35} r={r} fill="none" stroke="rgba(108,127,255,0.15)" strokeWidth={7}/>
+                    <circle cx={35} cy={35} r={r} fill="none" stroke={done?"var(--green)":"var(--purple)"} strokeWidth={7}
+                      strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ*(1-pct)}
+                      transform="rotate(-90 35 35)" style={{transition:"stroke-dashoffset 600ms ease"}}/>
+                  </svg>
+                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:done?"var(--green)":"var(--purple)",fontFamily:"monospace"}}>
+                    {Math.round(pct*100)}%
+                  </div>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:3}}>📋 Today's Study Goal</div>
+                  {!editingGoal ? (
+                    <>
+                      <div style={{fontSize:14,fontWeight:900,color:"var(--text)",marginBottom:4}}>
+                        {goalDone} <span style={{fontSize:11,color:"var(--sub)",fontWeight:400}}>/ {goalTarget} questions</span>
+                      </div>
+                      <div style={{fontSize:11,color:done?"var(--green)":"var(--sub)"}}>{done?"🎉 Goal completed!":"Keep going — answer more questions!"}</div>
+                    </>
+                  ) : (
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input type="number" value={goalInput} onChange={e=>setGoalInput(e.target.value)} min={1} max={200}
+                        style={{width:60,padding:"4px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--bg)",color:"var(--text)",fontSize:13}}/>
+                      <button onClick={()=>{const v=Math.max(1,Number(goalInput)||20);setGoalTarget(v);localStorage.setItem("rr_daily_goal_q",String(v));setEditingGoal(false);}}
+                        style={{padding:"4px 10px",borderRadius:6,background:"var(--purple)",color:"#fff",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
+                      <button onClick={()=>setEditingGoal(false)} style={{padding:"4px 8px",borderRadius:6,background:"var(--border)",border:"none",color:"var(--sub)",fontSize:11,cursor:"pointer"}}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+                {!editingGoal && (
+                  <button onClick={()=>{setEditingGoal(true);setGoalInput(String(goalTarget));}}
+                    style={{background:"none",border:"none",color:"var(--sub)",cursor:"pointer",fontSize:13,flexShrink:0}}>✏️</button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+
         {/* ── HERO BANNER ───────────────────────────── */}
         <div className="dash-banner" style={{ margin: nextClass || visibleAnnouncements.length > 0 || challenge ? "12px 14px 0" : "14px 14px 0" }}>
           <h3>HTR Zone 🎯</h3>
@@ -413,8 +560,11 @@ export default function Dashboard() {
             { icon:"📅", label:"Planner",    path:"/planner",     bg:"#dcfce7", color:"#16a34a" },
             { icon:"∑",  label:"Formulas",   path:"/formulas",    bg:"#fce7f3", color:"#db2777" },
             { icon:"🔢", label:"Tools",      path:"/tools",       bg:"#f3e5f5", color:"#7b2fa5" },
-            { icon:"📄", label:"Papers",     path:"/papers",      bg:"#e0f7fa", color:"#0097a7" },
-            { icon:"📝", label:"Notes",      path:"/notes",       bg:"#fff7ed", color:"#ea580c" },
+            { icon:"📄", label:"Papers",     path:"/papers",       bg:"#e0f7fa", color:"#0097a7" },
+            { icon:"📝", label:"Notes",      path:"/notes",        bg:"#fff7ed", color:"#ea580c" },
+            { icon:"⚡", label:"Battle Quiz",path:"/battle-quiz",  bg:"linear-gradient(135deg,#ede9fe,#fce7f3)", color:"#7c3aed" },
+            { icon:"📖", label:"Vocabulary", path:"/vocab",        bg:"linear-gradient(135deg,#dbeafe,#ede9fe)", color:"#1d4ed8" },
+            { icon:"🎯", label:"Focus Room", path:"/focus-room",   bg:"linear-gradient(135deg,#fef3c7,#ede9fe)", color:"#7c3aed" },
           ].map(q => (
             <button key={q.label} onClick={() => navigate(q.path)} className="dash-quick-item"
               style={{ background:q.bg }}>

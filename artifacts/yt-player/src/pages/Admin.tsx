@@ -6,7 +6,7 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards"|"exams"|"papers"|"formulas"|"vocab"|"settings";
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards"|"exams"|"papers"|"formulas"|"vocab"|"quotes"|"settings";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",   icon:"📊", label:"Overview"      },
   { id:"users",      icon:"👤", label:"Users"         },
@@ -29,6 +29,7 @@ const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"doubts",     icon:"❓", label:"Doubts"        },
   { id:"micro",      icon:"⚡", label:"Micro Feed"    },
   { id:"market",     icon:"🏪", label:"Marketplace"   },
+  { id:"quotes",     icon:"💬", label:"Quotes"        },
   { id:"settings",   icon:"⚙️", label:"Settings"      },
   { id:"db",         icon:"🗄️", label:"Database"      },
 ];
@@ -147,6 +148,7 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="papers"     && <PapersTab />}
           {tab==="formulas"   && <FormulasTab />}
           {tab==="vocab"      && <VocabTab />}
+          {tab==="quotes"     && <QuotesTab />}
           {tab==="settings"   && <SettingsTab />}
         </main>
       </div>
@@ -3052,6 +3054,57 @@ function SettingsTab(){
       </Card></div>
       {msg&&<div style={{margin:"12px 0"}}><Feedback msg={msg}/></div>}
       <button onClick={save} style={{...btnStyle("var(--purple)"),marginTop:12}}>💾 Save Settings</button>
+    </div>
+  );
+}
+
+/* ══ Motivational Quotes ════════════════════════════════════ */
+function QuotesTab(){
+  const [list,setList]=useState<any[]>([]);
+  const [form,setForm]=useState({text:"",author:"HTR Zone",lang:"bn"});
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/quotes",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function add(){
+    if(!form.text.trim()){setMsg("❌ Quote text required");return;}
+    const r=await api("/api/admin/quotes",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Quote added!");setForm({...form,text:"",author:"HTR Zone"});load();}
+  }
+  async function del(id:string){
+    if(!confirm("Delete this quote?"))return;
+    await api(`/api/admin/quotes/${id}`,{method:"DELETE"});
+    load();
+  }
+  return(
+    <div>
+      <SectionTitle>💬 Motivational Quotes</SectionTitle>
+      <InfoBox>Manage quotes shown on the student dashboard. Quotes rotate every 4 hours. Add both Bangla and English quotes for variety.</InfoBox>
+      <Card title="➕ Add Quote">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="Quote Text"><textarea value={form.text} onChange={e=>setForm({...form,text:e.target.value})} rows={3} placeholder="e.g. সফলতার চাবিকাঠি হলো অধ্যবসায়।" style={{...inp,resize:"vertical"}}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Author"><input value={form.author} onChange={e=>setForm({...form,author:e.target.value})} placeholder="e.g. Nelson Mandela" style={inp}/></Field>
+            <Field label="Language"><select value={form.lang} onChange={e=>setForm({...form,lang:e.target.value})} style={inp}><option value="bn">Bangla</option><option value="en">English</option></select></Field>
+          </div>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} style={btnStyle("var(--purple)")}>Add Quote</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>All Quotes ({list.length})</SectionTitle>
+      {list.length===0&&<Empty icon="💬" text="No quotes yet"/>}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {list.map(q=>(
+          <div key={q.id} style={{...listItem,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,color:"var(--text)",lineHeight:1.6,marginBottom:4,fontStyle:q.lang==="bn"?"normal":"italic"}}>{q.text}</div>
+              <div style={{fontSize:12,color:"var(--sub)"}}>— {q.author} · <span style={{padding:"1px 6px",borderRadius:10,background:"var(--bg)",fontSize:10,fontWeight:700}}>{q.lang==="bn"?"বাংলা":"English"}</span></div>
+            </div>
+            <button onClick={()=>del(q.id)} style={smBtn("#dc2626")}>✕</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1669,5 +1669,129 @@ router.get("/smart-quiz/pool", (req, res) => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════
+   GAMIFICATION
+══════════════════════════════════════════════════════════ */
+interface GameProfile {
+  username:string; displayName:string; xp:number; level:number; streak:number;
+  lastStudyDate:string; badges:string[];
+  badgeDetails:{key:string;label:string;icon:string}[];
+  examHistory:{quizId:string;title:string;score:number;total:number;pct:number;date:string;timeSecs:number}[];
+  topicScores:Record<string,{correct:number;total:number}>;
+  totalExams:number; totalCorrect:number; totalAnswers:number;
+}
+function computeLevel(xp:number):number { let l=1; while(l*l*100<=xp)l++; return Math.max(1,l-1); }
+const ALL_BADGES=[
+  {key:"first_quiz",  label:"First Step",    icon:"🎓", check:(p:GameProfile)=>p.totalExams>=1},
+  {key:"quiz_5",      label:"Quiz Veteran",  icon:"🏅", check:(p:GameProfile)=>p.totalExams>=5},
+  {key:"quiz_10",     label:"Quiz Master",   icon:"🏆", check:(p:GameProfile)=>p.totalExams>=10},
+  {key:"quiz_25",     label:"Champion",      icon:"🥇", check:(p:GameProfile)=>p.totalExams>=25},
+  {key:"perfect",     label:"Perfect Score", icon:"💯", check:(p:GameProfile)=>p.examHistory.some(e=>e.pct===100)},
+  {key:"streak_3",    label:"3-Day Streak",  icon:"🔥", check:(p:GameProfile)=>p.streak>=3},
+  {key:"streak_7",    label:"Week Warrior",  icon:"⚡", check:(p:GameProfile)=>p.streak>=7},
+  {key:"streak_30",   label:"Monthly Star",  icon:"🌟", check:(p:GameProfile)=>p.streak>=30},
+  {key:"xp_500",      label:"Rising Star",   icon:"⭐", check:(p:GameProfile)=>p.xp>=500},
+  {key:"xp_2000",     label:"Scholar",       icon:"📚", check:(p:GameProfile)=>p.xp>=2000},
+  {key:"accuracy_80", label:"Sharpshooter",  icon:"🎯", check:(p:GameProfile)=>p.totalAnswers>=20&&p.totalCorrect/p.totalAnswers>=0.8},
+  {key:"accuracy_90", label:"Precision Pro", icon:"💎", check:(p:GameProfile)=>p.totalAnswers>=30&&p.totalCorrect/p.totalAnswers>=0.9},
+];
+function getProfile(username:string):GameProfile {
+  return rd<GameProfile>(`game_${username}.json`,{username,displayName:username,xp:0,level:1,streak:0,lastStudyDate:"",badges:[],badgeDetails:[],examHistory:[],topicScores:{},totalExams:0,totalCorrect:0,totalAnswers:0});
+}
+function saveProfile(p:GameProfile){
+  p.level=computeLevel(p.xp);
+  const earned=ALL_BADGES.filter(b=>b.check(p));
+  p.badges=earned.map(b=>b.key); p.badgeDetails=earned.map(b=>({key:b.key,label:b.label,icon:b.icon}));
+  wr(`game_${p.username}.json`,p);
+}
+router.get("/gamification/me",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"";
+  if(!username) return res.json({xp:0,level:1,streak:0,displayName:"Guest",badges:[],badgeDetails:[],examHistory:[],topicScores:{},totalExams:0,totalCorrect:0,totalAnswers:0});
+  const p=getProfile(username); saveProfile(p); res.json(p);
+});
+router.post("/gamification/exam-complete",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||(req.username as string)||"";
+  if(!username) return res.json({ok:true,xpEarned:0});
+  const {quizId,quizTitle,score,total,timeSecs}=req.body as any;
+  const p=getProfile(username);
+  const pct=total>0?Math.round((score/total)*100):0;
+  p.examHistory.unshift({quizId:String(quizId||""),title:String(quizTitle||"Quiz").slice(0,60),score:Number(score||0),total:Number(total||0),pct,date:new Date().toISOString().slice(0,10),timeSecs:Number(timeSecs||0)});
+  p.examHistory=p.examHistory.slice(0,100);
+  const xpEarned=50+Math.round(pct*0.5)+(timeSecs>0&&timeSecs<60*Number(total||10)?10:0);
+  p.xp+=xpEarned; p.totalExams++; p.totalCorrect+=Number(score||0); p.totalAnswers+=Number(total||0);
+  const today=new Date().toISOString().slice(0,10);
+  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  if(p.lastStudyDate===yesterday) p.streak++; else if(p.lastStudyDate!==today) p.streak=1;
+  p.lastStudyDate=today;
+  saveProfile(p); res.json({ok:true,xpEarned,newXp:p.xp,level:p.level,streak:p.streak,badgeDetails:p.badgeDetails});
+});
+router.get("/gamification/leaderboard",(_req,res)=>{
+  const users=rd<any[]>("users.json",[]);
+  const rows=users.map(u=>{const p=getProfile(u.username);return{username:u.username,displayName:p.displayName||u.username,xp:p.xp,level:p.level,streak:p.streak,badges:p.badges.length,totalExams:p.totalExams};}).sort((a,b)=>b.xp-a.xp).slice(0,50).map((r,i)=>({...r,rank:i+1}));
+  res.json(rows);
+});
+router.patch("/gamification/display-name",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"";
+  if(!username) return res.status(400).json({error:"No username"});
+  const {displayName}=req.body as any;
+  if(!displayName?.trim()) return res.status(400).json({error:"Display name required"});
+  const p=getProfile(username); p.displayName=String(displayName).trim().slice(0,40);
+  saveProfile(p); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   STUDY GOALS
+══════════════════════════════════════════════════════════ */
+router.get("/study-goals/today",userAuth,(req:any,res)=>{
+  const username=req.username as string;
+  const goals=rd<any[]>("study-goals.json",[]);
+  const today=new Date().toISOString().slice(0,10);
+  const goal=goals.find(g=>g.username===username&&g.date===today)||{dailyQuestions:20,answered:0,date:today};
+  res.json(goal);
+});
+router.post("/study-goals/today",userAuth,(req:any,res)=>{
+  const username=req.username as string;
+  const {dailyQuestions,answered}=req.body as any;
+  const goals=rd<any[]>("study-goals.json",[]);
+  const today=new Date().toISOString().slice(0,10);
+  const i=goals.findIndex(g=>g.username===username&&g.date===today);
+  const entry={username,date:today,dailyQuestions:Number(dailyQuestions)||20,answered:Number(answered)||0};
+  if(i>=0) goals[i]={...goals[i],...entry}; else goals.push(entry);
+  wr("study-goals.json",goals.slice(-20000)); res.json(entry);
+});
+
+/* ══════════════════════════════════════════════════════════
+   MOTIVATIONAL QUOTES
+══════════════════════════════════════════════════════════ */
+const DEFAULT_QUOTES=[
+  {id:"dq1",text:"সফলতার চাবিকাঠি হলো অধ্যবসায়।",author:"Anonymous",lang:"bn"},
+  {id:"dq2",text:"Success is the sum of small efforts, repeated day in and day out.",author:"Robert Collier",lang:"en"},
+  {id:"dq3",text:"শিক্ষাই জাতির মেরুদণ্ড।",author:"Bengali Proverb",lang:"bn"},
+  {id:"dq4",text:"The secret of getting ahead is getting started.",author:"Mark Twain",lang:"en"},
+  {id:"dq5",text:"কঠিন পরিশ্রমের কোনো বিকল্প নেই।",author:"Thomas Edison",lang:"bn"},
+  {id:"dq6",text:"Education is the most powerful weapon you can use to change the world.",author:"Nelson Mandela",lang:"en"},
+  {id:"dq7",text:"প্রতিটি মিনিট মূল্যবান — আজকের পরিশ্রম, কালকের সাফল্য।",author:"HTR Zone",lang:"bn"},
+  {id:"dq8",text:"Believe you can and you're halfway there.",author:"Theodore Roosevelt",lang:"en"},
+  {id:"dq9",text:"পরীক্ষায় ভালো করতে চাইলে প্রতিদিন পড়তে হবে।",author:"HTR Zone",lang:"bn"},
+  {id:"dq10",text:"Don't watch the clock; do what it does. Keep going.",author:"Sam Levenson",lang:"en"},
+];
+router.get("/motivational-quote",(_req,res)=>{
+  const quotes=rd<any[]>("quotes.json",DEFAULT_QUOTES);
+  if(!quotes.length) return res.json(DEFAULT_QUOTES[0]);
+  const idx=Math.floor(Date.now()/(1000*60*60*4))%quotes.length;
+  res.json(quotes[idx]);
+});
+router.get("/admin/quotes",adminAuth,(_req,res)=>res.json(rd<any[]>("quotes.json",DEFAULT_QUOTES)));
+router.post("/admin/quotes",adminAuth,(req,res)=>{
+  const {text,author,lang}=req.body as any;
+  if(!text?.trim()) return res.status(400).json({error:"Text required"});
+  const quotes=rd<any[]>("quotes.json",DEFAULT_QUOTES);
+  const entry={id:uid(),text:String(text).trim(),author:String(author||"HTR Zone").trim(),lang:String(lang||"en"),createdAt:new Date().toISOString()};
+  quotes.push(entry); wr("quotes.json",quotes); res.json(entry);
+});
+router.delete("/admin/quotes/:id",adminAuth,(req,res)=>{
+  wr("quotes.json",rd<any[]>("quotes.json",DEFAULT_QUOTES).filter(q=>q.id!==req.params.id)); res.json({ok:true});
+});
+
 export default router;
 
