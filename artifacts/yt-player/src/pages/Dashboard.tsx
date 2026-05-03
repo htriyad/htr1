@@ -85,6 +85,85 @@ function formatCountdown(ms: number): string {
   return `${m}m ${String(sec).padStart(2,"0")}s`;
 }
 
+/* ══ Live Study Rooms Widget ══════════════════════════════ */
+function LiveRoomsWidget() {
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [, navigate] = useLocation();
+  useEffect(()=>{
+    fetch("/api/study-rooms").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setRooms(d.slice(0,6)); }).catch(()=>{});
+    const t = setInterval(()=>{
+      fetch("/api/study-rooms").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setRooms(d.slice(0,6)); }).catch(()=>{});
+    }, 10000);
+    return () => clearInterval(t);
+  },[]);
+  if (rooms.length === 0) return null;
+  const COLORS: Record<string,string> = {
+    Physics:"#3b82f6",Chemistry:"#8b5cf6",Biology:"#10b981",Math:"#f59e0b",
+    English:"#06b6d4",Bangla:"#ec4899",ICT:"#6366f1",General:"#64748b",
+    History:"#a16207",Geography:"#0891b2","BCS Prep":"#dc2626","Admission":"#7c3aed",
+  };
+  function av(u:string){ const hues=[210,262,142,38,190,330,24,0,280,168]; return `hsl(${hues[u.charCodeAt(0)%hues.length]},65%,52%)`; }
+  return (
+    <div style={{padding:"12px 0 0 14px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,paddingRight:14}}>
+        <div style={{fontSize:10,fontWeight:800,color:"var(--sub)",letterSpacing:"0.1em",flex:1}}>🏠 LIVE STUDY ROOMS</div>
+        <button onClick={()=>navigate("/study-room")} style={{background:"none",border:"none",color:"var(--purple)",fontSize:11,fontWeight:700,cursor:"pointer",padding:0}}>See all →</button>
+      </div>
+      <div style={{display:"flex",gap:10,overflowX:"auto",paddingRight:14,paddingBottom:4,scrollbarWidth:"none"}}>
+        {rooms.map(room=>{
+          const color = COLORS[room.subject]||"#64748b";
+          const online = (room.onlineMembers||[]).length;
+          return (
+            <div key={room.id} onClick={()=>navigate(`/study-room/${room.id}`)}
+              style={{flexShrink:0,width:160,background:"var(--surface)",borderRadius:14,padding:12,
+                border:`1.5px solid ${color}40`,cursor:"pointer",boxShadow:`0 2px 10px ${color}12`,
+                transition:"transform 120ms"}}
+              className="sr-lobby-card-hover">
+              {/* Header */}
+              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}>
+                <div style={{width:32,height:32,borderRadius:9,background:`${color}20`,border:`1px solid ${color}44`,
+                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>📚</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{room.name}</div>
+                  <div style={{fontSize:9,padding:"1px 6px",borderRadius:20,background:`${color}18`,color,fontWeight:700,display:"inline-block",marginTop:1}}>{room.subject}</div>
+                </div>
+              </div>
+              {/* Online avatars */}
+              <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+                <div style={{display:"flex",flexDirection:"row"}}>
+                  {room.members.slice(0,5).map((m:string,i:number)=>(
+                    <div key={m} style={{marginLeft:i===0?0:-7,zIndex:10-i,width:22,height:22,borderRadius:6,
+                      background:av(m),border:"2px solid var(--surface)",
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:"#fff"}}>
+                      {m[0].toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                {room.members.length>5 && <span style={{fontSize:9,color:"var(--sub)",marginLeft:4}}>+{room.members.length-5}</span>}
+              </div>
+              {/* Footer */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <span style={{fontSize:10,color:online>0?"#22c55e":"var(--sub)",fontWeight:700}}>
+                  {online>0?`● ${online} online`:`${room.members.length} members`}
+                </span>
+                {room.timerState?.running && <span style={{fontSize:9,padding:"2px 6px",borderRadius:20,background:"rgba(108,127,255,0.15)",color:"var(--purple)",fontWeight:700}}>⏱</span>}
+              </div>
+            </div>
+          );
+        })}
+        {/* Create room CTA */}
+        <div onClick={()=>navigate("/study-room")}
+          style={{flexShrink:0,width:120,background:"var(--surface)",borderRadius:14,padding:12,
+            border:"1.5px dashed var(--border)",cursor:"pointer",display:"flex",flexDirection:"column",
+            alignItems:"center",justifyContent:"center",gap:6,minHeight:100}}>
+          <div style={{fontSize:26}}>＋</div>
+          <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",textAlign:"center",lineHeight:1.3}}>Create<br/>a Room</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen]     = useState(false);
   const [, navigate]                      = useLocation();
@@ -347,6 +426,9 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* ── LIVE STUDY ROOMS ─────────────────────── */}
+        <LiveRoomsWidget />
 
         {/* ── EXAM COUNTDOWN ROW ────────────────────── */}
         {examDates.filter(e=>new Date(e.date).getTime()>now).length > 0 && (

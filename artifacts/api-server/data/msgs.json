@@ -71,5 +71,14 @@
     "status": "pending",
     "type": "content-request",
     "subject": "Hsc English"
+  },
+  {
+    "id": "3266545a-e80c-4a24-bbfc-d5571693a14a",
+    "ip": "103.77.16.76",
+    "message": "🛠️ DevTools Opened\nDetails: {\"outerWidth\":915,\"innerWidth\":411,\"outerHeight\":412,\"innerHeight\":857}",
+    "timestamp": "2026-05-03T09:35:55.464Z",
+    "status": "pending",
+    "type": "security-alert",
+    "alertType": "devtools"
   }
 ]

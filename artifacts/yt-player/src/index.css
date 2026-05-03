@@ -2123,6 +2123,52 @@ input, button, select, textarea, label {
 /* Eye / light overrides */
 .light-theme .dash-stat-chip { background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
 
+/* ══════════════════════════════════════════════════════════
+   GROUP STUDY ROOMS — messenger UI
+══════════════════════════════════════════════════════════ */
+
+/* Lobby cards */
+.sr-room-card { background:var(--surface); border-radius:18px; padding:16px; border:1.5px solid; display:flex; flex-direction:column; gap:0; transition:transform 120ms,box-shadow 120ms; }
+.sr-room-card:active { transform:scale(0.985); }
+.sr-join-btn { margin-top:12px; width:100%; padding:11px; border-radius:14px; border:none; font-weight:800; font-size:13px; cursor:pointer; transition:opacity 150ms; }
+.sr-join-btn:hover { opacity:0.9; }
+.sr-lobby-card-hover:active { transform:scale(0.97); }
+
+/* Chat background */
+.sr-chat-bg { background:var(--bg); }
+.light-theme .sr-chat-bg { background:#f0f2f5; }
+.eye-theme .sr-chat-bg   { background:#1a160f; }
+
+/* Bubble — mine (sent) */
+.sr-bubble-me {
+  background:linear-gradient(135deg,#4f46e5,#7c3aed);
+  color:#fff;
+  padding:9px 13px;
+  font-size:13px;
+  line-height:1.5;
+  word-break:break-word;
+  cursor:pointer;
+  user-select:text;
+  max-width:280px;
+  box-shadow:0 1px 3px rgba(79,70,229,0.25);
+}
+/* Bubble — theirs (received) */
+.sr-bubble-them {
+  background:var(--surface);
+  color:var(--text);
+  padding:9px 13px;
+  font-size:13px;
+  line-height:1.5;
+  word-break:break-word;
+  cursor:pointer;
+  user-select:text;
+  max-width:280px;
+  border:1px solid var(--border);
+  box-shadow:0 1px 2px rgba(0,0,0,0.06);
+}
+.light-theme .sr-bubble-them { background:#fff; }
+.eye-theme   .sr-bubble-them { background:#2a2418; border-color:#3a3020; }
+
 /* Eye-theme overrides */
 .eye-theme .fractal-intro-card,.eye-theme .why-seed-card,.eye-theme .why-node,.eye-theme .dna-input-card,.eye-theme .dna-question-card,.eye-theme .spore-create-card,.eye-theme .spore-card { background:#1e1c14; }
 .eye-theme .fractal-tabs,.eye-theme .why-answer-panel { background:#1e1c14; }

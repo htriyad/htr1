@@ -1836,10 +1836,14 @@ router.post("/study-rooms",(req:any,res)=>{
 
 router.get("/study-rooms/:id",(req:any,res)=>{
   const rooms=getRooms();
-  const room=rooms.find(r=>r.id===req.params.id);
+  const room=rooms.find(r=>r.id===req.params.id) as any;
   if(!room) return res.status(404).json({error:"Room not found"});
-  const {pin:_,isPrivate:__,...safe}=room as any;
-  res.json({...safe,isPrivate:room.isPrivate});
+  // compute who is online (heartbeat within 20s)
+  const onlineAt=room.onlineAt||{};
+  const now=Date.now();
+  const onlineMembers=Object.entries(onlineAt).filter(([,t])=>now-(t as number)<20000).map(([u])=>u);
+  const {pin:_,...safe}=room;
+  res.json({...safe,onlineMembers});
 });
 
 router.post("/study-rooms/:id/join",(req:any,res)=>{
@@ -1894,6 +1898,23 @@ router.post("/study-rooms/:id/messages",(req:any,res)=>{
   const i=rooms.findIndex(r=>r.id===req.params.id);
   if(i>=0){rooms[i].lastActivity=new Date().toISOString();saveRooms(rooms);}
   res.json(msg);
+});
+
+router.post("/study-rooms/:id/heartbeat",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const rooms=getRooms();
+  const i=rooms.findIndex(r=>r.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Room not found"});
+  const room=rooms[i] as any;
+  if(!room.onlineAt) room.onlineAt={};
+  room.onlineAt[username]=Date.now();
+  // auto-add member if they're sending heartbeat and not in room
+  if(!room.members.includes(username)&&room.members.length<room.maxMembers){
+    room.members.push(username);
+  }
+  room.lastActivity=new Date().toISOString();
+  rooms[i]=room; saveRooms(rooms);
+  res.json({ok:true});
 });
 
 router.put("/study-rooms/:id/timer",(req:any,res)=>{
