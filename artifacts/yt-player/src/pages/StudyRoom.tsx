@@ -62,14 +62,96 @@ function useNow() {
   return t;
 }
 
+function getShareUrl(roomId: string, pin?: string) {
+  const base = `${window.location.origin}/study-room/${roomId}`;
+  return pin ? `${base}#pin=${encodeURIComponent(pin)}` : base;
+}
+
+/* ══════════════════════════════════════════════════════════
+   INVITE MODAL
+══════════════════════════════════════════════════════════ */
+function InviteModal({ room, pin, onClose }: { room: Room; pin?: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const url = getShareUrl(room.id, pin);
+  const qr  = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}&bgcolor=0f172a&color=a78bfa&format=png&margin=12`;
+  const whatsapp = `https://wa.me/?text=${encodeURIComponent(`📚 Join my study room "${room.name}" on HTR Zone!\n\n🔗 ${url}`)}`;
+  const color = SUBJECT_COLORS[room.subject]||"#64748b";
+
+  function copy() {
+    navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2200); }).catch(()=>{});
+  }
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center",padding:"0 0 0 0"}}
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div className="sr-invite-sheet" style={{animation:"sr-slide-up 280ms cubic-bezier(0.34,1.56,0.64,1)"}}>
+        {/* Handle bar */}
+        <div style={{width:40,height:4,borderRadius:2,background:"var(--border)",margin:"0 auto 18px"}}/>
+
+        {/* Room identity */}
+        <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:20}}>
+          <div style={{width:48,height:48,borderRadius:14,background:`${color}22`,border:`2px solid ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>
+            📚
+          </div>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:"var(--text)"}}>{room.name}</div>
+            <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>
+              <span style={{fontSize:10,padding:"2px 8px",borderRadius:20,background:`${color}20`,color,fontWeight:800}}>{room.subject}</span>
+              {pin && <span style={{fontSize:10,padding:"2px 8px",borderRadius:20,background:"rgba(239,68,68,0.1)",color:"#ef4444",fontWeight:700}}>🔒 PIN included</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* QR code */}
+        <div style={{display:"flex",justifyContent:"center",marginBottom:18}}>
+          <div style={{padding:10,background:"#0f172a",borderRadius:16,border:"2px solid rgba(167,139,250,0.25)",boxShadow:"0 0 30px rgba(167,139,250,0.12)"}}>
+            <img src={qr} alt="QR Code" width={160} height={160} style={{display:"block",borderRadius:8}}
+              onError={e=>(e.currentTarget.style.display="none")}/>
+          </div>
+        </div>
+
+        {/* Link row */}
+        <div style={{display:"flex",gap:8,alignItems:"center",background:"var(--bg)",borderRadius:12,padding:"10px 12px",marginBottom:14,border:"1px solid var(--border)"}}>
+          <span style={{flex:1,fontSize:12,color:"var(--sub)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{url}</span>
+          <button onClick={copy}
+            style={{padding:"6px 14px",borderRadius:9,background:copied?"#22c55e":"linear-gradient(135deg,#4f46e5,#7c3aed)",
+              color:"#fff",border:"none",fontWeight:800,fontSize:12,cursor:"pointer",flexShrink:0,transition:"background 200ms",whiteSpace:"nowrap"}}>
+            {copied?"✓ Copied!":"Copy Link"}
+          </button>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
+          <a href={whatsapp} target="_blank" rel="noopener noreferrer"
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,
+              background:"#25D366",color:"#fff",textDecoration:"none",fontWeight:800,fontSize:14}}>
+            <span style={{fontSize:20}}>📱</span> WhatsApp
+          </a>
+          <button onClick={copy}
+            style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,
+              background:"var(--surface)",color:"var(--text)",border:"1px solid var(--border)",fontWeight:800,fontSize:14,cursor:"pointer"}}>
+            <span style={{fontSize:20}}>{copied?"✅":"🔗"}</span> {copied?"Copied!":"Copy Link"}
+          </button>
+        </div>
+
+        <button onClick={onClose}
+          style={{width:"100%",padding:"13px",borderRadius:14,background:"var(--border)",border:"none",color:"var(--sub)",fontWeight:700,fontSize:14,cursor:"pointer",marginTop:4}}>
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════
    LOBBY
 ══════════════════════════════════════════════════════════ */
-function Lobby({ onEnter }: { onEnter:(room:Room)=>void }) {
+function Lobby({ onEnter }: { onEnter:(room:Room,pin?:string)=>void }) {
   const [rooms,setRooms]   = useState<Room[]>([]);
   const [loading,setLoad]  = useState(true);
   const [creating,setCreating] = useState(false);
   const [joinPin,setJoinPin]   = useState<{room:Room;val:string}|null>(null);
+  const [shareRoom,setShareRoom] = useState<{room:Room;pin?:string}|null>(null);
   const [form,setForm] = useState({ name:"", subject:"General", maxMembers:"8", isPrivate:false, pin:"" });
   const [err,setErr]   = useState("");
   const [, navigate]   = useLocation();
@@ -87,7 +169,7 @@ function Lobby({ onEnter }: { onEnter:(room:Room)=>void }) {
     const r = await fetch("/api/study-rooms",{method:"POST",headers:xhdr(),body:JSON.stringify({...form,maxMembers:Number(form.maxMembers)})});
     const d = await r.json();
     if(d.error){ setErr(d.error); return; }
-    onEnter(d);
+    onEnter(d, form.isPrivate && form.pin ? form.pin : undefined);
   }
   async function join(room:Room, pin?:string){
     setErr("");
@@ -244,19 +326,28 @@ function Lobby({ onEnter }: { onEnter:(room:Room)=>void }) {
                   </div>
                 )}
 
-                <button
-                  onClick={()=>{ setErr(""); if(room.isPrivate&&!mine) setJoinPin({room,val:""}); else join(room); }}
-                  disabled={full&&!mine}
-                  className="sr-join-btn"
-                  style={{background:mine?"linear-gradient(135deg,#4f46e5,#7c3aed)":full?"var(--border)":"linear-gradient(135deg,#4f46e5,#7c3aed)",
-                    color:full&&!mine?"var(--sub)":"#fff",cursor:full&&!mine?"not-allowed":"pointer"}}>
-                  {mine?"↩ Re-enter Room →":full?"Room Full":"Join Room →"}
-                </button>
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <button
+                    onClick={()=>{ setErr(""); if(room.isPrivate&&!mine) setJoinPin({room,val:""}); else join(room); }}
+                    disabled={full&&!mine}
+                    className="sr-join-btn"
+                    style={{flex:1,marginTop:0,background:mine?"linear-gradient(135deg,#4f46e5,#7c3aed)":full?"var(--border)":"linear-gradient(135deg,#4f46e5,#7c3aed)",
+                      color:full&&!mine?"var(--sub)":"#fff",cursor:full&&!mine?"not-allowed":"pointer"}}>
+                    {mine?"↩ Re-enter →":full?"Room Full":"Join Room →"}
+                  </button>
+                  <button onClick={()=>setShareRoom({room})}
+                    style={{width:44,borderRadius:14,border:"1.5px solid var(--border)",background:"var(--bg)",
+                      color:"var(--sub)",fontSize:18,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    🔗
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {shareRoom && <InviteModal room={shareRoom.room} pin={shareRoom.pin} onClose={()=>setShareRoom(null)}/>}
     </div>
   );
 }
@@ -264,7 +355,7 @@ function Lobby({ onEnter }: { onEnter:(room:Room)=>void }) {
 /* ══════════════════════════════════════════════════════════
    ROOM — full messenger UI
 ══════════════════════════════════════════════════════════ */
-function RoomView({ room: init, onLeave }: { room:Room; onLeave:()=>void }) {
+function RoomView({ room: init, onLeave, invitePin }: { room:Room; onLeave:()=>void; invitePin?:string }) {
   const [room,setRoom]       = useState<Room>(init);
   const [msgs,setMsgs]       = useState<Msg[]>([]);
   const [text,setText]       = useState("");
@@ -272,6 +363,7 @@ function RoomView({ room: init, onLeave }: { room:Room; onLeave:()=>void }) {
   const [tab,setTab]         = useState<"chat"|"members"|"timer">("chat");
   const [reactionFor,setReactionFor] = useState<string|null>(null);
   const [reactions,setReactions]     = useState<Record<string,string[]>>({});
+  const [showInvite,setShowInvite]   = useState(false);
   const chatEnd  = useRef<HTMLDivElement>(null);
   const lastTs   = useRef<string>("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -391,6 +483,14 @@ function RoomView({ room: init, onLeave }: { room:Room; onLeave:()=>void }) {
             ))}
             {room.members.length>4 && <span style={{marginLeft:4,fontSize:10,color:"var(--sub)",fontWeight:700}}>+{room.members.length-4}</span>}
           </div>
+          {/* Invite button */}
+          <button onClick={()=>setShowInvite(true)}
+            title="Invite friends"
+            style={{marginLeft:6,width:34,height:34,borderRadius:10,border:"1.5px solid var(--border)",
+              background:"var(--bg)",color:"var(--sub)",fontSize:16,cursor:"pointer",
+              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            🔗
+          </button>
         </div>
 
         {/* Timer strip — compact */}
@@ -566,6 +666,8 @@ function RoomView({ room: init, onLeave }: { room:Room; onLeave:()=>void }) {
           )}
         </div>
       )}
+
+      {showInvite && <InviteModal room={room} pin={invitePin} onClose={()=>setShowInvite(false)}/>}
     </div>
   );
 }
@@ -598,27 +700,38 @@ function MemberRow({ username, host, isMe, online }: { username:string; host:str
    ENTRY POINT
 ══════════════════════════════════════════════════════════ */
 export default function StudyRoom() {
-  const [activeRoom, setActiveRoom] = useState<Room|null>(null);
-  const [,params]  = useRoute("/study-room/:id");
+  const [activeRoom,  setActiveRoom]  = useState<Room|null>(null);
+  const [invitePin,   setInvitePin]   = useState<string|undefined>(undefined);
+  const [,params]   = useRoute("/study-room/:id");
   const [,navigate] = useLocation();
 
+  /* ── auto-join via direct URL (e.g. shared invite link) ── */
   useEffect(()=>{
     if(params?.id && !activeRoom){
+      /* extract PIN from URL hash: /study-room/abc#pin=1234 */
+      const hash  = window.location.hash; // "#pin=1234"
+      const match = hash.match(/[#&]pin=([^&]*)/);
+      const hashPin = match ? decodeURIComponent(match[1]) : undefined;
+
       fetch(`/api/study-rooms/${params.id}`)
         .then(r=>r.json()).then(d=>{
           if(d.id){
-            fetch(`/api/study-rooms/${d.id}/join`,{method:"POST",headers:xhdr(),body:"{}"})
-              .then(r=>r.json()).then(j=>{ if(j.id) setActiveRoom(j); });
+            fetch(`/api/study-rooms/${d.id}/join`,{
+              method:"POST",headers:xhdr(),
+              body:JSON.stringify({ pin: hashPin||"" })
+            }).then(r=>r.json()).then(j=>{
+              if(j.id){ setActiveRoom(j); setInvitePin(hashPin); }
+            });
           }
         }).catch(()=>{});
     }
   },[params?.id]);
 
   if(activeRoom) return (
-    <RoomView room={activeRoom}
-      onLeave={()=>{ setActiveRoom(null); navigate("/study-room"); }}/>
+    <RoomView room={activeRoom} invitePin={invitePin}
+      onLeave={()=>{ setActiveRoom(null); setInvitePin(undefined); navigate("/study-room"); }}/>
   );
   return (
-    <Lobby onEnter={r=>{ setActiveRoom(r); navigate(`/study-room/${r.id}`); }}/>
+    <Lobby onEnter={(r,pin)=>{ setActiveRoom(r); setInvitePin(pin); navigate(`/study-room/${r.id}`); }}/>
   );
 }

@@ -2132,6 +2132,21 @@ input, button, select, textarea, label {
 .sr-room-card:active { transform:scale(0.985); }
 .sr-join-btn { margin-top:12px; width:100%; padding:11px; border-radius:14px; border:none; font-weight:800; font-size:13px; cursor:pointer; transition:opacity 150ms; }
 .sr-join-btn:hover { opacity:0.9; }
+
+/* Invite bottom sheet */
+.sr-invite-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  padding: 18px 18px 28px;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+  border-top: 1px solid var(--border);
+}
+@keyframes sr-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
 .sr-lobby-card-hover:active { transform:scale(0.97); }
 
 /* Chat background */
