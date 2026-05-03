@@ -1,0 +1,23 @@
+[
+  {
+    "id": "4387fb82-bf95-42a7-8f13-3e207fe76a7d",
+    "username": "Mod_Karim",
+    "password": "mod123",
+    "role": "moderator",
+    "createdAt": "2026-05-03T10:08:05.614Z"
+  },
+  {
+    "id": "b0e47674-5981-45a8-9f34-52c8f3b72ffb",
+    "username": "Teacher_Fatema",
+    "password": "teach456",
+    "role": "teacher",
+    "createdAt": "2026-05-03T10:08:05.744Z"
+  },
+  {
+    "id": "c7f98119-923b-473e-831a-a673e0e0290e",
+    "username": "Admin_Rafi",
+    "password": "admin789",
+    "role": "admin",
+    "createdAt": "2026-05-03T10:08:05.874Z"
+  }
+]

@@ -1,5 +1,16 @@
 [
   {
+    "id": "6452f0d6-1baf-43e5-bb69-da712447d998",
+    "author": "htr",
+    "text": "📢 HTR Zone Community-তে সবাইকে স্বাগতম! আমাদের কিছু নিয়মকানুন মেনে চলুন:\n\n✅ পড়ালেখা সংক্রান্ত বিষয় শেয়ার করুন\n✅ একে অপরকে সাহায্য করুন\n❌ Spam বা Irrelevant content পোস্ট করবেন না\n❌ অন্যদের সাথে অসম্মানজনক আচরণ করবেন না\n\nসবাই একসাথে পড়াশুনা করি, এগিয়ে যাই! 💪",
+    "subject": "Announcement",
+    "createdAt": "2026-05-03T10:07:44.735Z",
+    "reactions": {},
+    "comments": [],
+    "pinned": true,
+    "announced": true
+  },
+  {
     "id": "3a7840e3-dd03-4a11-93bd-e6cdee2867d0",
     "author": "Tarek_HSC",
     "text": "আজকে Math class এ একটা দারুণ shortcut শিখলাম! Quadratic equation solve করার জন্য:\n\nax² + bx + c = 0\n\nFormula: x = (-b ± √(b²-4ac)) / 2a\n\nকিন্তু আরো fast way:\nযদি b²-4ac = perfect square হয়, তাহলে factoring দিয়েই solve হবে!\n\nExample: x² - 5x + 6 = 0\n= (x-2)(x-3) = 0\nSo x = 2 or x = 3 ✨\n\nকারো কাছে আরো shortcut থাকলে comment করো!",

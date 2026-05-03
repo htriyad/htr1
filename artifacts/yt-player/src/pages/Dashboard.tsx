@@ -294,6 +294,7 @@ export default function Dashboard() {
     { label:"Solve Sheet",   icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/solve-sheet" },
     { label:"Community",     icon:"🌐", bg:"#ede9fe", chevron:"#7c3aed", path:"/community" },
     { label:"Messages",      icon:"💬", bg:"#e0f7fa", chevron:"#0ea5e9", path:"/messages" },
+    { label:"Mod Panel",     icon:"🛡️", bg:"#f3e5f5", chevron:"#7c3aed", path:"/mod-login" },
     { label:"Q&A Service",   icon:"❓", bg:"#fef3c7", chevron:"#d97706", path:"/ask" },
     { label:"Discussion",    icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/discussion" },
     { label:"My Progress",   icon:"🏆", bg:"#fff3e0", chevron:"#d97706", path:"/profile" },

@@ -1958,6 +1958,193 @@ router.put("/study-rooms/:id/timer",(req:any,res)=>{
 });
 
 /* ══════════════════════════════════════════════════════════
+   MOD / COMMUNITY ROLES SYSTEM
+══════════════════════════════════════════════════════════ */
+const MOD_SESSIONS = new Map<string,string>(); // token → username
+
+interface ModUser { id:string; username:string; password:string; role:string; createdAt:string; }
+
+function getMods():ModUser[]{return rd<ModUser[]>("mods.json",[]);}
+function saveMods(m:ModUser[]){wr("mods.json",m);}
+function getRoles():Record<string,string>{return rd<Record<string,string>>("community-roles.json",{"htr":"owner"});}
+function saveRoles(r:Record<string,string>){wr("community-roles.json",r);}
+function getPins():string[]{return rd<string[]>("community-pins.json",[]);}
+function savePins(p:string[]){wr("community-pins.json",p);}
+function getAnnounces():string[]{return rd<string[]>("community-announces.json",[]);}
+function saveAnnounces(a:string[]){wr("community-announces.json",a);}
+function getReports():any[]{return rd<any[]>("community-reports.json",[]);}
+function saveReports(r:any[]){wr("community-reports.json",r);}
+
+function modAuth(req:any,res:any,next:any){
+  const token=req.headers["x-mod-token"] as string;
+  if(!token||!MOD_SESSIONS.has(token)) return res.status(401).json({error:"Mod auth required"});
+  (req as any).modUsername=MOD_SESSIONS.get(token);
+  next();
+}
+function modOrAdminAuth(req:any,res:any,next:any){
+  const modToken=req.headers["x-mod-token"] as string;
+  const adminToken=req.headers["authorization"]?.replace("Bearer ","") || req.headers["x-admin-token"];
+  if(modToken&&MOD_SESSIONS.has(modToken)){(req as any).modUsername=MOD_SESSIONS.get(modToken);return next();}
+  if(adminToken&&ADMIN_SESSIONS.has(adminToken)){(req as any).modUsername="htr";return next();}
+  res.status(401).json({error:"Mod or admin auth required"});
+}
+
+router.post("/mod/login",(req:any,res)=>{
+  const{username,password}=req.body||{};
+  // Allow admin to log in as mod too
+  if(username===ADMIN_USER&&password===ADMIN_PASS){
+    const tok=crypto.randomUUID();MOD_SESSIONS.set(tok,username);return res.json({token:tok,role:"admin",username});
+  }
+  const mods=getMods();
+  const mod=mods.find(m=>m.username===username&&m.password===password);
+  if(!mod) return res.status(401).json({error:"Invalid credentials"});
+  const tok=crypto.randomUUID();
+  MOD_SESSIONS.set(tok,username);
+  res.json({token:tok,role:mod.role,username});
+});
+
+router.post("/mod/logout",modAuth,(req:any,res)=>{
+  const tok=req.headers["x-mod-token"] as string;
+  MOD_SESSIONS.delete(tok); res.json({ok:true});
+});
+
+router.get("/community/roles",(_req,res)=>{
+  res.json(getRoles());
+});
+
+router.post("/community/roles/assign",modOrAdminAuth,(req:any,res)=>{
+  const{username,role}=req.body||{};
+  if(!username) return res.status(400).json({error:"username required"});
+  const validRoles=["owner","admin","moderator","teacher","scholar","champion","elite","contributor","verified","active","veteran","newcomer",""];
+  if(!validRoles.includes(role||"")) return res.status(400).json({error:"Invalid role"});
+  // Only admin can assign admin/owner roles
+  if((role==="owner"||role==="admin")&&req.modUsername!=="htr") return res.status(403).json({error:"Only owner can assign this role"});
+  const roles=getRoles();
+  if(!role||role==="") delete roles[username];
+  else roles[username]=role;
+  saveRoles(roles); res.json(roles);
+});
+
+router.post("/community/posts/:id/pin",modOrAdminAuth,(req:any,res)=>{
+  const pins=getPins();
+  const i=pins.indexOf(req.params.id);
+  if(i>=0) pins.splice(i,1);
+  else pins.unshift(req.params.id);
+  savePins(pins); res.json({pinned:i<0,pins});
+});
+
+router.post("/community/posts/:id/announce",modOrAdminAuth,(req:any,res)=>{
+  const arr=getAnnounces();
+  const i=arr.indexOf(req.params.id);
+  if(i>=0) arr.splice(i,1);
+  else arr.unshift(req.params.id);
+  saveAnnounces(arr); res.json({announced:i<0});
+});
+
+router.post("/community/posts/:id/report",userAuth,(req:any,res)=>{
+  const u=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
+  const{reason}=req.body||{};
+  const reports=getReports();
+  reports.unshift({id:crypto.randomUUID(),postId:req.params.id,reporter:u,reason:String(reason||"No reason"),createdAt:new Date().toISOString(),resolved:false});
+  saveReports(reports.slice(0,500)); res.json({ok:true});
+});
+
+router.get("/mod/reports",modOrAdminAuth,(_req,res)=>res.json(getReports()));
+router.patch("/mod/reports/:id/resolve",modOrAdminAuth,(req:any,res)=>{
+  const reports=getReports();
+  const i=reports.findIndex((r:any)=>r.id===req.params.id);
+  if(i>=0){reports[i].resolved=true;saveReports(reports);}
+  res.json({ok:true});
+});
+
+router.get("/community/pins",(_req,res)=>res.json({pins:getPins(),announces:getAnnounces()}));
+
+router.get("/mod/users",modOrAdminAuth,(_req,res)=>{
+  const users=rd<any[]>("users.json",[]);
+  const roles=getRoles();
+  const warns=rd<Record<string,number>>("community-warns.json",{});
+  const bans=rd<string[]>("community-bans.json",[]);
+  res.json(users.map((u:any)=>({username:u.username||u.name,role:roles[u.username||u.name]||"",warned:(warns[u.username||u.name]||0)>0,banned:bans.includes(u.username||u.name)})));
+});
+
+router.post("/mod/users/:username/warn",modOrAdminAuth,(req:any,res)=>{
+  const warns=rd<Record<string,number>>("community-warns.json",{});
+  warns[req.params.username]=(warns[req.params.username]||0)+1;
+  wr("community-warns.json",warns);
+  // Send notification
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  notifs.unshift({id:crypto.randomUUID(),title:"⚠️ Community Warning",body:`You have received a community warning from a moderator. Repeated violations may result in a ban.`,createdAt:new Date().toISOString(),recipients:[req.params.username],readBy:[]});
+  wr("notifs.json",notifs.slice(0,300));
+  res.json({ok:true,warns:warns[req.params.username]});
+});
+
+router.post("/mod/users/:username/ban",modOrAdminAuth,(req:any,res)=>{
+  const bans=rd<string[]>("community-bans.json",[]);
+  if(!bans.includes(req.params.username)) bans.push(req.params.username);
+  wr("community-bans.json",bans);
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  notifs.unshift({id:crypto.randomUUID(),title:"🚫 Community Ban",body:`You have been banned from the HTR Zone Community by a moderator.`,createdAt:new Date().toISOString(),recipients:[req.params.username],readBy:[]});
+  wr("notifs.json",notifs.slice(0,300));
+  res.json({ok:true});
+});
+
+router.post("/mod/users/:username/unban",modOrAdminAuth,(req:any,res)=>{
+  const bans=rd<string[]>("community-bans.json",[]);
+  const i=bans.indexOf(req.params.username);
+  if(i>=0) bans.splice(i,1);
+  wr("community-bans.json",bans);
+  res.json({ok:true});
+});
+
+router.post("/mod/announce",modOrAdminAuth,(req:any,res)=>{
+  const{text}=req.body||{};
+  if(!text?.trim()) return res.status(400).json({error:"text required"});
+  const u=req.modUsername||"moderator";
+  const post:any={id:crypto.randomUUID(),author:u,text:String(text).slice(0,2000),subject:"Announcement",
+    createdAt:new Date().toISOString(),reactions:{},comments:[],pinned:true,announced:true};
+  const posts=getPosts();posts.unshift(post);savePosts(posts.slice(0,1000));
+  const announces=getAnnounces();announces.unshift(post.id);saveAnnounces(announces);
+  const pins=getPins();pins.unshift(post.id);savePins(pins);
+  // Broadcast notification
+  const notifs=rd<Notification[]>("notifs.json",[]);
+  notifs.unshift({id:crypto.randomUUID(),title:"📢 Community Announcement",body:String(text).slice(0,120),createdAt:new Date().toISOString(),readBy:[]});
+  wr("notifs.json",notifs.slice(0,300));
+  res.json(post);
+});
+
+// Mod management (admin only)
+router.get("/admin/mods",adminAuth,(_req,res)=>res.json(getMods()));
+router.post("/admin/mods",adminAuth,(req:any,res)=>{
+  const{username,password,role}=req.body||{};
+  if(!username||!password) return res.status(400).json({error:"username and password required"});
+  const mods=getMods();
+  if(mods.find(m=>m.username===username)) return res.status(409).json({error:"Username already exists"});
+  const mod:ModUser={id:crypto.randomUUID(),username:String(username).trim(),password:String(password),role:role||"moderator",createdAt:new Date().toISOString()};
+  mods.push(mod);saveMods(mods);
+  // Auto-assign role in community
+  const roles=getRoles();roles[mod.username]=mod.role;saveRoles(roles);
+  res.json(mod);
+});
+router.delete("/admin/mods/:id",adminAuth,(req:any,res)=>{
+  const mods=getMods();
+  const i=mods.findIndex(m=>m.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const{username,role}=mods[i];mods.splice(i,1);saveMods(mods);
+  // Remove role if it was mod role
+  const roles=getRoles();if(roles[username]===role){delete roles[username];saveRoles(roles);}
+  res.json({ok:true});
+});
+router.patch("/admin/mods/:id",adminAuth,(req:any,res)=>{
+  const mods=getMods();
+  const i=mods.findIndex(m=>m.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const{password,role}=req.body||{};
+  if(password) mods[i].password=String(password);
+  if(role) {mods[i].role=String(role); const roles=getRoles();roles[mods[i].username]=String(role);saveRoles(roles);}
+  saveMods(mods); res.json(mods[i]);
+});
+
+/* ══════════════════════════════════════════════════════════
    COMMUNITY — POSTS, REACTIONS, COMMENTS, STORIES
 ══════════════════════════════════════════════════════════ */
 interface CPost {
