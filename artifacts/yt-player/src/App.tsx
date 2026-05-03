@@ -31,6 +31,7 @@ import KnowledgeFractal from "./pages/KnowledgeFractal";
 import VocabBuilder from "./pages/VocabBuilder";
 import BattleQuiz from "./pages/BattleQuiz";
 import FocusRoom from "./pages/FocusRoom";
+import StudyRoom from "./pages/StudyRoom";
 import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
@@ -222,9 +223,11 @@ export default function App() {
         <Route path="/vault"           component={Vault} />
         <Route path="/exam-sim/:examId" component={ExamSim} />
         <Route path="/fractal"         component={KnowledgeFractal} />
-        <Route path="/vocab"           component={VocabBuilder} />
-        <Route path="/battle-quiz"     component={BattleQuiz} />
-        <Route path="/focus-room"      component={FocusRoom} />
+        <Route path="/vocab"             component={VocabBuilder} />
+        <Route path="/battle-quiz"       component={BattleQuiz} />
+        <Route path="/focus-room"        component={FocusRoom} />
+        <Route path="/study-room/:id"    component={StudyRoom} />
+        <Route path="/study-room"        component={StudyRoom} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>

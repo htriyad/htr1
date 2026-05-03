@@ -54,6 +54,7 @@ const SIDEBAR_ITEMS = [
   { label: "🌀 Knowledge Fractal", icon: "🌀", path: "/fractal" },
   { label: "AI Tutor",         icon: "🤖", path: "/ai-tutor" },
   { label: "Q&A Service",      icon: "💬", path: "/ask" },
+  { label: "Group Study Rooms",icon: "🏠", path: "/study-room" },
   { label: "Discussion Group", icon: "👥", path: "/discussion" },
   { label: "Leaderboard",      icon: "🥇", path: "/leaderboard" },
 ];
@@ -562,9 +563,10 @@ export default function Dashboard() {
             { icon:"🔢", label:"Tools",      path:"/tools",       bg:"#f3e5f5", color:"#7b2fa5" },
             { icon:"📄", label:"Papers",     path:"/papers",       bg:"#e0f7fa", color:"#0097a7" },
             { icon:"📝", label:"Notes",      path:"/notes",        bg:"#fff7ed", color:"#ea580c" },
-            { icon:"⚡", label:"Battle Quiz",path:"/battle-quiz",  bg:"linear-gradient(135deg,#ede9fe,#fce7f3)", color:"#7c3aed" },
-            { icon:"📖", label:"Vocabulary", path:"/vocab",        bg:"linear-gradient(135deg,#dbeafe,#ede9fe)", color:"#1d4ed8" },
-            { icon:"🎯", label:"Focus Room", path:"/focus-room",   bg:"linear-gradient(135deg,#fef3c7,#ede9fe)", color:"#7c3aed" },
+            { icon:"⚡", label:"Battle Quiz",path:"/battle-quiz",   bg:"linear-gradient(135deg,#ede9fe,#fce7f3)", color:"#7c3aed" },
+            { icon:"📖", label:"Vocabulary", path:"/vocab",         bg:"linear-gradient(135deg,#dbeafe,#ede9fe)", color:"#1d4ed8" },
+            { icon:"🎯", label:"Focus Room", path:"/focus-room",    bg:"linear-gradient(135deg,#fef3c7,#ede9fe)", color:"#7c3aed" },
+            { icon:"🏠", label:"Study Room", path:"/study-room",    bg:"linear-gradient(135deg,#dcfce7,#dbeafe)", color:"#16a34a" },
           ].map(q => (
             <button key={q.label} onClick={() => navigate(q.path)} className="dash-quick-item"
               style={{ background:q.bg }}>

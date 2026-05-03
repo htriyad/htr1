@@ -1793,5 +1793,129 @@ router.delete("/admin/quotes/:id",adminAuth,(req,res)=>{
   wr("quotes.json",rd<any[]>("quotes.json",DEFAULT_QUOTES).filter(q=>q.id!==req.params.id)); res.json({ok:true});
 });
 
+/* ══════════════════════════════════════════════════════════
+   GROUP STUDY ROOMS
+══════════════════════════════════════════════════════════ */
+interface StudyRoom { id:string; name:string; subject:string; host:string; members:string[]; maxMembers:number; isPrivate:boolean; pin:string|null; timerState:{running:boolean;endAt:number|null;mode:string;duration:number}; createdAt:string; lastActivity:string; }
+interface RoomMsg   { id:string; roomId:string; username:string; text:string; type:"chat"|"system"; ts:string; }
+
+function getRooms(): StudyRoom[]  { return rd<StudyRoom[]>("study-rooms.json",[]); }
+function saveRooms(r:StudyRoom[]) { wr("study-rooms.json",r); }
+function getMsgs(roomId:string):RoomMsg[]  { return rd<RoomMsg[]>(`room-${roomId}-chat.json`,[]); }
+function saveMsgs(roomId:string,msgs:RoomMsg[]) { wr(`room-${roomId}-chat.json`,msgs.slice(-200)); }
+
+// Prune stale rooms (no activity > 2h and empty)
+function pruneRooms(rooms:StudyRoom[]):StudyRoom[] {
+  const cutoff=Date.now()-2*60*60*1000;
+  return rooms.filter(r=>r.members.length>0||new Date(r.lastActivity).getTime()>cutoff);
+}
+
+router.get("/study-rooms",(_req,res)=>{
+  const rooms=pruneRooms(getRooms());
+  saveRooms(rooms);
+  res.json(rooms.filter(r=>!r.isPrivate).map(r=>({...r,pin:undefined})));
+});
+
+router.post("/study-rooms",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const {name,subject,maxMembers,isPrivate,pin}=req.body as any;
+  if(!name?.trim()) return res.status(400).json({error:"Room name required"});
+  const room:StudyRoom={
+    id:uid(), name:String(name).trim().slice(0,50), subject:String(subject||"General").trim().slice(0,30),
+    host:username, members:[username], maxMembers:Math.min(20,Math.max(2,Number(maxMembers)||8)),
+    isPrivate:!!isPrivate, pin:isPrivate&&pin?String(pin).slice(0,8):null,
+    timerState:{running:false,endAt:null,mode:"focus",duration:25},
+    createdAt:new Date().toISOString(), lastActivity:new Date().toISOString()
+  };
+  const rooms=pruneRooms(getRooms());
+  rooms.push(room);
+  saveRooms(rooms);
+  saveMsgs(room.id,[{id:uid(),roomId:room.id,username:"system",text:`${username} created the room. Welcome! 🎓`,type:"system",ts:new Date().toISOString()}]);
+  res.json(room);
+});
+
+router.get("/study-rooms/:id",(req:any,res)=>{
+  const rooms=getRooms();
+  const room=rooms.find(r=>r.id===req.params.id);
+  if(!room) return res.status(404).json({error:"Room not found"});
+  const {pin:_,isPrivate:__,...safe}=room as any;
+  res.json({...safe,isPrivate:room.isPrivate});
+});
+
+router.post("/study-rooms/:id/join",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const {pin}=req.body as any;
+  const rooms=getRooms();
+  const i=rooms.findIndex(r=>r.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Room not found"});
+  const room=rooms[i];
+  if(room.isPrivate&&room.pin&&room.pin!==String(pin||"")) return res.status(403).json({error:"Wrong PIN"});
+  if(room.members.length>=room.maxMembers&&!room.members.includes(username)) return res.status(400).json({error:"Room is full"});
+  if(!room.members.includes(username)){
+    room.members.push(username);
+    saveMsgs(room.id,[...getMsgs(room.id),{id:uid(),roomId:room.id,username:"system",text:`${username} joined the room 👋`,type:"system",ts:new Date().toISOString()}]);
+  }
+  room.lastActivity=new Date().toISOString();
+  rooms[i]=room; saveRooms(rooms);
+  res.json(room);
+});
+
+router.post("/study-rooms/:id/leave",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const rooms=getRooms();
+  const i=rooms.findIndex(r=>r.id===req.params.id);
+  if(i<0) return res.json({ok:true});
+  const room=rooms[i];
+  room.members=room.members.filter(m=>m!==username);
+  saveMsgs(room.id,[...getMsgs(room.id),{id:uid(),roomId:room.id,username:"system",text:`${username} left the room`,type:"system",ts:new Date().toISOString()}]);
+  if(room.members.length===0) rooms.splice(i,1);
+  else { if(room.host===username&&room.members.length>0) room.host=room.members[0]; rooms[i]=room; }
+  saveRooms(rooms); res.json({ok:true});
+});
+
+router.get("/study-rooms/:id/messages",(req:any,res)=>{
+  const since=String(req.query.since||"");
+  const msgs=getMsgs(req.params.id);
+  const filtered=since?msgs.filter(m=>m.ts>since):msgs.slice(-60);
+  res.json(filtered);
+});
+
+router.post("/study-rooms/:id/messages",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const {text}=req.body as any;
+  if(!text?.trim()) return res.status(400).json({error:"Empty message"});
+  const rooms=getRooms();
+  const room=rooms.find(r=>r.id===req.params.id);
+  if(!room) return res.status(404).json({error:"Room not found"});
+  const msg:RoomMsg={id:uid(),roomId:req.params.id,username,text:String(text).trim().slice(0,300),type:"chat",ts:new Date().toISOString()};
+  const msgs=getMsgs(req.params.id);
+  msgs.push(msg);
+  saveMsgs(req.params.id,msgs);
+  const i=rooms.findIndex(r=>r.id===req.params.id);
+  if(i>=0){rooms[i].lastActivity=new Date().toISOString();saveRooms(rooms);}
+  res.json(msg);
+});
+
+router.put("/study-rooms/:id/timer",(req:any,res)=>{
+  const username=(req.headers["x-username"] as string)||"guest";
+  const {running,mode,duration}=req.body as any;
+  const rooms=getRooms();
+  const i=rooms.findIndex(r=>r.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Room not found"});
+  const room=rooms[i];
+  if(room.host!==username) return res.status(403).json({error:"Only host can control timer"});
+  room.timerState={
+    running:!!running,
+    endAt:running?Date.now()+Number(duration||25)*60*1000:null,
+    mode:String(mode||"focus"),
+    duration:Number(duration||25)
+  };
+  room.lastActivity=new Date().toISOString();
+  rooms[i]=room; saveRooms(rooms);
+  const action=running?"started":"stopped";
+  saveMsgs(room.id,[...getMsgs(room.id),{id:uid(),roomId:room.id,username:"system",text:`${username} ${action} the ${mode||"focus"} timer ⏱`,type:"system",ts:new Date().toISOString()}]);
+  res.json(room.timerState);
+});
+
 export default router;
 
