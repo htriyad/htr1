@@ -82,7 +82,7 @@ function apiPlugin() {
         const m = req.method?.toUpperCase() || "GET";
 
         // ── Pass-through to API server proxy for modern routes ─────────
-        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu","/api/flashcard-decks","/api/daily-challenge","/api/search","/api/exam-dates","/api/past-papers","/api/formulas","/api/vocabulary","/api/study-log","/api/topic-votes","/api/platform-settings","/api/smart-quiz"];
+        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu","/api/flashcard-decks","/api/daily-challenge","/api/search","/api/exam-dates","/api/past-papers","/api/formulas","/api/vocabulary","/api/study-log","/api/topic-votes","/api/platform-settings","/api/smart-quiz","/api/fractal"];
         if (PROXIED.some(prefix => p === prefix || p.startsWith(prefix+"/")||p.startsWith(prefix+"?"))) return next();
 
         // ── GET /api/check-ip ──────────────────────────────────────────

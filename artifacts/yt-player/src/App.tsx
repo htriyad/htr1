@@ -27,6 +27,7 @@ import SmartQuiz from "./pages/SmartQuiz";
 import Roadmap from "./pages/Roadmap";
 import Vault from "./pages/Vault";
 import ExamSim from "./pages/ExamSim";
+import KnowledgeFractal from "./pages/KnowledgeFractal";
 import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
@@ -216,6 +217,7 @@ export default function App() {
         <Route path="/roadmap"         component={Roadmap} />
         <Route path="/vault"           component={Vault} />
         <Route path="/exam-sim/:examId" component={ExamSim} />
+        <Route path="/fractal"         component={KnowledgeFractal} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>
