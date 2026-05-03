@@ -12,6 +12,9 @@ import AiTutor from "./pages/AiTutor";
 import AskTeacher from "./pages/AskTeacher";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
+import SolveSheet from "./pages/SolveSheet";
+import LiveClasses from "./pages/LiveClasses";
+import Discussion from "./pages/Discussion";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -185,6 +188,9 @@ export default function App() {
         <Route path="/ask"             component={AskTeacher} />
         <Route path="/profile"         component={Profile} />
         <Route path="/leaderboard"     component={Leaderboard} />
+        <Route path="/solve-sheet"     component={SolveSheet} />
+        <Route path="/live-class"      component={LiveClasses} />
+        <Route path="/discussion"      component={Discussion} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>

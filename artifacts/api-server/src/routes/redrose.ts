@@ -1144,6 +1144,139 @@ router.delete("/doubts/:id", adminAuth, (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════
+   SOLVE SHEETS
+══════════════════════════════════════════════════════════ */
+interface SolveSheet {
+  id: string; title: string; subject: string;
+  exam: string; year: string;
+  imageUrls: string[]; pdfUrl?: string;
+  createdAt: string;
+}
+if (!fs.existsSync(path.join(DATA_DIR,"solve-sheets.json"))) wr("solve-sheets.json",[]);
+router.get("/solve-sheets", userAuth, (_req,res) => res.json(rd<SolveSheet[]>("solve-sheets.json",[])));
+router.get("/admin/solve-sheets", adminAuth, (_req,res) => res.json(rd<SolveSheet[]>("solve-sheets.json",[])));
+router.post("/admin/solve-sheets", adminAuth, (req,res) => {
+  const {title,subject,exam,year,imageUrls,pdfUrl}=req.body||{};
+  if(!title||!subject) return res.status(400).json({error:"title and subject required"});
+  const sheets=rd<SolveSheet[]>("solve-sheets.json",[]);
+  const item:SolveSheet={id:crypto.randomUUID(),title:String(title).trim(),subject:String(subject).trim(),exam:String(exam||"").trim(),year:String(year||"").trim(),imageUrls:Array.isArray(imageUrls)?imageUrls.filter(Boolean):[],pdfUrl:pdfUrl||undefined,createdAt:new Date().toISOString()};
+  sheets.unshift(item); wr("solve-sheets.json",sheets); res.json(item);
+});
+router.put("/admin/solve-sheets/:id", adminAuth, (req,res) => {
+  const sheets=rd<SolveSheet[]>("solve-sheets.json",[]); const i=sheets.findIndex(s=>s.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const b=req.body||{}; sheets[i]={...sheets[i],...(b.title?{title:String(b.title).trim()}:{}),...(b.subject?{subject:String(b.subject).trim()}:{}),...(b.exam!==undefined?{exam:String(b.exam).trim()}:{}),...(b.year!==undefined?{year:String(b.year).trim()}:{}),...(Array.isArray(b.imageUrls)?{imageUrls:b.imageUrls.filter(Boolean)}:{}),...(b.pdfUrl!==undefined?{pdfUrl:b.pdfUrl||undefined}:{})};
+  wr("solve-sheets.json",sheets); res.json(sheets[i]);
+});
+router.delete("/admin/solve-sheets/:id", adminAuth, (req,res) => {
+  wr("solve-sheets.json",rd<SolveSheet[]>("solve-sheets.json",[]).filter(s=>s.id!==req.params.id)); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   LIVE CLASSES
+══════════════════════════════════════════════════════════ */
+interface LiveClass {
+  id: string; title: string; subject: string; teacherName: string;
+  youtubeId: string; scheduledAt: string; durationMinutes: number;
+  description?: string; createdAt: string;
+}
+if (!fs.existsSync(path.join(DATA_DIR,"live-classes.json"))) wr("live-classes.json",[]);
+router.get("/live-classes", userAuth, (_req,res) => res.json(rd<LiveClass[]>("live-classes.json",[])));
+router.get("/admin/live-classes", adminAuth, (_req,res) => res.json(rd<LiveClass[]>("live-classes.json",[])));
+router.post("/admin/live-classes", adminAuth, (req,res) => {
+  const {title,subject,teacherName,youtubeId,scheduledAt,durationMinutes,description}=req.body||{};
+  if(!title||!youtubeId||!scheduledAt) return res.status(400).json({error:"title, youtubeId, scheduledAt required"});
+  const classes=rd<LiveClass[]>("live-classes.json",[]);
+  const item:LiveClass={id:crypto.randomUUID(),title:String(title).trim(),subject:String(subject||"General").trim(),teacherName:String(teacherName||"").trim(),youtubeId:String(youtubeId).trim(),scheduledAt:String(scheduledAt),durationMinutes:Number(durationMinutes)||60,description:description||undefined,createdAt:new Date().toISOString()};
+  classes.push(item); classes.sort((a,b)=>new Date(a.scheduledAt).getTime()-new Date(b.scheduledAt).getTime()); wr("live-classes.json",classes); res.json(item);
+});
+router.put("/admin/live-classes/:id", adminAuth, (req,res) => {
+  const classes=rd<LiveClass[]>("live-classes.json",[]); const i=classes.findIndex(c=>c.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const b=req.body||{}; classes[i]={...classes[i],...b}; wr("live-classes.json",classes); res.json(classes[i]);
+});
+router.delete("/admin/live-classes/:id", adminAuth, (req,res) => {
+  wr("live-classes.json",rd<LiveClass[]>("live-classes.json",[]).filter(c=>c.id!==req.params.id)); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   ANNOUNCEMENTS
+══════════════════════════════════════════════════════════ */
+interface Announcement {
+  id: string; title: string; body: string;
+  type: "info"|"warning"|"success"|"urgent";
+  pinned: boolean; createdAt: string; expiresAt?: string;
+}
+if (!fs.existsSync(path.join(DATA_DIR,"announcements.json"))) wr("announcements.json",[]);
+router.get("/announcements", userAuth, (_req,res) => {
+  const now=new Date().toISOString();
+  res.json(rd<Announcement[]>("announcements.json",[]).filter(a=>!a.expiresAt||a.expiresAt>now));
+});
+router.get("/admin/announcements", adminAuth, (_req,res) => res.json(rd<Announcement[]>("announcements.json",[])));
+router.post("/admin/announcements", adminAuth, (req,res) => {
+  const {title,body,type,pinned,expiresAt}=req.body||{};
+  if(!title||!body) return res.status(400).json({error:"title and body required"});
+  const items=rd<Announcement[]>("announcements.json",[]);
+  const item:Announcement={id:crypto.randomUUID(),title:String(title).trim(),body:String(body).trim(),type:(type||"info") as Announcement["type"],pinned:Boolean(pinned),createdAt:new Date().toISOString(),expiresAt:expiresAt||undefined};
+  items.unshift(item); wr("announcements.json",items); res.json(item);
+});
+router.put("/admin/announcements/:id", adminAuth, (req,res) => {
+  const items=rd<Announcement[]>("announcements.json",[]); const i=items.findIndex(a=>a.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  items[i]={...items[i],...req.body}; wr("announcements.json",items); res.json(items[i]);
+});
+router.delete("/admin/announcements/:id", adminAuth, (req,res) => {
+  wr("announcements.json",rd<Announcement[]>("announcements.json",[]).filter(a=>a.id!==req.params.id)); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   DISCUSSION BOARD
+══════════════════════════════════════════════════════════ */
+interface DiscussionReply { id:string; body:string; author:string; ip:string; createdAt:string; isTeacher?:boolean; }
+interface DiscussionPost  { id:string; subject:string; title:string; body:string; author:string; ip:string; createdAt:string; pinned?:boolean; replies:DiscussionReply[]; upvotes:string[]; }
+if (!fs.existsSync(path.join(DATA_DIR,"discussions.json"))) wr("discussions.json",[]);
+router.get("/discussions", userAuth, (_req,res) => res.json(rd<DiscussionPost[]>("discussions.json",[])));
+router.post("/discussions", userAuth, (req,res) => {
+  const {subject,title,body}=req.body||{}; if(!title||!body) return res.status(400).json({error:"title and body required"});
+  const user=getLoggedInUser(req); const ip=clientIp(req);
+  const posts=rd<DiscussionPost[]>("discussions.json",[]);
+  const post:DiscussionPost={id:crypto.randomUUID(),subject:String(subject||"General").trim(),title:String(title).slice(0,200),body:String(body).slice(0,3000),author:user?.username||"Anonymous",ip,createdAt:new Date().toISOString(),replies:[],upvotes:[]};
+  posts.unshift(post); wr("discussions.json",posts.slice(0,500)); res.json(post);
+});
+router.post("/discussions/:id/reply", userAuth, (req,res) => {
+  const {body}=req.body||{}; if(!body) return res.status(400).json({error:"body required"});
+  const posts=rd<DiscussionPost[]>("discussions.json",[]); const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const user=getLoggedInUser(req); const ip=clientIp(req);
+  const reply:DiscussionReply={id:crypto.randomUUID(),body:String(body).slice(0,2000),author:user?.username||"Anonymous",ip,createdAt:new Date().toISOString()};
+  posts[i].replies.push(reply); wr("discussions.json",posts); res.json(reply);
+});
+router.patch("/discussions/:id/upvote", userAuth, (req,res) => {
+  const posts=rd<DiscussionPost[]>("discussions.json",[]); const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const ip=clientIp(req);
+  if(posts[i].upvotes.includes(ip)) posts[i].upvotes=posts[i].upvotes.filter(x=>x!==ip);
+  else posts[i].upvotes.push(ip);
+  wr("discussions.json",posts); res.json({upvotes:posts[i].upvotes.length});
+});
+router.patch("/admin/discussions/:id/pin", adminAuth, (req,res) => {
+  const posts=rd<DiscussionPost[]>("discussions.json",[]); const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  posts[i].pinned=!posts[i].pinned; wr("discussions.json",posts); res.json({ok:true});
+});
+router.delete("/admin/discussions/:id", adminAuth, (req,res) => {
+  wr("discussions.json",rd<DiscussionPost[]>("discussions.json",[]).filter(p=>p.id!==req.params.id)); res.json({ok:true});
+});
+router.get("/admin/discussions", adminAuth, (_req,res) => res.json(rd<DiscussionPost[]>("discussions.json",[])));
+router.post("/admin/discussions/:id/reply", adminAuth, (req,res) => {
+  const {body}=req.body||{}; if(!body) return res.status(400).json({error:"body required"});
+  const posts=rd<DiscussionPost[]>("discussions.json",[]); const i=posts.findIndex(p=>p.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  const reply:DiscussionReply={id:crypto.randomUUID(),body:String(body).slice(0,2000),author:"Teacher",ip:"admin",createdAt:new Date().toISOString(),isTeacher:true};
+  posts[i].replies.push(reply); wr("discussions.json",posts); res.json(reply);
+});
+
+/* ══════════════════════════════════════════════════════════
    ADMIN — MANUAL DATABASE EDITOR
 ══════════════════════════════════════════════════════════ */
 function safeName(name: string): string|null {

@@ -82,7 +82,7 @@ function apiPlugin() {
         const m = req.method?.toUpperCase() || "GET";
 
         // ── Pass-through to API server proxy for modern routes ─────────
-        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification"];
+        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu"];
         if (PROXIED.some(prefix => p === prefix || p.startsWith(prefix+"/")||p.startsWith(prefix+"?"))) return next();
 
         // ── GET /api/check-ip ──────────────────────────────────────────
@@ -228,6 +228,11 @@ export default defineConfig({
       '/api/user':           { target: 'http://localhost:8080', changeOrigin: true },
       '/api/subjects':       { target: 'http://localhost:8080', changeOrigin: true },
       '/api/doubts':         { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/solve-sheets':  { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/live-classes':  { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/announcements': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/discussions':   { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/dashboard-menu':{ target: 'http://localhost:8080', changeOrigin: true },
     },
     fs:{ strict:true, deny:["**/.*"] },
   },

@@ -55,9 +55,9 @@
     "icon": "👨‍🏫",
     "bg": "#e8f5e9",
     "chevron": "#e53935",
-    "path": "/",
+    "path": "/live-class",
     "order": 7,
-    "enabled": false
+    "enabled": true
   },
   {
     "id": "m8",
@@ -65,7 +65,7 @@
     "icon": "📋",
     "bg": "#f3e5f5",
     "chevron": "#7b2fa5",
-    "path": "/",
+    "path": "/solve-sheet",
     "order": 8,
     "enabled": true
   },
@@ -95,7 +95,7 @@
     "icon": "👥",
     "bg": "#e8f5e9",
     "chevron": "#2e7d32",
-    "path": "/",
+    "path": "/discussion",
     "order": 10,
     "enabled": true
   }

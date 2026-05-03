@@ -6,7 +6,7 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db";
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",  icon:"📊", label:"Overview"      },
   { id:"users",     icon:"👤", label:"Users"         },
@@ -16,6 +16,10 @@ const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"videos",    icon:"🎬", label:"Videos"        },
   { id:"quizzes",   icon:"📝", label:"Quizzes"       },
   { id:"notifs",    icon:"🔔", label:"Notify"        },
+  { id:"solve",     icon:"📋", label:"Solve Sheet"   },
+  { id:"live",      icon:"👨‍🏫", label:"Live Class"    },
+  { id:"announce",  icon:"📢", label:"Announcements" },
+  { id:"discuss",   icon:"💬", label:"Discussions"   },
   { id:"menu",      icon:"⊞",  label:"Dashboard Menu"},
   { id:"doubts",    icon:"❓", label:"Doubts"        },
   { id:"micro",     icon:"⚡", label:"Micro Feed"    },
@@ -101,6 +105,10 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="micro"     && <MicroFeedTab />}
           {tab==="market"    && <MarketplaceTab />}
           {tab==="menu"      && <MenuTab />}
+          {tab==="solve"     && <SolveSheetTab />}
+          {tab==="live"      && <LiveClassTab />}
+          {tab==="announce"  && <AnnouncementsTab />}
+          {tab==="discuss"   && <DiscussionsTab />}
           {tab==="db"        && <DatabaseTab />}
         </main>
       </div>
@@ -2024,6 +2032,313 @@ function DatabaseTab() {
           {msg && <Feedback msg={msg} style={{marginTop:10}}/>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   SOLVE SHEET TAB
+══════════════════════════════════════════════════════════ */
+interface AdminSheet { id:string; title:string; subject:string; exam:string; year:string; imageUrls:string[]; pdfUrl?:string; createdAt:string; }
+function SolveSheetTab() {
+  const [sheets, setSheets] = useState<AdminSheet[]>([]);
+  const [form, setForm] = useState({ title:"", subject:"", exam:"", year:"", imageUrls:"", pdfUrl:"" });
+  const [editId, setEditId] = useState<string|null>(null);
+  const [msg, setMsg] = useState("");
+  const load = useCallback(() => api("/api/admin/solve-sheets").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setSheets(d); }), []);
+  useEffect(() => { load(); }, [load]);
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setMsg("");
+    const payload = { ...form, imageUrls: form.imageUrls.split("\n").map(u=>u.trim()).filter(Boolean) };
+    const r = editId
+      ? await api(`/api/admin/solve-sheets/${editId}`, { method:"PUT", body:JSON.stringify(payload) })
+      : await api("/api/admin/solve-sheets", { method:"POST", body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (!r.ok) { setMsg("❌ " + (d.error||"Failed")); return; }
+    setMsg("✅ Saved!"); setForm({ title:"", subject:"", exam:"", year:"", imageUrls:"", pdfUrl:"" }); setEditId(null); load();
+  }
+  function startEdit(s: AdminSheet) {
+    setEditId(s.id); setForm({ title:s.title, subject:s.subject, exam:s.exam, year:s.year, imageUrls:s.imageUrls.join("\n"), pdfUrl:s.pdfUrl||"" }); setMsg("");
+  }
+  return (
+    <div>
+      <SectionTitle>📋 Solve Sheet Library</SectionTitle>
+      <Card title={editId?"Edit Solve Sheet":"Add Solve Sheet"}>
+        <form onSubmit={save} style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="TITLE *"><input style={inp} value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Physics SSC 2024 Solve" required /></Field>
+            <Field label="SUBJECT *"><input style={inp} value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="Physics, Math…" required /></Field>
+            <Field label="EXAM TYPE"><input style={inp} value={form.exam} onChange={e=>setForm({...form,exam:e.target.value})} placeholder="SSC / HSC / Admission / BCS" /></Field>
+            <Field label="YEAR"><input style={inp} value={form.year} onChange={e=>setForm({...form,year:e.target.value})} placeholder="2024" /></Field>
+          </div>
+          <Field label="IMAGE URLs (one per line)">
+            <textarea style={{...inp,resize:"vertical",height:80}} value={form.imageUrls} onChange={e=>setForm({...form,imageUrls:e.target.value})} placeholder={"https://example.com/page1.jpg\nhttps://example.com/page2.jpg"} />
+          </Field>
+          <Field label="PDF URL (optional)"><input style={inp} value={form.pdfUrl} onChange={e=>setForm({...form,pdfUrl:e.target.value})} placeholder="https://drive.google.com/..." /></Field>
+          <div style={{display:"flex",gap:8}}>
+            <button type="submit" style={btnStyle("var(--purple)")}>{editId?"Update Sheet":"Add Sheet"}</button>
+            {editId&&<button type="button" onClick={()=>{setEditId(null);setForm({title:"",subject:"",exam:"",year:"",imageUrls:"",pdfUrl:""});setMsg("");}} style={btnStyle("#6b7280")}>Cancel</button>}
+          </div>
+          {msg&&<Feedback msg={msg}/>}
+        </form>
+      </Card>
+      <SectionTitle style={{marginTop:8}}>All Sheets ({sheets.length})</SectionTitle>
+      {sheets.length===0&&<Empty icon="📋" text="No solve sheets yet"/>}
+      {sheets.map(s=>(
+        <div key={s.id} style={{...listItem,display:"flex",gap:12,alignItems:"flex-start"}}>
+          {s.imageUrls[0]&&<img src={s.imageUrls[0]} alt={s.title} style={{width:50,height:60,objectFit:"cover",borderRadius:8,flexShrink:0}}/>}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"var(--text)"}}>{s.title}</div>
+            <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{s.subject} · {s.exam} {s.year} · {s.imageUrls.length} image{s.imageUrls.length!==1?"s":""}{s.pdfUrl?" · PDF":""}</div>
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0}}>
+            <button onClick={()=>startEdit(s)} style={smBtn("var(--purple)")}>Edit</button>
+            <button onClick={async()=>{if(!confirm("Delete?"))return;await api(`/api/admin/solve-sheets/${s.id}`,{method:"DELETE"});load();}} style={smBtn("#ef4444")}>Del</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   LIVE CLASS TAB
+══════════════════════════════════════════════════════════ */
+interface AdminLiveClass { id:string; title:string; subject:string; teacherName:string; youtubeId:string; scheduledAt:string; durationMinutes:number; description?:string; createdAt:string; }
+function LiveClassTab() {
+  const [classes, setClasses] = useState<AdminLiveClass[]>([]);
+  const [form, setForm] = useState({ title:"", subject:"", teacherName:"", youtubeId:"", scheduledAt:"", durationMinutes:"60", description:"" });
+  const [editId, setEditId] = useState<string|null>(null);
+  const [msg, setMsg] = useState("");
+  const load = useCallback(() => api("/api/admin/live-classes").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setClasses(d); }), []);
+  useEffect(() => { load(); }, [load]);
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setMsg("");
+    const payload = { ...form, durationMinutes: Number(form.durationMinutes)||60 };
+    const r = editId
+      ? await api(`/api/admin/live-classes/${editId}`, { method:"PUT", body:JSON.stringify(payload) })
+      : await api("/api/admin/live-classes", { method:"POST", body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (!r.ok) { setMsg("❌ " + (d.error||"Failed")); return; }
+    setMsg("✅ Saved!"); setForm({ title:"", subject:"", teacherName:"", youtubeId:"", scheduledAt:"", durationMinutes:"60", description:"" }); setEditId(null); load();
+  }
+  function startEdit(c: AdminLiveClass) {
+    setEditId(c.id);
+    const local = new Date(c.scheduledAt);
+    const pad = (n:number) => String(n).padStart(2,"0");
+    const localStr = `${local.getFullYear()}-${pad(local.getMonth()+1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`;
+    setForm({ title:c.title, subject:c.subject, teacherName:c.teacherName||"", youtubeId:c.youtubeId, scheduledAt:localStr, durationMinutes:String(c.durationMinutes), description:c.description||"" });
+    setMsg("");
+  }
+  function classStatus(c: AdminLiveClass): { label:string; color:string } {
+    const now = Date.now(); const start = new Date(c.scheduledAt).getTime(); const end = start + c.durationMinutes*60000;
+    if (now < start) return { label:"Upcoming", color:"#d97706" };
+    if (now < end)   return { label:"LIVE", color:"#dc2626" };
+    return { label:"Ended", color:"#6b7280" };
+  }
+  return (
+    <div>
+      <SectionTitle>👨‍🏫 Live Class Scheduler</SectionTitle>
+      <Card title={editId?"Edit Class":"Schedule Live Class"}>
+        <form onSubmit={save} style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="TITLE *"><input style={inp} value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Physics Chapter 4 Live" required /></Field>
+            <Field label="SUBJECT"><input style={inp} value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} placeholder="Physics, Math…" /></Field>
+            <Field label="TEACHER NAME"><input style={inp} value={form.teacherName} onChange={e=>setForm({...form,teacherName:e.target.value})} placeholder="Mr. Rahman" /></Field>
+            <Field label="YOUTUBE VIDEO ID *"><input style={inp} value={form.youtubeId} onChange={e=>setForm({...form,youtubeId:e.target.value})} placeholder="dQw4w9WgXcQ" required /></Field>
+            <Field label="SCHEDULED DATE & TIME *"><input type="datetime-local" style={inp} value={form.scheduledAt} onChange={e=>setForm({...form,scheduledAt:e.target.value})} required /></Field>
+            <Field label="DURATION (minutes)"><input type="number" style={inp} value={form.durationMinutes} onChange={e=>setForm({...form,durationMinutes:e.target.value})} min={1} max={480} /></Field>
+          </div>
+          <Field label="DESCRIPTION (optional)">
+            <textarea style={{...inp,resize:"vertical",height:60}} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="What will be covered in this class…" />
+          </Field>
+          <div style={{display:"flex",gap:8}}>
+            <button type="submit" style={btnStyle("var(--purple)")}>{editId?"Update Class":"Schedule Class"}</button>
+            {editId&&<button type="button" onClick={()=>{setEditId(null);setForm({title:"",subject:"",teacherName:"",youtubeId:"",scheduledAt:"",durationMinutes:"60",description:""});setMsg("");}} style={btnStyle("#6b7280")}>Cancel</button>}
+          </div>
+          {msg&&<Feedback msg={msg}/>}
+        </form>
+      </Card>
+      <SectionTitle style={{marginTop:8}}>All Classes ({classes.length})</SectionTitle>
+      {classes.length===0&&<Empty icon="👨‍🏫" text="No live classes scheduled yet"/>}
+      {classes.map(c=>{
+        const st=classStatus(c);
+        return (
+          <div key={c.id} style={{...listItem,display:"flex",gap:12,alignItems:"flex-start"}}>
+            <img src={`https://img.youtube.com/vi/${c.youtubeId}/mqdefault.jpg`} alt={c.title}
+              style={{width:72,height:48,objectFit:"cover",borderRadius:8,flexShrink:0}} />
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                <span style={{fontWeight:700,fontSize:14,color:"var(--text)"}}>{c.title}</span>
+                <span style={{fontSize:10,padding:"1px 7px",borderRadius:20,background:st.color+"22",color:st.color,fontWeight:700}}>{st.label}</span>
+              </div>
+              <div style={{fontSize:12,color:"var(--sub)"}}>{c.subject} {c.teacherName&&`· ${c.teacherName}`} · {new Date(c.scheduledAt).toLocaleString("en-BD",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})} · {c.durationMinutes}min</div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button onClick={()=>startEdit(c)} style={smBtn("var(--purple)")}>Edit</button>
+              <button onClick={async()=>{if(!confirm("Delete?"))return;await api(`/api/admin/live-classes/${c.id}`,{method:"DELETE"});load();}} style={smBtn("#ef4444")}>Del</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   ANNOUNCEMENTS TAB
+══════════════════════════════════════════════════════════ */
+interface AdminAnnouncement { id:string; title:string; body:string; type:"info"|"warning"|"success"|"urgent"; pinned:boolean; createdAt:string; expiresAt?:string; }
+const ANN_TYPE_COLORS: Record<string,string> = { info:"#3b82f6", warning:"#d97706", success:"#16a34a", urgent:"#dc2626" };
+function AnnouncementsTab() {
+  const [items, setItems] = useState<AdminAnnouncement[]>([]);
+  const [form, setForm] = useState({ title:"", body:"", type:"info", pinned:false, expiresAt:"" });
+  const [editId, setEditId] = useState<string|null>(null);
+  const [msg, setMsg] = useState("");
+  const load = useCallback(() => api("/api/admin/announcements").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setItems(d); }), []);
+  useEffect(() => { load(); }, [load]);
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setMsg("");
+    const payload = { ...form, expiresAt: form.expiresAt || undefined };
+    const r = editId
+      ? await api(`/api/admin/announcements/${editId}`, { method:"PUT", body:JSON.stringify(payload) })
+      : await api("/api/admin/announcements", { method:"POST", body:JSON.stringify(payload) });
+    const d = await r.json();
+    if (!r.ok) { setMsg("❌ " + (d.error||"Failed")); return; }
+    setMsg("✅ Published!"); setForm({ title:"", body:"", type:"info", pinned:false, expiresAt:"" }); setEditId(null); load();
+  }
+  function startEdit(a: AdminAnnouncement) {
+    setEditId(a.id); setForm({ title:a.title, body:a.body, type:a.type, pinned:a.pinned, expiresAt:a.expiresAt||"" }); setMsg("");
+  }
+  return (
+    <div>
+      <SectionTitle>📢 Announcements</SectionTitle>
+      <InfoBox>Announcements appear as coloured banners on the student dashboard. Use <b>urgent</b> for important notices, <b>warning</b> for reminders, <b>success</b> for positive news.</InfoBox>
+      <Card title={editId?"Edit Announcement":"New Announcement"}>
+        <form onSubmit={save} style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="TITLE *"><input style={inp} value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Exam schedule updated" required /></Field>
+          <Field label="BODY *">
+            <textarea style={{...inp,resize:"vertical",height:70}} value={form.body} onChange={e=>setForm({...form,body:e.target.value})} placeholder="Full announcement text…" required />
+          </Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="TYPE">
+              <select style={inp} value={form.type} onChange={e=>setForm({...form,type:e.target.value as any})}>
+                <option value="info">ℹ️ Info</option>
+                <option value="warning">⚠️ Warning</option>
+                <option value="success">✅ Success</option>
+                <option value="urgent">🚨 Urgent</option>
+              </select>
+            </Field>
+            <Field label="EXPIRES (optional)"><input type="datetime-local" style={inp} value={form.expiresAt} onChange={e=>setForm({...form,expiresAt:e.target.value})} /></Field>
+          </div>
+          <label style={{display:"flex",gap:8,alignItems:"center",cursor:"pointer",fontSize:13}}>
+            <input type="checkbox" checked={form.pinned} onChange={e=>setForm({...form,pinned:e.target.checked})} />
+            <span>📌 Pin to top</span>
+          </label>
+          <div style={{display:"flex",gap:8}}>
+            <button type="submit" style={btnStyle("var(--purple)")}>{editId?"Update":"Publish"}</button>
+            {editId&&<button type="button" onClick={()=>{setEditId(null);setForm({title:"",body:"",type:"info",pinned:false,expiresAt:""});setMsg("");}} style={btnStyle("#6b7280")}>Cancel</button>}
+          </div>
+          {msg&&<Feedback msg={msg}/>}
+        </form>
+      </Card>
+      <SectionTitle style={{marginTop:8}}>Published ({items.length})</SectionTitle>
+      {items.length===0&&<Empty icon="📢" text="No announcements yet"/>}
+      {items.map(a=>{
+        const col=ANN_TYPE_COLORS[a.type]||"#3b82f6";
+        return (
+          <div key={a.id} style={{...listItem,borderLeft:`4px solid ${col}`}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",gap:6,marginBottom:4}}>
+                  <span style={{fontSize:12,fontWeight:700,color:col,textTransform:"uppercase"}}>{a.type}</span>
+                  {a.pinned&&<span style={{fontSize:11,color:"var(--sub)"}}>📌 Pinned</span>}
+                  {a.expiresAt&&<span style={{fontSize:11,color:"var(--sub)"}}>Expires {new Date(a.expiresAt).toLocaleString("en-BD",{day:"2-digit",month:"short"})}</span>}
+                </div>
+                <div style={{fontWeight:700,fontSize:14,color:"var(--text)",marginBottom:4}}>{a.title}</div>
+                <div style={{fontSize:13,color:"var(--sub)",lineHeight:1.5}}>{a.body}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>startEdit(a)} style={smBtn("var(--purple)")}>Edit</button>
+                <button onClick={async()=>{if(!confirm("Delete?"))return;await api(`/api/admin/announcements/${a.id}`,{method:"DELETE"});load();}} style={smBtn("#ef4444")}>Del</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   DISCUSSIONS TAB
+══════════════════════════════════════════════════════════ */
+interface AdminDiscussionReply { id:string; body:string; author:string; createdAt:string; isTeacher?:boolean; }
+interface AdminDiscussion { id:string; subject:string; title:string; body:string; author:string; createdAt:string; pinned?:boolean; replies:AdminDiscussionReply[]; upvotes:string[]; }
+function DiscussionsTab() {
+  const [posts, setPosts] = useState<AdminDiscussion[]>([]);
+  const [expanded, setExpanded] = useState<string|null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyId, setReplyId] = useState<string|null>(null);
+  const [msg, setMsg] = useState("");
+  const load = useCallback(() => api("/api/admin/discussions").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setPosts(d); }), []);
+  useEffect(() => { load(); }, [load]);
+  async function sendReply(postId: string) {
+    if (!replyText.trim()) return;
+    setMsg("");
+    const r = await api(`/api/admin/discussions/${postId}/reply`, { method:"POST", body:JSON.stringify({ body:replyText }) });
+    if (r.ok) { setReplyText(""); setReplyId(null); setMsg("✅ Reply sent!"); load(); }
+    else { const d=await r.json().catch(()=>({})); setMsg("❌ "+(d.error||"Failed")); }
+  }
+  return (
+    <div>
+      <SectionTitle>💬 Discussions Board</SectionTitle>
+      {msg&&<Feedback msg={msg} style={{marginBottom:12}}/>}
+      {posts.length===0&&<Empty icon="💬" text="No discussions yet"/>}
+      {posts.map(p=>(
+        <div key={p.id} style={{...listItem}}>
+          <button onClick={()=>setExpanded(e=>e===p.id?null:p.id)}
+            style={{width:"100%",textAlign:"left",background:"none",border:"none",cursor:"pointer",padding:0}}>
+            <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",gap:6,marginBottom:4}}>
+                  {p.pinned&&<span style={{fontSize:10,background:"#ede9fe",color:"var(--purple)",padding:"1px 7px",borderRadius:20,fontWeight:700}}>📌 Pinned</span>}
+                  {p.subject&&<span style={{fontSize:10,background:"var(--bg)",color:"var(--sub)",padding:"1px 7px",borderRadius:20}}>{p.subject}</span>}
+                </div>
+                <div style={{fontWeight:700,fontSize:13,color:"var(--text)",marginBottom:2}}>{p.title}</div>
+                <div style={{fontSize:11,color:"var(--sub)"}}>👤 {p.author} · 💬 {p.replies.length} · ❤️ {p.upvotes.length} · {new Date(p.createdAt).toLocaleString("en-BD",{day:"2-digit",month:"short"})}</div>
+              </div>
+              <span style={{color:"var(--sub)",fontSize:14}}>{expanded===p.id?"▲":"▼"}</span>
+            </div>
+          </button>
+          {expanded===p.id&&(
+            <div style={{paddingTop:12}}>
+              <div style={{background:"var(--bg)",borderRadius:10,padding:10,marginBottom:10,fontSize:13,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{p.body}</div>
+              {p.replies.map(r=>(
+                <div key={r.id} style={{background:r.isTeacher?"#f0fdf4":"var(--bg)",borderRadius:8,padding:"8px 10px",marginBottom:6,fontSize:12,color:"var(--text)"}}>
+                  <span style={{fontWeight:700,color:r.isTeacher?"#166534":"var(--purple)"}}>{r.author}{r.isTeacher?" 👨‍🏫":""}: </span>{r.body}
+                </div>
+              ))}
+              {replyId===p.id ? (
+                <div style={{display:"flex",gap:8,marginTop:8}}>
+                  <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="Teacher reply…" rows={2}
+                    style={{...inp,flex:1,resize:"none"}} />
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <button onClick={()=>sendReply(p.id)} style={smBtn("var(--green)")}>Send</button>
+                    <button onClick={()=>{setReplyId(null);setReplyText("");}} style={smBtn("#6b7280")}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                  <button onClick={()=>setReplyId(p.id)} style={smBtn("var(--green)")}>👨‍🏫 Reply as Teacher</button>
+                  <button onClick={async()=>{await api(`/api/admin/discussions/${p.id}/pin`,{method:"PATCH"});load();}} style={smBtn("var(--purple)")}>{p.pinned?"Unpin":"📌 Pin"}</button>
+                  <button onClick={async()=>{if(!confirm("Delete post?"))return;await api(`/api/admin/discussions/${p.id}`,{method:"DELETE"});load();}} style={smBtn("#ef4444")}>Delete</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
