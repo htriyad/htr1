@@ -4,6 +4,7 @@
     "username": "htr",
     "password": "htr",
     "note": "htr",
-    "createdAt": "2026-04-23T08:54:22.926Z"
+    "createdAt": "2026-04-23T08:54:22.926Z",
+    "universalAccess": false
   }
 ]

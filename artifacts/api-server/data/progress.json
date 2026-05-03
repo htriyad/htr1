@@ -2,16 +2,29 @@
   "ip:103.77.16.77": {
     "id": "ip:103.77.16.77",
     "displayName": "103.77.16.77",
-    "xp": 0,
+    "xp": 62,
     "level": 1,
-    "streak": 0,
-    "lastActive": "",
-    "badges": [],
-    "examHistory": [],
+    "streak": 1,
+    "lastActive": "2026-04-24T07:20:47.156Z",
+    "badges": [
+      "first_exam",
+      "perfect_score"
+    ],
+    "examHistory": [
+      {
+        "quizId": "ee82abec-ff90-4907-b207-ef5d0383d59c",
+        "title": "nznzn",
+        "score": 1,
+        "total": 1,
+        "pct": 100,
+        "date": "2026-04-24T07:20:47.156Z",
+        "timeSecs": 1
+      }
+    ],
     "topicScores": {},
-    "totalExams": 0,
-    "totalCorrect": 0,
-    "totalAnswers": 0
+    "totalExams": 1,
+    "totalCorrect": 1,
+    "totalAnswers": 1
   },
   "ip:103.77.16.76": {
     "id": "ip:103.77.16.76",
