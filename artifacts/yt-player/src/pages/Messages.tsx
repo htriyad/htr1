@@ -567,6 +567,11 @@ function ChatView({ thread, group, onBack }:{ thread?:Thread; group?:Group; onBa
   const [currentGroup, setCurrentGroup] = useState<Group|null>(group||null);
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
   const [showSR, setShowSR] = useState(false);
+  // Feature #7: Schedule, #8: Self-destruct, #10: Translation
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [selfDestruct, setSelfDestruct] = useState(false);
+  const [translatedMsgs, setTranslatedMsgs] = useState<Record<string,string>>({});
   const voice = useVoice();
   const chatEnd = useRef<HTMLDivElement>(null);
   const lastTs = useRef(""); const imgRef = useRef<HTMLInputElement>(null);

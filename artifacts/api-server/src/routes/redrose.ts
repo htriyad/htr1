@@ -3995,6 +3995,179 @@ router.post("/groups/:id/typing", (req: any, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════
+   ACTIVITY STATUS  (feature #12)
+══════════════════════════════════════════════════════════ */
+const ACTIVITY_MAP = new Map<string,{text:string;emoji:string;ts:number}>();
+
+router.post("/user/activity", (req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.status(401).json({error:"Unauthorized"});return;}
+  const {text,emoji}=req.body;
+  if(!text){ACTIVITY_MAP.delete(me);res.json({ok:true});return;}
+  ACTIVITY_MAP.set(me,{text,emoji:emoji||"💬",ts:Date.now()});
+  res.json({ok:true});
+});
+router.get("/user/activity/:username",(req:any,res)=>{
+  const a=ACTIVITY_MAP.get(req.params.username);
+  if(!a||Date.now()-a.ts>4*3600*1000){res.json(null);return;}
+  res.json(a);
+});
+
+/* ══════════════════════════════════════════════════════════
+   POST VIEWS — "Seen by"  (feature #4)
+══════════════════════════════════════════════════════════ */
+const POST_VIEWS=new Map<string,string[]>();
+
+router.post("/community/posts/:id/view",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.json({ok:true});return;}
+  const ex=POST_VIEWS.get(req.params.id)||[];
+  if(!ex.includes(me))POST_VIEWS.set(req.params.id,[...ex,me]);
+  res.json({ok:true});
+});
+router.get("/community/posts/:id/viewers",(req:any,res)=>{
+  res.json(POST_VIEWS.get(req.params.id)||[]);
+});
+
+/* ══════════════════════════════════════════════════════════
+   REACTIONS LEADERBOARD  (feature #2)
+══════════════════════════════════════════════════════════ */
+router.get("/community/reactions-leaderboard",(req:any,res)=>{
+  const posts=rd<any[]>("community-posts.json",[]);
+  const scores:Record<string,number>={};
+  posts.forEach((p:any)=>{
+    const total=Object.values(p.reactions||{}).reduce((s:number,arr:any)=>s+arr.length,0) as number;
+    if(p.author)scores[p.author]=(scores[p.author]||0)+total;
+  });
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([username,score])=>({username,score}));
+  res.json(sorted);
+});
+
+/* ══════════════════════════════════════════════════════════
+   STUDY STREAK LEADERBOARD  (feature #20)
+══════════════════════════════════════════════════════════ */
+router.get("/leaderboard/streaks",(req:any,res)=>{
+  const users=rd<any[]>("users.json",[]);
+  const posts=rd<any[]>("community-posts.json",[]);
+  const streaks=users.map((u:any)=>{
+    const up=posts.filter((p:any)=>p.author===u.username).sort((a:any,b:any)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime());
+    let streak=0;
+    const checkDay=new Date(); checkDay.setHours(0,0,0,0);
+    for(let i=0;i<30;i++){
+      const ds=new Date(checkDay); ds.setHours(0,0,0,0);
+      const de=new Date(checkDay); de.setHours(23,59,59,999);
+      if(up.some((p:any)=>{const d=new Date(p.createdAt);return d>=ds&&d<=de;}))streak++;
+      else break;
+      checkDay.setDate(checkDay.getDate()-1);
+    }
+    return {username:u.username,streak,totalPosts:up.length};
+  }).filter((u:any)=>u.streak>0||u.totalPosts>0).sort((a:any,b:any)=>b.streak-a.streak||b.totalPosts-a.totalPosts).slice(0,15);
+  res.json(streaks);
+});
+
+/* ══════════════════════════════════════════════════════════
+   STUDY BUDDIES  (feature #25)
+══════════════════════════════════════════════════════════ */
+router.get("/social/study-buddies",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.json([]);return;}
+  const posts=rd<any[]>("community-posts.json",[]);
+  const profiles=rd<any[]>("social-profiles.json",[]);
+  const mySubjects=new Set(posts.filter((p:any)=>p.author===me&&p.subject).map((p:any)=>p.subject));
+  const result=profiles
+    .filter((p:any)=>p.username!==me)
+    .map((p:any)=>{
+      const theirSubs=new Set(posts.filter((x:any)=>x.author===p.username&&x.subject).map((x:any)=>x.subject));
+      const common=[...mySubjects].filter(s=>theirSubs.has(s));
+      return{...p,commonSubjects:common,score:common.length,totalPosts:posts.filter((x:any)=>x.author===p.username).length};
+    })
+    .filter((p:any)=>p.score>0||p.totalPosts>0)
+    .sort((a:any,b:any)=>b.score-a.score||b.totalPosts-a.totalPosts)
+    .slice(0,20);
+  res.json(result);
+});
+
+/* ══════════════════════════════════════════════════════════
+   NEAR YOU  (feature #21)
+══════════════════════════════════════════════════════════ */
+router.get("/social/near-you",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.json([]);return;}
+  const profiles=rd<any[]>("social-profiles.json",[]);
+  const myP=profiles.find((p:any)=>p.username===me);
+  if(!myP?.location){res.json([]);return;}
+  const myCity=myP.location.toLowerCase().split(",")[0].trim();
+  const nearby=profiles.filter((p:any)=>p.username!==me&&p.location&&p.location.toLowerCase().includes(myCity)).slice(0,20);
+  res.json(nearby);
+});
+
+/* ══════════════════════════════════════════════════════════
+   DAILY CHALLENGE  (feature #23)
+══════════════════════════════════════════════════════════ */
+const DAILY_CHALLENGES=[
+  {id:"1",title:"সমীকরণ সমাধান",subject:"Math",question:"2x + 5 = 13 হলে x = ?",answer:"4",points:10,emoji:"🔢"},
+  {id:"2",title:"Physics Force",subject:"Physics",question:"F = ma. m=5kg, a=3m/s², তাহলে F=?",answer:"15N",points:15,emoji:"⚡"},
+  {id:"3",title:"Vocabulary",subject:"English",question:"Synonym of 'Abundant'?",answer:"Plentiful",points:10,emoji:"📝"},
+  {id:"4",title:"BCS প্রস্তুতি",subject:"BCS",question:"বাংলাদেশের সংবিধান কত সালে প্রণীত হয়?",answer:"1972",points:20,emoji:"🏛️"},
+  {id:"5",title:"Chemistry",subject:"Chemistry",question:"H₂O অণুতে মোট পরমাণু সংখ্যা?",answer:"3",points:12,emoji:"🧪"},
+  {id:"6",title:"Biology Cell",subject:"Biology",question:"মানব দেহে ক্রোমোজোম সংখ্যা কত?",answer:"46",points:15,emoji:"🔬"},
+  {id:"7",title:"বাংলা ব্যাকরণ",subject:"Bangla",question:"'আকাশ' শব্দের সমার্থক শব্দ?",answer:"অম্বর",points:10,emoji:"📖"},
+];
+router.get("/challenges/daily",(req:any,res)=>{
+  const dayIdx=Math.floor(Date.now()/86400000)%DAILY_CHALLENGES.length;
+  const ch=DAILY_CHALLENGES[dayIdx];
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  const comp=rd<Record<string,string[]>>("daily-challenge-completions.json",{});
+  const todayKey=new Date().toISOString().slice(0,10);
+  const done=(comp[todayKey]||[]).includes(me||"");
+  res.json({...ch,done,completionCount:(comp[todayKey]||[]).length});
+});
+router.post("/challenges/daily/complete",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.status(401).json({error:"Unauthorized"});return;}
+  const todayKey=new Date().toISOString().slice(0,10);
+  const comp=rd<Record<string,string[]>>("daily-challenge-completions.json",{});
+  if(!(comp[todayKey]||[]).includes(me)){comp[todayKey]=[...(comp[todayKey]||[]),me];wr("daily-challenge-completions.json",comp);}
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   TRANSLATION  (feature #10)
+══════════════════════════════════════════════════════════ */
+router.post("/translate",(req:any,res)=>{
+  const {text}=req.body;
+  if(!text){res.json({translated:""});return;}
+  const hasBangla=/[\u0980-\u09FF]/.test(text);
+  const enBn:Record<string,string>={"hello":"হ্যালো","how are you":"তুমি কেমন আছো","good":"ভালো","thanks":"ধন্যবাদ","study":"পড়াশোনা","exam":"পরীক্ষা","school":"স্কুল","college":"কলেজ","physics":"পদার্থবিজ্ঞান","chemistry":"রসায়ন","biology":"জীববিজ্ঞান","math":"গণিত","english":"ইংরেজি","help":"সাহায্য","please":"দয়া করে","yes":"হ্যাঁ","no":"না","ok":"ঠিক আছে","bye":"বিদায়","love":"ভালোবাসা","friend":"বন্ধু","teacher":"শিক্ষক","book":"বই","read":"পড়া","write":"লেখা","question":"প্রশ্ন","answer":"উত্তর"};
+  const bnEn:Record<string,string>={"হ্যালো":"Hello","ভালো":"Good","ধন্যবাদ":"Thanks","পড়াশোনা":"Study","পরীক্ষা":"Exam","স্কুল":"School","কলেজ":"College","সাহায্য":"Help","হ্যাঁ":"Yes","না":"No","ঠিক আছে":"OK","বিদায়":"Bye","বন্ধু":"Friend","শিক্ষক":"Teacher","বই":"Book","প্রশ্ন":"Question","উত্তর":"Answer"};
+  if(hasBangla){
+    let t=text;Object.entries(bnEn).forEach(([bn,en])=>{t=t.replace(new RegExp(bn,"g"),en);});
+    res.json({translated:t,from:"bn",to:"en"});
+  } else {
+    let t=text;Object.entries(enBn).forEach(([en,bn])=>{t=t.replace(new RegExp(en,"gi"),bn);});
+    if(t===text)t="["+text+"]";
+    res.json({translated:t,from:"en",to:"bn"});
+  }
+});
+
+/* ══════════════════════════════════════════════════════════
+   SCHEDULED MESSAGES  (feature #7)
+══════════════════════════════════════════════════════════ */
+const SCHEDULED_MSGS:any[]=[];
+router.post("/dm/threads/:id/schedule-message",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  if(!me){res.status(401).json({error:"Unauthorized"});return;}
+  const {text,scheduledAt}=req.body;
+  if(!text||!scheduledAt){res.status(400).json({error:"text and scheduledAt required"});return;}
+  SCHEDULED_MSGS.push({id:Date.now().toString(),threadId:req.params.id,author:me,text,scheduledAt:new Date(scheduledAt)});
+  res.json({ok:true,scheduledAt});
+});
+router.get("/dm/threads/:id/scheduled",(req:any,res)=>{
+  const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string);
+  res.json(SCHEDULED_MSGS.filter(j=>j.threadId===req.params.id&&j.author===me&&new Date(j.scheduledAt)>new Date()));
+});
+
+/* ══════════════════════════════════════════════════════════
    SERVER-SENT EVENTS  — real-time push to clients
 ══════════════════════════════════════════════════════════ */
 router.get("/sse", (req: any, res) => {

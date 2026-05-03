@@ -31,12 +31,13 @@ function ytId(url: string): string | null {
 
 /* ── Text rendering with hashtags + @mentions ──────────── */
 function RichText({ text }: { text: string }) {
+  const [,nav] = useLocation();
   const parts = text.split(/(#[\w\u0980-\u09FF]+|@\w+)/g);
   return (
     <span>
       {parts.map((p, i) => {
-        if (p.startsWith("#")) return <span key={i} className="rr-tag">{p}</span>;
-        if (p.startsWith("@")) return <span key={i} className="rr-mention">{p}</span>;
+        if (p.startsWith("#")) return <span key={i} className="rr-tag" style={{ cursor:"pointer" }} onClick={e=>{e.stopPropagation();nav(`/hashtag/${p.slice(1)}`);}}>{p}</span>;
+        if (p.startsWith("@")) return <span key={i} className="rr-mention" style={{ cursor:"pointer" }} onClick={e=>{e.stopPropagation();nav(`/social/${p.slice(1)}`);}}>{p}</span>;
         return <span key={i}>{p}</span>;
       })}
     </span>
@@ -47,7 +48,71 @@ const REACTIONS = [
   { emoji:"👍",label:"Like" },{ emoji:"❤️",label:"Love" },
   { emoji:"😂",label:"Haha" },{ emoji:"😮",label:"Wow" },
   { emoji:"😢",label:"Sad" },{ emoji:"😡",label:"Angry" },
+  { emoji:"📚",label:"Study" },{ emoji:"💡",label:"Smart" },
+  { emoji:"🔥",label:"Fire" },{ emoji:"🎯",label:"Goal" },
+  { emoji:"🏆",label:"Legend" },
 ];
+
+/* ══════════════════════════════════════════════════════════
+   DAILY CHALLENGE WIDGET  (feature #23)
+══════════════════════════════════════════════════════════ */
+function DailyChallengeWidget() {
+  const me = UN();
+  const [challenge, setChallenge] = useState<any>(null);
+  const [answer, setAnswer] = useState("");
+  const [result, setResult] = useState<"correct"|"wrong"|null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(()=>{
+    fetch("/api/challenges/daily",{headers:xhdr()}).then(r=>r.json()).then(d=>{setChallenge(d);setLoading(false);}).catch(()=>setLoading(false));
+  },[]);
+
+  async function submit() {
+    if (!answer.trim() || !challenge) return;
+    const correct = answer.trim().toLowerCase() === challenge.answer.toLowerCase();
+    setResult(correct ? "correct" : "wrong");
+    if (correct) {
+      await fetch("/api/challenges/daily/complete", { method:"POST", headers:xhdr() }).catch(()=>{});
+      setChallenge((c: any) => ({ ...c, done: true }));
+    }
+  }
+
+  if (loading || !challenge) return null;
+
+  return (
+    <div style={{ background:"linear-gradient(135deg,rgba(124,58,237,0.07),rgba(219,39,119,0.07))", borderRadius:16, marginBottom:12, overflow:"hidden", border:"1.5px solid rgba(124,58,237,0.18)" }}>
+      <div style={{ padding:"12px 14px", display:"flex", alignItems:"center", gap:10, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
+        <span style={{ fontSize:22 }}>{challenge.emoji}</span>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:"var(--purple)", textTransform:"uppercase", letterSpacing:"0.05em" }}>Daily Challenge · {challenge.subject}</div>
+          <div style={{ fontSize:13, fontWeight:700, color:"var(--text)", marginTop:1 }}>{challenge.title}</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          {challenge.done && <span style={{ fontSize:11, padding:"3px 8px", borderRadius:99, background:"rgba(34,197,94,0.15)", color:"#16a34a", fontWeight:700 }}>✅ Done</span>}
+          <span style={{ fontSize:16, color:"var(--purple)", fontWeight:700 }}>{expanded ? "▲" : "▼"}</span>
+        </div>
+      </div>
+      {expanded && (
+        <div style={{ padding:"0 14px 14px" }}>
+          <div style={{ background:"var(--surface)", borderRadius:12, padding:"12px 14px", marginBottom:10 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:"var(--text)", lineHeight:1.55 }}>{challenge.question}</div>
+          </div>
+          {!challenge.done && !result && (
+            <div style={{ display:"flex", gap:8 }}>
+              <input value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Type your answer…"
+                style={{ flex:1, padding:"9px 12px", borderRadius:10, border:"1.5px solid var(--border)", background:"var(--bg)", color:"var(--text)", fontSize:13, fontFamily:"inherit", outline:"none" }}/>
+              <button onClick={submit} style={{ padding:"9px 18px", borderRadius:10, border:"none", background:"var(--purple)", color:"#fff", fontWeight:700, cursor:"pointer", fontSize:13 }}>Submit</button>
+            </div>
+          )}
+          {result === "correct" && <div style={{ padding:"10px 14px", borderRadius:10, background:"rgba(34,197,94,0.12)", color:"#16a34a", fontWeight:700, fontSize:13 }}>🎉 Correct! +{challenge.points} XP</div>}
+          {result === "wrong" && <div style={{ padding:"10px 14px", borderRadius:10, background:"rgba(239,68,68,0.1)", color:"#dc2626", fontWeight:700, fontSize:13 }}>❌ Wrong! Answer: <strong>{challenge.answer}</strong></div>}
+          {challenge.done && !result && <div style={{ padding:"10px 14px", borderRadius:10, background:"rgba(34,197,94,0.1)", color:"#16a34a", fontWeight:600, fontSize:13 }}>✅ You already completed today's challenge! · {challenge.completionCount} students done today</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 const BG_COLORS = [
   "linear-gradient(135deg,#7c3aed,#a855f7)","linear-gradient(135deg,#0ea5e9,#38bdf8)",
   "linear-gradient(135deg,#f59e0b,#fbbf24)","linear-gradient(135deg,#ef4444,#f97316)",
@@ -784,7 +849,7 @@ export default function Community() {
         )}
 
         <div style={{ padding:"10px 12px" }}>
-          {view==="feed"&&<CreatePost me={me} onDone={p=>setPosts(prev=>[p,...prev])} bookmarkedIds={bookmarkedIds}/>}
+          {view==="feed"&&<><DailyChallengeWidget/><CreatePost me={me} onDone={p=>setPosts(prev=>[p,...prev])} bookmarkedIds={bookmarkedIds}/></>}
 
           {view==="saved"&&savedPosts.length===0&&(
             <div style={{ textAlign:"center",padding:48 }}>

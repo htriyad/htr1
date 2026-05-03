@@ -7,6 +7,16 @@ const api = (p: string, o: RequestInit = {}) =>
   fetch(p, { ...o, headers: { "Content-Type": "application/json", "x-username": ME(), ...(o.headers as any || {}) } });
 
 const BG_COLORS = ["#1e1b4b","#0c4a6e","#064e3b","#4a0013","#292524","#1c1917","linear-gradient(135deg,#e05c8a,#7c3aed)","linear-gradient(135deg,#f59e0b,#dc2626)","linear-gradient(135deg,#0891b2,#1d4ed8)","linear-gradient(135deg,#16a34a,#0891b2)"];
+const QUOTE_TEMPLATES = [
+  { text: "📚 পড়াশোনা করো, স্বপ্ন পূরণ করো! #study", bg: "linear-gradient(135deg,#7c3aed,#db2777)" },
+  { text: "🔥 আজকের পরিশ্রম কালকের সাফল্য! #motivation", bg: "linear-gradient(135deg,#f59e0b,#ef4444)" },
+  { text: "🎯 Focus on your goal! #bcs #study", bg: "linear-gradient(135deg,#1e3a5f,#2563eb)" },
+  { text: "💡 Every expert was once a beginner. Keep going! #exam", bg: "linear-gradient(135deg,#064e3b,#10b981)" },
+  { text: "🏆 কঠোর পরিশ্রমের কোনো বিকল্প নেই! #success", bg: "linear-gradient(135deg,#292524,#7c3aed)" },
+  { text: "⚡ Dream. Believe. Achieve. #admission", bg: "linear-gradient(135deg,#0c4a6e,#0891b2)" },
+  { text: "📝 আজ পড়লে কাল পরীক্ষা দিতে পারবে! #hsc #ssc", bg: "linear-gradient(135deg,#4a0013,#ec4899)" },
+  { text: "✨ Success is not final, failure is not fatal. #bcs", bg: "linear-gradient(135deg,#1c1917,#f59e0b)" },
+];
 
 export default function Stories() {
   const [stories, setStories] = useState<any[]>([]);

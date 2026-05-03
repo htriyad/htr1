@@ -42,6 +42,7 @@ import SocialProfile from "./pages/SocialProfile";
 import Stories from "./pages/Stories";
 import Events from "./pages/Events";
 import Friends from "./pages/Friends";
+import HashtagPage from "./pages/HashtagPage";
 import Notifications from "./pages/Notifications";
 import UserSettings from "./pages/UserSettings";
 import FloatingMusic from "./components/FloatingMusic";
@@ -257,6 +258,7 @@ export default function App() {
         <Route path="/stories"           component={Stories} />
         <Route path="/events"            component={Events} />
         <Route path="/friends"           component={Friends} />
+        <Route path="/hashtag/:tag"      component={HashtagPage} />
         <Route path="/notifications"     component={Notifications} />
         <Route path="/settings"          component={UserSettings} />
         <Route><Dashboard /></Route>
