@@ -1103,17 +1103,28 @@ router.post("/admin/dashboard-menu/reorder", adminAuth, (req, res) => {
 /* ══════════════════════════════════════════════════════════
    DOUBTS / Q&A
 ══════════════════════════════════════════════════════════ */
+interface DoubtReply {
+  text?: string;
+  audioData?: string;
+  imageData?: string;
+  pdfData?: string; pdfName?: string;
+  links?: string[];
+  repliedAt: string;
+}
 interface DoubtQuestion {
   id: string; ip: string; username?: string; fullName?: string;
   question: string; audioData?: string; imageData?: string;
+  pdfData?: string; pdfName?: string;
+  links?: string[];
   timestamp: string; status: "open" | "answered";
-  reply?: { text?: string; audioData?: string; repliedAt: string };
+  subject?: string;
+  reply?: DoubtReply;
 }
 if (!fs.existsSync(path.join(DATA_DIR, "doubts.json"))) wr("doubts.json", []);
 
 router.post("/doubts", userAuth, (req, res) => {
   const ip = clientIp(req);
-  const { question, audioData, imageData, fullName } = req.body || {};
+  const { question, audioData, imageData, fullName, pdfData, pdfName, links, subject } = req.body || {};
   if (!question?.trim() && !audioData) return res.status(400).json({ error: "question or audio required" });
   const username = getLoggedInUser(req)?.username;
   const doubts = rd<DoubtQuestion[]>("doubts.json", []);
@@ -1123,6 +1134,10 @@ router.post("/doubts", userAuth, (req, res) => {
     question: String(question || "").slice(0, 3000),
     audioData: audioData ? String(audioData).slice(0, 8_000_000) : undefined,
     imageData: imageData ? String(imageData).slice(0, 8_000_000) : undefined,
+    pdfData:   pdfData   ? String(pdfData).slice(0, 10_000_000) : undefined,
+    pdfName:   pdfName   ? String(pdfName).slice(0, 200) : undefined,
+    links:     Array.isArray(links) ? (links as string[]).slice(0, 10).map(l => String(l).slice(0, 500)) : undefined,
+    subject:   subject   ? String(subject).slice(0, 80) : undefined,
     timestamp: new Date().toISOString(), status: "open",
   };
   doubts.unshift(item);
@@ -1146,13 +1161,17 @@ router.get("/doubts", adminAuth, (_req, res) => {
 });
 
 router.patch("/doubts/:id/reply", adminAuth, (req, res) => {
-  const { text, audioData } = req.body || {};
+  const { text, audioData, imageData, pdfData, pdfName, links } = req.body || {};
   const doubts = rd<DoubtQuestion[]>("doubts.json", []);
   const i = doubts.findIndex(d => d.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: "Not found" });
   doubts[i].reply = {
-    text: text ? String(text).slice(0, 5000) : undefined,
+    text:      text      ? String(text).slice(0, 5000) : undefined,
     audioData: audioData ? String(audioData).slice(0, 8_000_000) : undefined,
+    imageData: imageData ? String(imageData).slice(0, 8_000_000) : undefined,
+    pdfData:   pdfData   ? String(pdfData).slice(0, 10_000_000) : undefined,
+    pdfName:   pdfName   ? String(pdfName).slice(0, 200) : undefined,
+    links:     Array.isArray(links) ? (links as string[]).slice(0, 10).map(l => String(l).slice(0, 500)) : undefined,
     repliedAt: new Date().toISOString(),
   };
   doubts[i].status = "answered";

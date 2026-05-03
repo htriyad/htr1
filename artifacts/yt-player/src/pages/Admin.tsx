@@ -1866,16 +1866,52 @@ function useAdminVoice() {
   return{recording,audioData,secs,start,stop,clear};
 }
 
+function useAdminFilePicker(accept:string,maxBytes:number,label:string){
+  const [data,setData]=useState<string|null>(null);
+  const [name,setName]=useState("");
+  const inputRef=useRef<HTMLInputElement>(null);
+  function pick(){inputRef.current?.click();}
+  function onFile(e:React.ChangeEvent<HTMLInputElement>){
+    const f=e.target.files?.[0]; if(!f) return;
+    if(f.size>maxBytes){alert(`${label} too large (max ${Math.round(maxBytes/1_000_000)}MB)`);return;}
+    const reader=new FileReader();
+    reader.onload=()=>{setData(reader.result as string);setName(f.name);};
+    reader.readAsDataURL(f); e.target.value="";
+  }
+  const clear=()=>{setData(null);setName("");};
+  const input=<input ref={inputRef} type="file" accept={accept} style={{display:"none"}} onChange={onFile}/>;
+  return{data,name,pick,clear,input};
+}
+function openPdfAdmin(data:string,name:string){
+  const arr=data.split(",");const mime=arr[0].match(/:(.*?);/)?.[1]||"application/pdf";
+  const bytes=atob(arr[1]);const buf=new Uint8Array(bytes.length);
+  for(let i=0;i<bytes.length;i++)buf[i]=bytes.charCodeAt(i);
+  window.open(URL.createObjectURL(new Blob([buf],{type:mime})),"_blank");
+}
+
 function DoubtReplyPanel({d,token,onDone}:{d:any;token:string;onDone:()=>void}){
   const [text,setText]=useState("");
   const [saving,setSaving]=useState(false);
   const [aiLoading,setAiLoading]=useState(false);
   const [aiErr,setAiErr]=useState("");
+  const [linkInput,setLinkInput]=useState("");
+  const [links,setLinks]=useState<string[]>([]);
   const voice=useAdminVoice();
+  const photo=useAdminFilePicker("image/*",5_000_000,"Image");
+  const pdf=useAdminFilePicker("application/pdf",10_000_000,"PDF");
+
   async function submit(){
-    if(!text.trim()&&!voice.audioData)return;
+    if(!text.trim()&&!voice.audioData&&!photo.data&&!pdf.data&&!links.length)return;
     setSaving(true);
-    await fetch(`/api/doubts/${d.id}/reply`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({text:text||undefined,audioData:voice.audioData||undefined})});
+    await fetch(`/api/doubts/${d.id}/reply`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+      body:JSON.stringify({
+        text:text||undefined,
+        audioData:voice.audioData||undefined,
+        imageData:photo.data||undefined,
+        pdfData:pdf.data||undefined,
+        pdfName:pdf.name||undefined,
+        links:links.length?links:undefined
+      })});
     setSaving(false); onDone();
   }
   async function aiSuggest(){
@@ -1883,48 +1919,89 @@ function DoubtReplyPanel({d,token,onDone}:{d:any;token:string;onDone:()=>void}){
     try {
       const r=await fetch(`/api/doubts/${d.id}/ai-answer`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}});
       const j=await r.json();
-      if(j.answer) setText(j.answer);
-      else setAiErr(j.error||"AI failed");
-    } catch { setAiErr("Network error"); }
-    finally { setAiLoading(false); }
+      if(j.answer) setText(j.answer); else setAiErr(j.error||"AI failed");
+    } catch { setAiErr("Network error"); } finally { setAiLoading(false); }
   }
+  function addLink(){
+    const u=linkInput.trim(); if(!u) return;
+    let url=u; try{if(!url.startsWith("http"))url="https://"+url; new URL(url);}catch{return;}
+    setLinks(l=>[...l,url]); setLinkInput("");
+  }
+
   return(
     <div style={{borderTop:"1px solid var(--border)",paddingTop:12,marginTop:8}}>
+      {photo.input}{pdf.input}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <div style={{fontWeight:700,fontSize:12,color:"var(--purple)"}}>SEND REPLY</div>
         <button onClick={aiSuggest} disabled={aiLoading}
           style={{padding:"4px 12px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-          {aiLoading?"⏳ Generating…":"🤖 AI Suggest Answer"}
+          {aiLoading?"⏳ Generating…":"🤖 AI Suggest"}
         </button>
       </div>
       {aiErr&&<div style={{fontSize:11,color:"#dc2626",marginBottom:6}}>{aiErr}</div>}
+
+      {/* Text */}
       <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Type reply (Bangla or English)…" rows={3}
-        style={{width:"100%",borderRadius:10,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",padding:"8px 10px",fontSize:13,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
-      <div style={{marginTop:8,marginBottom:10}}>
-        {!voice.audioData?(
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {!voice.recording?(
-              <button type="button" onClick={voice.start} style={{padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>🎤 Record Voice Reply</button>
-            ):(
-              <>
-                <button type="button" onClick={voice.stop} style={{padding:"6px 14px",borderRadius:8,border:"none",background:"#dc2626",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}}>⏹ Stop ({voice.secs}s)</button>
-                <span style={{fontSize:11,color:"#dc2626",fontWeight:700}}>● REC</span>
-              </>
-            )}
-          </div>
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            <audio src={voice.audioData} controls style={{width:"100%",height:34}}/>
-            <button type="button" onClick={voice.clear} style={{alignSelf:"flex-start",padding:"3px 10px",borderRadius:6,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:11,cursor:"pointer",fontWeight:700}}>✕ Remove</button>
-          </div>
+        style={{width:"100%",borderRadius:10,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",padding:"8px 10px",fontSize:13,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit",marginBottom:8}}/>
+
+      {/* Attachment buttons */}
+      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>
+        {/* Voice */}
+        {!voice.audioData&&(
+          !voice.recording?(
+            <button type="button" onClick={voice.start} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",fontWeight:700,fontSize:11,cursor:"pointer"}}>🎤 Voice</button>
+          ):(
+            <button type="button" onClick={voice.stop} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#dc2626",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer"}}>⏹ Stop ({voice.secs}s)</button>
+          )
         )}
+        {/* Photo */}
+        {!photo.data&&<button type="button" onClick={photo.pick} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",fontWeight:700,fontSize:11,cursor:"pointer"}}>📷 Photo</button>}
+        {/* PDF */}
+        {!pdf.data&&<button type="button" onClick={pdf.pick} style={{padding:"6px 12px",borderRadius:8,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",fontWeight:700,fontSize:11,cursor:"pointer"}}>📄 PDF</button>}
       </div>
-      <div style={{display:"flex",gap:8}}>
-        <button onClick={submit} disabled={saving||(!text.trim()&&!voice.audioData)}
-          style={{padding:"8px 18px",borderRadius:10,border:"none",background:"var(--purple)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
-          {saving?"Sending…":"📨 Send Reply"}
-        </button>
+
+      {/* Attachment previews */}
+      {voice.audioData&&(
+        <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:4}}>
+          <audio src={voice.audioData} controls style={{width:"100%",height:34}}/>
+          <button type="button" onClick={voice.clear} style={{alignSelf:"flex-start",padding:"3px 10px",borderRadius:6,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:11,cursor:"pointer",fontWeight:700}}>✕ Remove Voice</button>
+        </div>
+      )}
+      {photo.data&&(
+        <div style={{position:"relative",display:"inline-block",marginBottom:8}}>
+          <img src={photo.data} alt="reply" style={{maxWidth:200,maxHeight:150,borderRadius:10,border:"1.5px solid var(--border)",display:"block"}}/>
+          <button type="button" onClick={photo.clear} style={{position:"absolute",top:3,right:3,width:20,height:20,borderRadius:"50%",border:"none",background:"#dc2626",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900}}>✕</button>
+        </div>
+      )}
+      {pdf.data&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.2)",marginBottom:8}}>
+          <span style={{fontSize:20}}>📄</span>
+          <span style={{flex:1,fontSize:12,fontWeight:700,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pdf.name}</span>
+          <button type="button" onClick={pdf.clear} style={{padding:"3px 8px",borderRadius:6,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:11,cursor:"pointer",fontWeight:700}}>✕</button>
+        </div>
+      )}
+
+      {/* Links */}
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",gap:6,marginBottom:6}}>
+          <input value={linkInput} onChange={e=>setLinkInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addLink();}}}
+            placeholder="Add a link URL…"
+            style={{flex:1,padding:"6px 10px",borderRadius:8,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",fontSize:12,fontFamily:"inherit"}}/>
+          <button type="button" onClick={addLink} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"rgba(108,127,255,0.15)",color:"var(--purple)",fontWeight:700,fontSize:11,cursor:"pointer"}}>+Link</button>
+        </div>
+        {links.map((l,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <span style={{flex:1,fontSize:11,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🔗 {l}</span>
+            <button type="button" onClick={()=>setLinks(ls=>ls.filter((_,j)=>j!==i))} style={{padding:"2px 6px",borderRadius:5,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:10,cursor:"pointer",fontWeight:700}}>✕</button>
+          </div>
+        ))}
       </div>
+
+      <button onClick={submit} disabled={saving||(!text.trim()&&!voice.audioData&&!photo.data&&!pdf.data&&!links.length)}
+        style={{padding:"8px 18px",borderRadius:10,border:"none",background:"var(--purple)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+        {saving?"Sending…":"📨 Send Reply"}
+      </button>
     </div>
   );
 }
@@ -2034,13 +2111,54 @@ function DoubtsTab() {
                   <img src={d.imageData} alt="student attachment" style={{maxWidth:"100%",borderRadius:10,border:"1.5px solid var(--border)"}}/>
                 </div>
               )}
+              {d.pdfData&&(
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",marginBottom:4}}>📄 PDF ATTACHMENT</div>
+                  <button onClick={()=>openPdfAdmin(d.pdfData,d.pdfName||"document.pdf")}
+                    style={{display:"inline-flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:9,
+                      background:"rgba(239,68,68,0.08)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.2)",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                    📄 Open {d.pdfName||"PDF"}
+                  </button>
+                </div>
+              )}
+              {Array.isArray(d.links)&&d.links.length>0&&(
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",marginBottom:6}}>🔗 LINKS</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                    {(d.links as string[]).map((l:string,i:number)=>(
+                      <a key={i} href={l} target="_blank" rel="noopener noreferrer"
+                        style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:20,
+                          background:"rgba(37,99,235,0.08)",color:"#3b82f6",fontSize:12,fontWeight:700,textDecoration:"none",
+                          border:"1px solid rgba(37,99,235,0.2)",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        🔗 {l}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Existing reply */}
               {d.reply&&(
-                <div style={{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:12,padding:12,marginBottom:10}}>
+                <div style={{background:"rgba(34,197,94,0.06)",border:"1.5px solid rgba(34,197,94,0.25)",borderRadius:12,padding:12,marginBottom:10}}>
                   <div style={{fontSize:11,fontWeight:700,color:"#166534",marginBottom:6}}>👨‍🏫 YOUR REPLY · {new Date(d.reply.repliedAt).toLocaleString("en-BD",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
-                  {d.reply.text&&<div style={{fontSize:13,color:"#166534",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{d.reply.text}</div>}
-                  {d.reply.audioData&&<audio src={d.reply.audioData} controls style={{width:"100%",height:34,marginTop:8}}/>}
+                  {d.reply.text&&<div style={{fontSize:13,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap",marginBottom:6}}>{d.reply.text}</div>}
+                  {d.reply.audioData&&<audio src={d.reply.audioData} controls style={{width:"100%",height:34,marginTop:4}}/>}
+                  {d.reply.imageData&&<img src={d.reply.imageData} alt="reply" style={{maxWidth:"100%",borderRadius:8,border:"1.5px solid rgba(34,197,94,0.3)",marginTop:6}}/>}
+                  {d.reply.pdfData&&(
+                    <button onClick={()=>openPdfAdmin(d.reply.pdfData,d.reply.pdfName||"reply.pdf")}
+                      style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,
+                        background:"rgba(239,68,68,0.08)",color:"#ef4444",border:"1px solid rgba(239,68,68,0.2)",fontWeight:700,fontSize:11,cursor:"pointer",marginTop:6}}>
+                      📄 {d.reply.pdfName||"PDF"}
+                    </button>
+                  )}
+                  {Array.isArray(d.reply.links)&&d.reply.links.length>0&&(
+                    <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                      {(d.reply.links as string[]).map((l:string,i:number)=>(
+                        <a key={i} href={l} target="_blank" rel="noopener noreferrer"
+                          style={{fontSize:11,color:"#3b82f6",fontWeight:700,textDecoration:"none"}}>🔗 {l}</a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
