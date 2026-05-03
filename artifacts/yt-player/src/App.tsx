@@ -32,7 +32,8 @@ import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
-if (savedTheme === "eye") document.documentElement.classList.add("eye-theme");
+if (savedTheme === "light") document.documentElement.classList.add("light-theme");
+else if (savedTheme === "eye") document.documentElement.classList.add("eye-theme");
 
 export const USER_TOKEN_KEY  = "rr_user_token";
 export const USER_NAME_KEY   = "rr_username";

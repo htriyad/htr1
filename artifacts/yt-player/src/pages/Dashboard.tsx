@@ -206,12 +206,11 @@ export default function Dashboard() {
               <X size={22} />
             </button>
             <div className="uu-logo-text">
-              <span style={{ color:"#e53935" }}>Red</span>
-              <span style={{ color:"#c0392b" }}>Rose</span>
-              <span style={{ marginLeft:2 }}>🥀</span>
-              <div className="uu-logo-sub">Online Care</div>
+              <span style={{ color:"#4f8ef7", fontWeight:900 }}>HTR</span>
+              <span style={{ color:"var(--text)", fontWeight:800 }}> Zone</span>
+              <div className="uu-logo-sub" style={{ fontSize:9, letterSpacing:"0.04em" }}>EXAM PORTAL</div>
             </div>
-            <div className="uu-avatar" style={{ marginLeft:"auto" }}>R</div>
+            <div className="uu-avatar" style={{ marginLeft:"auto", background:"linear-gradient(135deg,#1d4ed8,#6c7fff)" }}>H</div>
           </div>
           {SIDEBAR_ITEMS.map((item) => (
             <button key={item.label} className="sidebar-item"
@@ -391,7 +390,7 @@ export default function Dashboard() {
 
         {/* ── HERO BANNER ───────────────────────────── */}
         <div className="dash-banner" style={{ margin: nextClass || visibleAnnouncements.length > 0 || challenge ? "12px 14px 0" : "14px 14px 0" }}>
-          <h3>🌹 RedRose Online Care</h3>
+          <h3>HTR Zone 🎯</h3>
           <p style={{ fontSize:12, opacity:0.85, marginBottom:12 }}>SSC · HSC · Admission · BCS</p>
           <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
             <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/flashcards");}}>🃏 Flashcards</a>

@@ -45,25 +45,52 @@ export default function Admin() {
 ══════════════════════════════════════════════════════════ */
 function LoginScreen({ onLogin }: { onLogin:(t:string)=>void }) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(""); const [loading,setLoad]=useState(false);
+  const [showPass,setShowPass]=useState(false);
   async function submit(e:React.FormEvent){ e.preventDefault(); setLoad(true); setErr("");
     const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
     const d=await r.json(); setLoad(false);
     if(d.token) onLogin(d.token); else setErr(d.error||"Login failed");
   }
   return (
-    <div style={{minHeight:"100svh",background:"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{background:"var(--surface)",borderRadius:20,padding:36,width:"100%",maxWidth:380,boxShadow:"0 8px 40px rgba(0,0,0,0.12)"}}>
-        <div style={{textAlign:"center",marginBottom:28}}><div style={{fontSize:44}}>🥀</div>
-          <h1 style={{fontSize:24,fontWeight:900,color:"var(--purple)",fontFamily:"Lato,sans-serif",marginTop:8}}>RedRose Admin</h1>
-          <p style={{fontSize:13,color:"var(--sub)",marginTop:4}}>Super Admin Dashboard</p></div>
-        <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:14}}>
-          <input value={u} onChange={e=>setU(e.target.value)} placeholder="Username" style={inp} autoComplete="username"/>
-          <input type="password" value={p} onChange={e=>setP(e.target.value)} placeholder="Password" style={inp} autoComplete="current-password"/>
-          {err&&<div style={{background:"#fff0f0",border:"1px solid #fcc",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#c00"}}>{err}</div>}
-          <button type="submit" disabled={loading} style={{...btnStyle("var(--purple)"),fontSize:16,padding:14}}>
-            {loading?"Logging in...":"Login →"}
-          </button>
-        </form>
+    <div style={{minHeight:"100svh",background:"linear-gradient(135deg,#04091a 0%,#081428 55%,#0c1e40 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter,'Roboto','Noto Sans Bengali',sans-serif"}}>
+      {/* Animated bg dots */}
+      <div style={{position:"fixed",inset:0,overflow:"hidden",pointerEvents:"none",zIndex:0}}>
+        {[...Array(6)].map((_,i)=>(
+          <div key={i} style={{position:"absolute",borderRadius:"50%",background:"rgba(79,142,247,0.06)",width:i%2?300:200,height:i%2?300:200,top:`${[10,50,80,20,60,35][i]}%`,left:`${[5,75,30,85,15,55][i]}%`,filter:"blur(60px)"}}/>
+        ))}
+      </div>
+      <div style={{width:"100%",maxWidth:400,position:"relative",zIndex:1}}>
+        {/* Logo */}
+        <div style={{textAlign:"center",marginBottom:36}}>
+          <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:76,height:76,borderRadius:22,background:"linear-gradient(135deg,#1d4ed8,#6c7fff)",marginBottom:18,boxShadow:"0 0 50px rgba(108,127,255,0.45)"}}>
+            <span style={{fontSize:34}}>🛡️</span>
+          </div>
+          <h1 style={{fontSize:28,fontWeight:900,color:"#fff",fontFamily:"Lato,sans-serif",letterSpacing:"-0.01em"}}>
+            <span style={{color:"#4f8ef7"}}>HTR</span> Zone
+          </h1>
+          <p style={{fontSize:12,color:"rgba(255,255,255,0.35)",marginTop:6,letterSpacing:"0.12em",fontWeight:600}}>ADMIN CONTROL PANEL</p>
+        </div>
+        {/* Card */}
+        <div style={{background:"rgba(255,255,255,0.035)",borderRadius:22,padding:"32px 28px",border:"1px solid rgba(79,142,247,0.2)",backdropFilter:"blur(16px)",boxShadow:"0 24px 80px rgba(0,0,0,0.5)"}}>
+          <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div>
+              <label style={{display:"block",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:"0.1em",marginBottom:7,textTransform:"uppercase"}}>Username</label>
+              <input value={u} onChange={e=>setU(e.target.value)} placeholder="htr" style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1.5px solid rgba(79,142,247,0.25)",borderRadius:12,padding:"13px 15px",color:"#fff",fontSize:15,outline:"none",transition:"border-color 200ms"}} onFocus={e=>(e.target.style.borderColor="rgba(79,142,247,0.6)")} onBlur={e=>(e.target.style.borderColor="rgba(79,142,247,0.25)")} autoComplete="username"/>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:"0.1em",marginBottom:7,textTransform:"uppercase"}}>Password</label>
+              <div style={{position:"relative"}}>
+                <input type={showPass?"text":"password"} value={p} onChange={e=>setP(e.target.value)} placeholder="••••••••" style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1.5px solid rgba(79,142,247,0.25)",borderRadius:12,padding:"13px 44px 13px 15px",color:"#fff",fontSize:15,outline:"none"}} onFocus={e=>(e.target.style.borderColor="rgba(79,142,247,0.6)")} onBlur={e=>(e.target.style.borderColor="rgba(79,142,247,0.25)")} autoComplete="current-password"/>
+                <button type="button" onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:14,padding:4}}>{showPass?"🙈":"👁"}</button>
+              </div>
+            </div>
+            {err&&<div style={{background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.35)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#f87171",display:"flex",gap:8,alignItems:"center"}}>⚠️ {err}</div>}
+            <button type="submit" disabled={loading||!u||!p} style={{background:loading||!u||!p?"rgba(79,142,247,0.3)":"linear-gradient(135deg,#1d4ed8,#6c7fff)",color:"#fff",border:"none",borderRadius:13,padding:"15px",fontSize:16,fontWeight:800,cursor:(loading||!u||!p)?"not-allowed":"pointer",marginTop:4,boxShadow:loading||!u||!p?"none":"0 6px 24px rgba(108,127,255,0.45)",transition:"all 200ms",letterSpacing:"0.02em"}}>
+              {loading?"🔐 Authenticating...":"Login to Admin Panel →"}
+            </button>
+          </form>
+        </div>
+        <p style={{textAlign:"center",fontSize:11,color:"rgba(255,255,255,0.15)",marginTop:22,letterSpacing:"0.03em"}}>HTR Zone · Secure Admin Portal · v2.0</p>
       </div>
     </div>
   );
@@ -80,8 +107,7 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
       {/* Top bar */}
       <div style={{background:"var(--navy)",color:"#fff",padding:"0 16px",height:52,display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:200}}>
         <button onClick={()=>setSideOpen(o=>!o)} style={{background:"none",border:"none",color:"#fff",fontSize:20,cursor:"pointer",padding:4}}>☰</button>
-        <span style={{fontSize:18}}>🥀</span>
-        <span style={{fontWeight:800,fontSize:15,flex:1,fontFamily:"Lato,sans-serif"}}>RedRose Admin</span>
+        <span style={{fontWeight:900,fontSize:15,flex:1,fontFamily:"Lato,sans-serif"}}><span style={{color:"#4f8ef7"}}>HTR</span> Zone <span style={{fontSize:11,opacity:0.55,fontWeight:500}}>Admin</span></span>
         <button onClick={onLogout} style={{background:"var(--orange)",border:"none",color:"#fff",padding:"5px 14px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}}>Logout</button>
       </div>
 
@@ -965,12 +991,35 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
   const [htmlMode,setHtmlMode]=useState(false);
   const [htmlBusy,setHtmlBusy]=useState(false);
 
+  const [imgPanel,setImgPanel]=useState<number|null>(null);
+  const [imgUrl,setImgUrl]=useState("");
+  const [imgSize,setImgSize]=useState("50");
+  const qTextRefs=useRef<Record<number,HTMLTextAreaElement|null>>({});
+
   const emptyQ=()=>({id:`q${Date.now()}`,text:"",options:[{id:"A",text:""},{id:"B",text:""},{id:"C",text:""},{id:"D",text:""}],correct:"A",solution:""});
 
   function addQuestion(){ const q=emptyQ(); setQuestions(qs=>[...qs,q]); setActiveQ(questions.length); }
   function removeQuestion(i:number){ setQuestions(qs=>qs.filter((_,j)=>j!==i)); if(activeQ===i)setActiveQ(null); }
   function updateQ(i:number,field:string,val:string){ setQuestions(qs=>qs.map((q,j)=>j===i?{...q,[field]:val}:q)); }
   function updateOpt(qi:number,oi:number,val:string){ setQuestions(qs=>qs.map((q,j)=>j===qi?{...q,options:q.options.map((o:any,k:number)=>k===oi?{...o,text:val}:o)}:q)); }
+
+  function insertAtCursor(qi:number, sym:string){
+    const ta=qTextRefs.current[qi];
+    if(ta){
+      const start=ta.selectionStart??ta.value.length;
+      const end=ta.selectionEnd??ta.value.length;
+      const newVal=ta.value.slice(0,start)+sym+ta.value.slice(end);
+      updateQ(qi,"text",newVal);
+      setTimeout(()=>{ ta.focus(); ta.setSelectionRange(start+sym.length,start+sym.length); },10);
+    } else {
+      updateQ(qi,"text",(questions[qi]?.text||"")+sym);
+    }
+  }
+  function insertImage(qi:number){
+    if(!imgUrl.trim())return;
+    insertAtCursor(qi,` [img:${imgUrl.trim()}:${imgSize}] `);
+    setImgUrl(""); setImgPanel(null);
+  }
 
   function parseBulk(){
     const lines=bulkText.trim().split(/\n\n+/);
@@ -994,32 +1043,152 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
     setQuestions(qs=>[...qs,...parsed]); setBulkText(""); setBulkMode(false); setImportMsg(`✅ ${parsed.length} questions imported!`);
   }
 
-  /* ── HTML upload (Utkorsho/Udvash exam HTML) ──
-     Normalises Bangla (ক/খ/গ/ঘ) or English (A-D) option labels to A-D, picks
-     correct answer from .fas.fa-check, embeds images via [img:URL] so they
-     render in MathText, keeps math/chemistry. */
+  /* ── HTML parser helpers ── */
   function normaliseOptId(rawId: string, idx: number): string {
-    const s = (rawId || "").trim().replace(/[.):।]/g, "").toUpperCase();
+    const s = (rawId || "").trim().replace(/[.):।\s]/g, "").toUpperCase();
     if (/^[A-D]$/.test(s)) return s;
     const map: Record<string,string> = {
       "ক":"A","খ":"B","গ":"C","ঘ":"D",
       "১":"A","২":"B","৩":"C","৪":"D",
       "1":"A","2":"B","3":"C","4":"D",
       "I":"A","II":"B","III":"C","IV":"D",
+      "(A)":"A","(B)":"B","(C)":"C","(D)":"D",
     };
     return map[s] || ["A","B","C","D"][idx] || "A";
   }
-  function cleanHtmlText(el: Element | null): string {
+  function cleanEl(el: Element | null): string {
     if (!el) return "";
     const c = el.cloneNode(true) as Element;
-    c.querySelectorAll("style,script").forEach(t => t.remove());
-    c.querySelectorAll("br").forEach(b => b.replaceWith(document.createTextNode("\n")));
+    c.querySelectorAll("style,script,.option-label,.option-key,.serial,.q-serial").forEach(t => t.remove());
+    c.querySelectorAll("br").forEach(b => b.replaceWith(document.createTextNode(" ")));
     c.querySelectorAll("img").forEach(img => {
       const src = img.getAttribute("src") || "";
       img.replaceWith(document.createTextNode(src ? ` [img:${src}] ` : ""));
     });
-    return (c.textContent || "").replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+    return (c.textContent || "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   }
+  function makeQ(i: number, text: string, opts: any[], correct: string, sol: string) {
+    return { id:`q${Date.now()}_${i}`, text, options: opts.slice(0,4), correct, solution: sol };
+  }
+
+  /* Strategy 1 — Utkorsho / Utkorsho Online / classic Udvash clones
+     Selectors: .questionBlock > .questionText  +  .questionOption(.input-group-text) */
+  function parseStrategy1(doc: Document): any[] {
+    const blocks = doc.querySelectorAll(".questionBlock");
+    if (!blocks.length) return [];
+    const out: any[] = [];
+    blocks.forEach((block, i) => {
+      const qText = cleanEl(block.querySelector(".questionText,.question-text,.q-text"));
+      if (!qText) return;
+      const optEls = block.querySelectorAll(".questionOption,.question-option");
+      const opts: any[] = []; let correct = "A";
+      optEls.forEach((oe, oi) => {
+        const rawId = oe.querySelector(".input-group-text,.opt-label,.option-id")?.textContent?.trim() || "";
+        const id = normaliseOptId(rawId, oi);
+        const labelEl = oe.querySelector(".questionTable label,.opt-text,label") || oe;
+        const text = cleanEl(labelEl);
+        const isCorrect = !!(oe.querySelector(".fas.fa-check,.fa-check,.correct,.is-correct") ||
+          oe.classList.contains("correct") || oe.getAttribute("data-correct")==="true");
+        if (isCorrect) correct = id;
+        if (text) opts.push({ id, text });
+      });
+      while (opts.length < 4) opts.push({ id:["A","B","C","D"][opts.length], text:"" });
+      const sol = cleanEl(block.querySelector(".solveText,.solve-text,.explanation,.solution-text"));
+      if (opts.length >= 2) out.push(makeQ(i, qText, opts, correct, sol));
+    });
+    return out;
+  }
+
+  /* Strategy 2 — Chorcha / modern portal pattern
+     Selectors: .question-block / .qblock / .quiz-item / .mcq-item etc. */
+  function parseStrategy2(doc: Document): any[] {
+    const sel = [
+      ".question-block",".qblock",".quiz-item",".mcq-item",".question-card",
+      ".q-container",".question-wrapper",".exam-question",".q-item",
+      "li.question","div.question:not(.question-text):not(.questionText)",
+    ].join(",");
+    const blocks = doc.querySelectorAll(sel);
+    if (!blocks.length) return [];
+    const out: any[] = [];
+    blocks.forEach((block, i) => {
+      const qTextEl = block.querySelector(
+        ".question-text,.q-text,.qtext,.question-body,.q-body,.q-title,.question-title,p.question"
+      ) || block.querySelector("p:first-child,h4,h5");
+      const qText = cleanEl(qTextEl);
+      if (!qText || qText.length < 5) return;
+      const optEls = block.querySelectorAll(
+        ".option,.choice,.answer-option,.q-option,.mcq-option,li.option,label.option,li.choice"
+      );
+      if (optEls.length < 2) return;
+      const opts: any[] = []; let correct = "A";
+      optEls.forEach((oe, oi) => {
+        const id = ["A","B","C","D"][oi] || String.fromCharCode(65+oi);
+        const isCorrect = !!(oe.classList.contains("correct") || oe.classList.contains("right") ||
+          oe.classList.contains("answer") || oe.getAttribute("data-correct")==="true" ||
+          oe.querySelector(".fa-check,.correct-mark,.right-answer"));
+        if (isCorrect) correct = id;
+        const labelEl = oe.querySelector("label,span.text,.text,.opt-text") || oe;
+        const text = cleanEl(labelEl);
+        if (text) opts.push({ id, text });
+      });
+      while (opts.length < 4) opts.push({ id:["A","B","C","D"][opts.length], text:"" });
+      const sol = cleanEl(block.querySelector(".explanation,.solution,.answer-explanation,.rationale,.solve"));
+      if (opts.length >= 2) out.push(makeQ(i, qText, opts, correct, sol));
+    });
+    return out;
+  }
+
+  /* Strategy 3 — Table-based or dl/dt/dd pattern */
+  function parseStrategy3(doc: Document): any[] {
+    const tables = doc.querySelectorAll("table");
+    const out: any[] = [];
+    tables.forEach(tbl => {
+      const rows = tbl.querySelectorAll("tr");
+      let qText = ""; const opts: any[] = []; let correct = "A"; let sol = "";
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("td,th");
+        if (cells.length === 0) return;
+        const first = cleanEl(cells[0]);
+        if (/^Q\.?\s*\d*\s*[.:)]?\s*/i.test(first) || cells.length === 1) {
+          if (qText && opts.length >= 2) { out.push(makeQ(out.length, qText, opts, correct, sol)); opts.length=0; sol=""; }
+          qText = first.replace(/^Q\.?\s*\d*\s*[.:)]?\s*/i,"").trim();
+        } else if (cells.length >= 2 && /^[ABCD(]/.test(first)) {
+          const id = normaliseOptId(first.slice(0,3), opts.length);
+          const text = cleanEl(cells[1]);
+          const isCorrect = !!(cells[2] && cleanEl(cells[2]).match(/✓|correct|yes/i));
+          if (isCorrect) correct = id;
+          if (text) opts.push({ id, text });
+        }
+      });
+      if (qText && opts.length >= 2) out.push(makeQ(out.length, qText, opts, correct, sol));
+    });
+    return out;
+  }
+
+  /* Strategy 4 — Plain text fallback (Q1. / A. B. C. D. / Ans: pattern) */
+  function parseTextFallback(text: string): any[] {
+    const blocks = text.split(/\n{2,}/);
+    const out: any[] = [];
+    for (const block of blocks) {
+      const ls = block.split("\n").map(l=>l.trim()).filter(Boolean);
+      if (ls.length < 5) continue;
+      const qMatch = ls[0].match(/^(?:Q\.?\s*\d+[.:)]?\s*|[\d]+[.)]\s*)(.+)/i);
+      if (!qMatch) continue;
+      const qText = qMatch[1].trim();
+      const opts: any[] = []; let correct = "A"; let sol = "";
+      for (const l of ls.slice(1)) {
+        const om = l.match(/^([ABCD])[.):\s]+(.+)/i);
+        if (om) opts.push({ id:om[1].toUpperCase(), text:om[2].trim() });
+        const am = l.match(/^(?:Ans|Answer|উত্তর)[.:)\s]*([ABCD])/i);
+        if (am) correct = am[1].toUpperCase();
+        const sm = l.match(/^(?:Sol|Solution|ব্যাখ্যা|Explanation)[.:)\s]+(.+)/i);
+        if (sm) sol = sm[1].trim();
+      }
+      if (qText && opts.length >= 2) out.push(makeQ(out.length, qText, opts, correct, sol));
+    }
+    return out;
+  }
+
   async function importHtmlFile(file: File) {
     if (!file) return;
     setHtmlBusy(true); setImportMsg("");
@@ -1027,53 +1196,30 @@ function QuizBuilder({ initial, aiPrefill, onSave, onCancel }:{ initial:any; aiP
       const content = await file.text();
       const doc = new DOMParser().parseFromString(content, "text/html");
 
+      // Auto-detect title
       const titleEl =
         doc.querySelector(".TakeExamHeader h3:last-child") ||
         doc.querySelector(".TakeExamHeader h3") ||
+        doc.querySelector(".exam-title,.quiz-title,h1.title") ||
         doc.querySelector("title");
       const fileTitle = titleEl?.textContent?.trim() || "";
-      if (fileTitle && !title) setTitle(fileTitle);
+      if (fileTitle && !title) setTitle(fileTitle.replace(/\s*-\s*HTR.*$/i,"").trim());
 
-      const blocks = doc.querySelectorAll(".questionBlock");
-      const parsed: any[] = [];
-      blocks.forEach((block, i) => {
-        const qText = cleanHtmlText(block.querySelector(".questionText"));
-        const optEls = block.querySelectorAll(".questionOption");
-        const opts: any[] = [];
-        let correct = "A";
-        optEls.forEach((oe, oi) => {
-          const rawId = oe.querySelector(".input-group-text")?.textContent?.trim() || "";
-          const id = normaliseOptId(rawId, oi);
-          const text = cleanHtmlText(oe.querySelector(".questionTable label") || oe);
-          const isCorrect = !!oe.querySelector(".fas.fa-check, .fa-check, .correct");
-          if (isCorrect) correct = id;
-          if (text) opts.push({ id, text });
-        });
-        while (opts.length < 4) {
-          const id = ["A","B","C","D"][opts.length];
-          opts.push({ id, text: "" });
-        }
-        const sol = cleanHtmlText(block.querySelector(".solveText"));
-        if (qText && opts.length >= 2) {
-          parsed.push({
-            id: `q${Date.now()}_${i}`,
-            text: qText,
-            options: opts.slice(0, 4),
-            correct,
-            solution: sol || "",
-          });
-        }
-      });
+      // Try each strategy in order
+      let parsed: any[] = parseStrategy1(doc);
+      if (parsed.length === 0) parsed = parseStrategy2(doc);
+      if (parsed.length === 0) parsed = parseStrategy3(doc);
+      if (parsed.length === 0) parsed = parseTextFallback(doc.body?.textContent || "");
 
       if (parsed.length === 0) {
-        setImportMsg("❌ No questions found in this file. Make sure it's an Utkorsho/Udvash exam HTML.");
+        setImportMsg("❌ No questions found. Tried 4 parsing strategies (Utkorsho, Chorcha, Table, Text). Try Bulk Text Import instead.");
       } else {
         setQuestions(qs => [...qs, ...parsed]);
         setHtmlMode(false);
         setImportMsg(`✅ ${parsed.length} questions imported from "${file.name}"`);
       }
     } catch (err: any) {
-      setImportMsg(`❌ Failed to parse: ${err?.message || "invalid HTML"}`);
+      setImportMsg(`❌ Parse error: ${err?.message || "invalid HTML"}`);
     } finally {
       setHtmlBusy(false);
     }
@@ -1176,9 +1322,68 @@ A. Option A...`}</code>
             <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:14}}>
               {/* LEFT: editor */}
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <Field label="Question Text (Bangla/English, $math$, \\ce{H2O})">
-                  <textarea value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)} rows={3} placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`} style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace",fontSize:13}}/>
-                  <div style={{fontSize:10,color:"var(--sub)",marginTop:4}}>💡 <code>{"$x^2$"}</code> · <code>{"$$\\frac{a}{b}$$"}</code> · <code>{"\\ce{H_2O}"}</code></div>
+                <Field label="Question Text (Bangla/English, $math$, \ce{H2O})">
+                  {/* ── Math symbol toolbar ── */}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6,padding:6,background:"var(--bg)",borderRadius:8,border:"1px solid var(--border)"}}>
+                    {[
+                      ["±","±"],["×","×"],["÷","÷"],["√","√"],["∞","∞"],
+                      ["≤","≤"],["≥","≥"],["≠","≠"],["≈","≈"],["∝","∝"],
+                      ["π","π"],["θ","θ"],["α","α"],["β","β"],["γ","γ"],
+                      ["Δ","Δ"],["∑","∑"],["∫","∫"],["∂","∂"],["→","→"],
+                    ].map(([sym])=>(
+                      <button key={sym} type="button" onMouseDown={e=>{e.preventDefault();insertAtCursor(qi,sym);}}
+                        style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:13,color:"var(--text)",fontFamily:"serif",lineHeight:1.3}}>
+                        {sym}
+                      </button>
+                    ))}
+                    <div style={{width:1,background:"var(--border)",margin:"0 2px"}}/>
+                    {[
+                      ["x²","^{2}"],["xₙ","_{n}"],["√x","\\sqrt{x}"],["a/b","\\frac{a}{b}"],["→","\\vec{v}"],["$","$...$"],
+                      ["⌀","$$...$$"],
+                    ].map(([label,sym])=>(
+                      <button key={label} type="button" onMouseDown={e=>{e.preventDefault();insertAtCursor(qi,sym);}}
+                        title={`Insert: ${sym}`}
+                        style={{background:"rgba(108,127,255,0.12)",border:"1px solid rgba(108,127,255,0.25)",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:11,color:"var(--purple)",fontFamily:"monospace",fontWeight:700,lineHeight:1.3}}>
+                        {label}
+                      </button>
+                    ))}
+                    <div style={{width:1,background:"var(--border)",margin:"0 2px"}}/>
+                    {[
+                      ["H₂O","\\ce{H_2O}"],["CO₂","\\ce{CO_2}"],["⇌","\\ce{<=>}"],
+                    ].map(([label,sym])=>(
+                      <button key={label} type="button" onMouseDown={e=>{e.preventDefault();insertAtCursor(qi,sym);}}
+                        title={`Chem: ${sym}`}
+                        style={{background:"rgba(34,197,94,0.10)",border:"1px solid rgba(34,197,94,0.25)",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:11,color:"var(--green)",fontFamily:"monospace",fontWeight:700}}>
+                        {label}
+                      </button>
+                    ))}
+                    <button type="button" onMouseDown={e=>{e.preventDefault();setImgPanel(imgPanel===qi?null:qi);setImgUrl("");}}
+                      style={{background:"rgba(249,115,22,0.10)",border:"1px solid rgba(249,115,22,0.3)",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"var(--orange)",fontWeight:700,marginLeft:"auto"}}>
+                      📷 Image
+                    </button>
+                  </div>
+                  {/* Image insert panel */}
+                  {imgPanel===qi&&(
+                    <div style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:8,padding:10,marginBottom:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                      <input value={imgUrl} onChange={e=>setImgUrl(e.target.value)} placeholder="Image URL (https://...)" style={{...inp,flex:2,minWidth:160,fontSize:12}} autoFocus/>
+                      <select value={imgSize} onChange={e=>setImgSize(e.target.value)} style={{...inp,width:90,fontSize:12}}>
+                        <option value="25">25% small</option>
+                        <option value="50">50% medium</option>
+                        <option value="75">75% large</option>
+                        <option value="100">100% full</option>
+                      </select>
+                      <button type="button" onClick={()=>insertImage(qi)} disabled={!imgUrl.trim()} style={{...smBtn("var(--orange)"),fontSize:12}}>Insert</button>
+                      <button type="button" onClick={()=>setImgPanel(null)} style={{...smBtn("#888"),fontSize:12}}>✕</button>
+                    </div>
+                  )}
+                  <textarea
+                    ref={el=>{qTextRefs.current[qi]=el;}}
+                    value={q.text} onChange={e=>updateQ(qi,"text",e.target.value)}
+                    rows={3}
+                    placeholder={`What is the value of $x$ if $2x + 5 = 15$?\nOR: হাইড্রোজেনের পারমাণবিক সংখ্যা কত?`}
+                    style={{...inp,resize:"vertical",fontFamily:"Roboto,'Noto Sans Bengali',monospace",fontSize:13}}
+                  />
+                  <div style={{fontSize:10,color:"var(--sub)",marginTop:4}}>Inline: <code>{"$x^2$"}</code> · Block: <code>{"$$\\frac{a}{b}$$"}</code> · Chem: <code>{"\\ce{H_2O}"}</code> · Img: <code>{"[img:URL:50]"}</code></div>
                 </Field>
                 {q.options.map((o:any,oi:number)=>(
                   <Field key={o.id} label={`Option ${o.id}`}>
@@ -2810,7 +3015,7 @@ function VocabTab(){
 
 /* ══ Platform Settings ══════════════════════════════════════ */
 function SettingsTab(){
-  const [settings,setSettings]=useState<any>({siteName:"RedRose Online Care",tagline:"SSC · HSC · Admission · BCS",primaryColor:"#dc2626",enableLeaderboard:true,enableDiscussions:true,maintenanceMode:false});
+  const [settings,setSettings]=useState<any>({siteName:"HTR Zone",tagline:"SSC · HSC · Admission · BCS",primaryColor:"#4f8ef7",enableLeaderboard:true,enableDiscussions:true,maintenanceMode:false});
   const [msg,setMsg]=useState("");
   const load=useCallback(()=>api("/api/admin/platform-settings",{method:"GET"}).then(r=>r.json()).then(d=>{if(d&&!d.error)setSettings(d);}),[]);
   useEffect(()=>{load();},[load]);
@@ -2822,7 +3027,7 @@ function SettingsTab(){
   return(
     <div>
       <SectionTitle>⚙️ Platform Settings</SectionTitle>
-      <InfoBox>Configure site-wide settings for RedRose Online Care.</InfoBox>
+      <InfoBox>Configure site-wide settings for HTR Zone exam portal.</InfoBox>
       <Card title="General">
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Field label="Site Name"><input value={settings.siteName} onChange={e=>setSettings({...settings,siteName:e.target.value})} style={inp}/></Field>
@@ -2830,7 +3035,7 @@ function SettingsTab(){
           <Field label="Primary Color"><div style={{display:"flex",gap:10,alignItems:"center"}}><input type="color" value={settings.primaryColor} onChange={e=>setSettings({...settings,primaryColor:e.target.value})} style={{width:50,height:36,padding:2,border:"1px solid var(--border)",borderRadius:8,cursor:"pointer"}}/><span style={{fontSize:13,color:"var(--sub)"}}>{settings.primaryColor}</span></div></Field>
         </div>
       </Card>
-      <Card title="Feature Toggles" style={{marginTop:16}}>
+      <div style={{marginTop:16}}><Card title="Feature Toggles">
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {[
             {key:"enableLeaderboard",label:"🏆 Leaderboard"},
@@ -2844,7 +3049,7 @@ function SettingsTab(){
             </label>
           ))}
         </div>
-      </Card>
+      </Card></div>
       {msg&&<div style={{margin:"12px 0"}}><Feedback msg={msg}/></div>}
       <button onClick={save} style={{...btnStyle("var(--purple)"),marginTop:12}}>💾 Save Settings</button>
     </div>

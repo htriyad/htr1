@@ -42,6 +42,7 @@ export default function ExamSim() {
   const [currentQIdx, setCurrentQIdx] = useState(0);
   const [qStartTime, setQStart]   = useState(Date.now());
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [paused, setPaused]       = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const token = T();
@@ -59,7 +60,7 @@ export default function ExamSim() {
   }, [examId]);
 
   useEffect(() => {
-    if (!quiz || submitted) return;
+    if (!quiz || submitted || paused) return;
     timerRef.current = setInterval(() => {
       setSecsLeft(s => {
         if (s <= 1) { if (timerRef.current) clearInterval(timerRef.current); handleSubmit(); return 0; }
@@ -67,7 +68,7 @@ export default function ExamSim() {
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [quiz, submitted]);
+  }, [quiz, submitted, paused]);
 
   const handleSubmit = useCallback(async () => {
     if (submitting||submitted) return;
@@ -97,6 +98,7 @@ export default function ExamSim() {
   }, [examId, answers, submitting, submitted, quiz, secsLeft, questionTimes]);
 
   function selectAnswer(qId: string, optId: string) {
+    if (paused) return;
     const timeSecs = Math.round((Date.now()-qStartTime)/1000);
     setQTimes(prev => ({ ...prev, [qId]: (prev[qId]||0) + timeSecs }));
     setAnswers(a => ({ ...a, [qId]: optId }));
@@ -239,20 +241,35 @@ export default function ExamSim() {
   return (
     <div style={{background:"#0f172a",minHeight:"100svh",display:"flex",flexDirection:"column"}}>
       {/* Dark exam header */}
-      <div style={{background:"#1e293b",borderBottom:"1px solid #334155",padding:"12px 16px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:100}}>
+      <div style={{background:"#0d1a36",borderBottom:"1px solid #1c3255",padding:"12px 16px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:100}}>
         <div style={{flex:1}}>
-          <div style={{fontSize:12,color:"#94a3b8",fontWeight:700,marginBottom:1,textTransform:"uppercase",letterSpacing:"0.05em"}}>Exam Simulation</div>
-          <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",fontFamily:"Lato,sans-serif",maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</div>
+          <div style={{fontSize:11,color:"#7a9bc4",fontWeight:700,marginBottom:1,textTransform:"uppercase",letterSpacing:"0.06em"}}>HTR Zone · Exam Simulation</div>
+          <div style={{fontSize:14,fontWeight:800,color:"#dde5f8",fontFamily:"Lato,sans-serif",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</div>
         </div>
+        {/* Pause button */}
+        <button
+          onClick={() => setPaused(p=>!p)}
+          style={{background:paused?"rgba(245,158,11,0.15)":"rgba(79,142,247,0.10)",border:`1.5px solid ${paused?"#f59e0b":"#1c3255"}`,borderRadius:8,padding:"5px 12px",cursor:"pointer",color:paused?"#f59e0b":"#7a9bc4",fontWeight:700,fontSize:12,flexShrink:0}}
+        >
+          {paused ? "▶ Resume" : "⏸ Pause"}
+        </button>
         {/* Timer */}
-        <div style={{background:timerDanger?"#dc2626":timerWarn?"#d97706":"#1e3a5f",borderRadius:10,padding:"8px 16px",fontSize:20,fontWeight:900,fontFamily:"monospace",color:"#fff",letterSpacing:2}}>
-          {fmt(secsLeft)}
+        <div style={{background:timerDanger?"rgba(248,113,113,0.2)":timerWarn?"rgba(249,115,22,0.15)":"rgba(29,78,216,0.2)",border:`1.5px solid ${timerDanger?"#f87171":timerWarn?"#f97316":"#1c3255"}`,borderRadius:10,padding:"7px 14px",fontSize:19,fontWeight:900,fontFamily:"monospace",color:timerDanger?"#f87171":timerWarn?"#f97316":"#dde5f8",letterSpacing:2,flexShrink:0}}>
+          {paused?"⏸":""}{fmt(secsLeft)}
         </div>
         {/* Q counter */}
-        <div style={{background:"#334155",borderRadius:10,padding:"8px 12px",fontSize:13,fontWeight:700,color:"#94a3b8",flexShrink:0}}>
+        <div style={{background:"rgba(255,255,255,0.05)",border:"1px solid #1c3255",borderRadius:8,padding:"7px 10px",fontSize:12,fontWeight:700,color:"#7a9bc4",flexShrink:0}}>
           {answered}/{quiz.questions.length}
         </div>
       </div>
+      {/* Paused banner */}
+      {paused&&(
+        <div style={{background:"rgba(245,158,11,0.12)",borderBottom:"1px solid rgba(245,158,11,0.3)",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"center",gap:10}}>
+          <span style={{fontSize:16}}>⏸</span>
+          <span style={{fontWeight:700,color:"#f59e0b",fontSize:13}}>Exam Paused — Timer stopped</span>
+          <button onClick={()=>setPaused(false)} style={{background:"#f59e0b",color:"#000",border:"none",borderRadius:8,padding:"4px 14px",fontWeight:800,fontSize:12,cursor:"pointer",marginLeft:4}}>Resume ▶</button>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div style={{height:3,background:"#1e293b"}}>
@@ -317,17 +334,19 @@ export default function ExamSim() {
           <div style={{fontSize:12,color:"#64748b"}}>Answered: <b style={{color:"#a78bfa"}}>{answered}</b>/{quiz.questions.length}</div>
           {answered<quiz.questions.length&&<div style={{fontSize:11,color:"#d97706"}}>{quiz.questions.length-answered} remaining</div>}
         </div>
-        {showSubmitConfirm ? (
+        {paused ? (
+          <button onClick={()=>setPaused(false)} style={{padding:"12px 20px",borderRadius:12,background:"rgba(245,158,11,0.15)",color:"#f59e0b",border:"1.5px solid #f59e0b",fontWeight:700,fontSize:14,cursor:"pointer"}}>▶ Resume Exam</button>
+        ) : showSubmitConfirm ? (
           <>
-            <div style={{fontSize:12,color:"#d97706",alignSelf:"center"}}>Confirm?</div>
-            <button onClick={()=>setShowSubmitConfirm(false)} style={{padding:"10px 16px",borderRadius:10,border:"1px solid #475569",background:"transparent",color:"#94a3b8",fontWeight:700,cursor:"pointer"}}>No</button>
-            <button onClick={handleSubmit} disabled={submitting} style={{padding:"10px 18px",borderRadius:10,background:"var(--purple)",color:"#fff",border:"none",fontWeight:700,cursor:"pointer"}}>
+            <div style={{fontSize:12,color:"#f59e0b",alignSelf:"center"}}>Confirm submit?</div>
+            <button onClick={()=>setShowSubmitConfirm(false)} style={{padding:"10px 16px",borderRadius:10,border:"1px solid #1c3255",background:"transparent",color:"#7a9bc4",fontWeight:700,cursor:"pointer"}}>No</button>
+            <button onClick={handleSubmit} disabled={submitting} style={{padding:"10px 18px",borderRadius:10,background:"#4f8ef7",color:"#fff",border:"none",fontWeight:700,cursor:"pointer"}}>
               {submitting?"...":"Yes, Submit"}
             </button>
           </>
         ) : (
           <button onClick={()=>{if(answered<quiz.questions.length)setShowSubmitConfirm(true);else handleSubmit();}} disabled={submitting}
-            style={{padding:"12px 22px",borderRadius:12,background:answered===quiz.questions.length?"var(--purple)":"#334155",color:answered===quiz.questions.length?"#fff":"#94a3b8",border:"none",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+            style={{padding:"12px 22px",borderRadius:12,background:answered===quiz.questions.length?"#4f8ef7":"rgba(255,255,255,0.06)",color:answered===quiz.questions.length?"#fff":"#7a9bc4",border:`1px solid ${answered===quiz.questions.length?"#4f8ef7":"#1c3255"}`,fontWeight:700,fontSize:15,cursor:"pointer"}}>
             {submitting?"Submitting...":"Submit Exam ✓"}
           </button>
         )}

@@ -32,10 +32,10 @@ export default function MathText({ text, block, className }: Props) {
 
 /* ─────────── Top-level: split out math + code blocks first ─────────── */
 function renderMixed(raw: string): string {
-  // Image markers [img:URL]
-  const imgs: string[] = [];
-  let src = raw.replace(/\[img:([^\]]+)\]/gi, (_m, url) => {
-    imgs.push(url.trim());
+  // Image markers [img:URL] or [img:URL:size%] or [img:URL:50]
+  const imgs: Array<{url:string; size:string}> = [];
+  let src = raw.replace(/\[img:([^:\]]+)(?::(\d+%?))?\]/gi, (_m, url, size) => {
+    imgs.push({ url: url.trim(), size: size ? (size.includes("%") ? size : size+"%") : "100%" });
     return `\u0000IMG${imgs.length - 1}\u0000`;
   });
 
@@ -71,7 +71,7 @@ function renderMixed(raw: string): string {
 }
 
 /* ─────────── Lightweight Markdown renderer (block + inline) ─────────── */
-function markdown(s: string, imgs: string[], codeBlocks: string[]): string {
+function markdown(s: string, imgs: Array<{url:string;size:string}>, codeBlocks: string[]): string {
   if (!s) return "";
   // First protect inline code `...` so we don't apply markup inside.
   const inlineCodes: string[] = [];
@@ -136,8 +136,10 @@ function markdown(s: string, imgs: string[], codeBlocks: string[]): string {
 
   // Restore images
   html = html.replace(/\u0000IMG(\d+)\u0000/g, (_m, idx) => {
-    const url = imgs[Number(idx)] || "";
-    return `<img src="${escapeAttr(url)}" alt="" class="rr-img"/>`;
+    const item = imgs[Number(idx)];
+    if (!item) return "";
+    const style = `max-width:${item.size};width:${item.size};height:auto;border-radius:6px;display:block;margin:4px 0;`;
+    return `<img src="${escapeAttr(item.url)}" alt="" class="rr-img" style="${style}"/>`;
   });
 
   // Restore fenced code blocks

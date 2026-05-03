@@ -2,29 +2,60 @@
 @import "tw-animate-css";
 
 /* ═══════════════════════════════════════════
-   DESIGN TOKENS — Udvash colour system
+   DESIGN TOKENS — HTR Zone dark-blue default
 ═══════════════════════════════════════════ */
 :root {
-  --bg:        #eceaf3;
-  --surface:   #ffffff;
-  --purple:    #7b2fa5;
-  --purple-dk: #5a1e8a;
-  --navy:      #1e2d6e;
-  --orange:    #f5541e;
-  --green:     #4FA621;
-  --text:      #1a1a1a;
-  --sub:       #555;
-  --border:    #ddd;
-  --gold:      #d97706;
-  --red-txt:   #c0392b;
+  --bg:        #08112b;
+  --surface:   #0d1a36;
+  --card:      #0f2040;
+  --border:    #1c3255;
+  --text:      #dde5f8;
+  --sub:       #7a9bc4;
+  --purple:    #6c7fff;
+  --purple-dk: #4f63e8;
+  --navy:      #1d4ed8;
+  --orange:    #f97316;
+  --green:     #22c55e;
+  --gold:      #f59e0b;
+  --red-txt:   #f87171;
+  --accent:    #4f8ef7;
 }
 
 /* ═══════════════════════════════════════════
-   EYE-PROTECTION THEME (warm, low blue-light)
+   LIGHT THEME
 ═══════════════════════════════════════════ */
+.light-theme {
+  --bg:        #f0f4ff;
+  --surface:   #ffffff;
+  --card:      #f8faff;
+  --border:    #d1d9f0;
+  --text:      #1a1a2e;
+  --sub:       #4a5a7a;
+  --purple:    #5a1fa0;
+  --purple-dk: #40187a;
+  --navy:      #1e2d6e;
+  --orange:    #f5541e;
+  --green:     #16a34a;
+  --gold:      #d97706;
+  --red-txt:   #c0392b;
+  --accent:    #3b6fd4;
+}
+.light-theme .uu-header { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+.light-theme .uu-header-icon-btn { color: #333; }
+.light-theme .dash-menu-item { background: #fff; }
+.light-theme .pc-card { background: #fff; }
+.light-theme .vp-info-card { background: #fff; }
+.light-theme .dash-banner { background: linear-gradient(135deg, #5b21b6 0%, #7b2fa5 50%, #9b1dab 100%); }
+.light-theme .sidebar { background: #fff; }
+.light-theme .vp-source-tab { background: #f0f4ff; color: #4a5a7a; }
+.light-theme .vp-source-tab.active { background: #5a1fa0; }
+
+/* Eye-theme alias for backward compat */
 .eye-theme {
   --bg:        #1e1c14;
   --surface:   #272519;
+  --card:      #2a2820;
+  --border:    #3a3820;
   --purple:    #89a84a;
   --purple-dk: #6b8a38;
   --navy:      #4a6030;
@@ -32,21 +63,11 @@
   --green:     #89a84a;
   --text:      #d4cc99;
   --sub:       #9a9270;
-  --border:    #3a3820;
   --gold:      #c4923e;
   --red-txt:   #c08840;
+  --accent:    #89a84a;
 }
 .eye-theme .uu-header { background: #222018; border-bottom: 1px solid #3a3820; }
-.eye-theme .uu-logo-text span:first-child { color: #c47830 !important; }
-.eye-theme .dash-menu-item { background: #272519; }
-.eye-theme .pc-card { background: #272519; }
-.eye-theme .vp-info-card { background: #272519; }
-.eye-theme .vp-source-tab { background: #1e1c14; color: #9a9270; }
-.eye-theme .vp-source-tab.active { background: #4a6030; }
-.eye-theme .pc-select { background: #272519; border-color: #3a3820; color: #d4cc99; }
-.eye-theme .sidebar { background: #222018; }
-.eye-theme .sidebar-item { border-color: #3a3820; }
-.eye-theme .sidebar-item:hover { background: #2e2c1e; }
 .eye-theme .dash-banner { background: linear-gradient(135deg, #3a5020 0%, #4a6030 60%, #5a7038 100%); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -75,13 +96,14 @@ input, button, select, textarea, label {
   position: sticky;
   top: 0;
   z-index: 200;
-  background: #fff;
+  background: var(--surface);
   display: flex;
   align-items: center;
   padding: 0 14px;
   height: 56px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  box-shadow: 0 1px 0 var(--border);
   gap: 10px;
+  border-bottom: 1px solid var(--border);
 }
 .uu-header-icon-btn {
   background: none;
@@ -90,7 +112,7 @@ input, button, select, textarea, label {
   padding: 6px;
   display: flex;
   align-items: center;
-  color: #333;
+  color: var(--sub);
   flex-shrink: 0;
 }
 .uu-logo-text {
