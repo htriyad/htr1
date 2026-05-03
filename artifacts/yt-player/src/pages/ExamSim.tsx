@@ -243,7 +243,7 @@ export default function ExamSim() {
       {/* Dark exam header */}
       <div style={{background:"#0d1a36",borderBottom:"1px solid #1c3255",padding:"12px 16px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:100}}>
         <div style={{flex:1}}>
-          <div style={{fontSize:11,color:"#7a9bc4",fontWeight:700,marginBottom:1,textTransform:"uppercase",letterSpacing:"0.06em"}}>HTR Zone · Exam Simulation</div>
+          <div style={{fontSize:11,color:"#7a9bc4",fontWeight:700,marginBottom:1,textTransform:"uppercase",letterSpacing:"0.06em"}}>Red Rose 🥀 · Exam Simulation</div>
           <div style={{fontSize:14,fontWeight:800,color:"#dde5f8",fontFamily:"Lato,sans-serif",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{quiz.title}</div>
         </div>
         {/* Pause button */}

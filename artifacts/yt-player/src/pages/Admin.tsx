@@ -91,7 +91,7 @@ function LoginScreen({ onLogin }: { onLogin:(t:string)=>void }) {
             </button>
           </form>
         </div>
-        <p style={{textAlign:"center",fontSize:11,color:"rgba(255,255,255,0.15)",marginTop:22,letterSpacing:"0.03em"}}>HTR Zone · Secure Admin Portal · v2.0</p>
+        <p style={{textAlign:"center",fontSize:11,color:"rgba(255,255,255,0.15)",marginTop:22,letterSpacing:"0.03em"}}>Red Rose 🥀 · Secure Admin Portal · v2.0</p>
       </div>
     </div>
   );
@@ -3135,7 +3135,7 @@ function VocabTab(){
 
 /* ══ Platform Settings ══════════════════════════════════════ */
 function SettingsTab(){
-  const [settings,setSettings]=useState<any>({siteName:"HTR Zone",tagline:"SSC · HSC · Admission · BCS",primaryColor:"#4f8ef7",enableLeaderboard:true,enableDiscussions:true,maintenanceMode:false});
+  const [settings,setSettings]=useState<any>({siteName:"Red Rose 🥀",tagline:"SSC · HSC · Admission · BCS",primaryColor:"#e05c8a",enableLeaderboard:true,enableDiscussions:true,maintenanceMode:false});
   const [msg,setMsg]=useState("");
   const load=useCallback(()=>api("/api/admin/platform-settings",{method:"GET"}).then(r=>r.json()).then(d=>{if(d&&!d.error)setSettings(d);}),[]);
   useEffect(()=>{load();},[load]);
@@ -3179,7 +3179,7 @@ function SettingsTab(){
 /* ══ Motivational Quotes ════════════════════════════════════ */
 function QuotesTab(){
   const [list,setList]=useState<any[]>([]);
-  const [form,setForm]=useState({text:"",author:"HTR Zone",lang:"bn"});
+  const [form,setForm]=useState({text:"",author:"Red Rose 🥀",lang:"bn"});
   const [msg,setMsg]=useState("");
   const load=useCallback(()=>api("/api/admin/quotes",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
   useEffect(()=>{load();},[load]);
@@ -3188,7 +3188,7 @@ function QuotesTab(){
     const r=await api("/api/admin/quotes",{method:"POST",body:JSON.stringify(form)});
     const d=await r.json();
     if(d.error)setMsg("❌ "+d.error);
-    else{setMsg("✅ Quote added!");setForm({...form,text:"",author:"HTR Zone"});load();}
+    else{setMsg("✅ Quote added!");setForm({...form,text:"",author:"Red Rose 🥀"});load();}
   }
   async function del(id:string){
     if(!confirm("Delete this quote?"))return;

@@ -1789,9 +1789,9 @@ const DEFAULT_QUOTES=[
   {id:"dq4",text:"The secret of getting ahead is getting started.",author:"Mark Twain",lang:"en"},
   {id:"dq5",text:"কঠিন পরিশ্রমের কোনো বিকল্প নেই।",author:"Thomas Edison",lang:"bn"},
   {id:"dq6",text:"Education is the most powerful weapon you can use to change the world.",author:"Nelson Mandela",lang:"en"},
-  {id:"dq7",text:"প্রতিটি মিনিট মূল্যবান — আজকের পরিশ্রম, কালকের সাফল্য।",author:"HTR Zone",lang:"bn"},
+  {id:"dq7",text:"প্রতিটি মিনিট মূল্যবান — আজকের পরিশ্রম, কালকের সাফল্য।",author:"Red Rose 🥀",lang:"bn"},
   {id:"dq8",text:"Believe you can and you're halfway there.",author:"Theodore Roosevelt",lang:"en"},
-  {id:"dq9",text:"পরীক্ষায় ভালো করতে চাইলে প্রতিদিন পড়তে হবে।",author:"HTR Zone",lang:"bn"},
+  {id:"dq9",text:"পরীক্ষায় ভালো করতে চাইলে প্রতিদিন পড়তে হবে।",author:"Red Rose 🥀",lang:"bn"},
   {id:"dq10",text:"Don't watch the clock; do what it does. Keep going.",author:"Sam Levenson",lang:"en"},
 ];
 router.get("/motivational-quote",(_req,res)=>{
@@ -1805,7 +1805,7 @@ router.post("/admin/quotes",adminAuth,(req,res)=>{
   const {text,author,lang}=req.body as any;
   if(!text?.trim()) return res.status(400).json({error:"Text required"});
   const quotes=rd<any[]>("quotes.json",DEFAULT_QUOTES);
-  const entry={id:uid(),text:String(text).trim(),author:String(author||"HTR Zone").trim(),lang:String(lang||"en"),createdAt:new Date().toISOString()};
+  const entry={id:uid(),text:String(text).trim(),author:String(author||"Red Rose 🥀").trim(),lang:String(lang||"en"),createdAt:new Date().toISOString()};
   quotes.push(entry); wr("quotes.json",quotes); res.json(entry);
 });
 router.delete("/admin/quotes/:id",adminAuth,(req,res)=>{
@@ -2083,7 +2083,7 @@ router.post("/mod/users/:username/ban",modOrAdminAuth,(req:any,res)=>{
   if(!bans.includes(req.params.username)) bans.push(req.params.username);
   wr("community-bans.json",bans);
   const notifs=rd<Notification[]>("notifs.json",[]);
-  notifs.unshift({id:crypto.randomUUID(),title:"🚫 Community Ban",body:`You have been banned from the HTR Zone Community by a moderator.`,createdAt:new Date().toISOString(),recipients:[req.params.username],readBy:[]});
+  notifs.unshift({id:crypto.randomUUID(),title:"🚫 Community Ban",body:`You have been banned from the Red Rose 🥀 Community by a moderator.`,createdAt:new Date().toISOString(),recipients:[req.params.username],readBy:[]});
   wr("notifs.json",notifs.slice(0,300));
   res.json({ok:true});
 });

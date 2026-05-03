@@ -115,8 +115,8 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
         style={{ cursor: "pointer" }}
         onClick={() => navigate("/")}
       >
-        <span style={{ color: "#4f8ef7", fontWeight: 900 }}>HTR</span>
-        <span style={{ color: "var(--text)", fontWeight: 800 }}> Zone</span>
+        <span style={{ color: "#e05c8a", fontWeight: 900 }}>Red Rose</span>
+        <span style={{ color: "var(--text)", fontWeight: 800 }}> 🥀</span>
         <div className="uu-logo-sub" style={{ color: "var(--sub)", fontSize: 9, letterSpacing: "0.04em" }}>EXAM PORTAL</div>
       </div>
 

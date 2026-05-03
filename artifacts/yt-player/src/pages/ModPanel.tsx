@@ -178,7 +178,7 @@ export default function ModPanel() {
         <div style={{ fontSize:22 }}>🛡️</div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:14,fontWeight:900,color:"#fff",letterSpacing:"-0.3px" }}>Mod Panel</div>
-          <div style={{ fontSize:10,color:"rgba(255,255,255,0.5)" }}>HTR Zone Community</div>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.5)" }}>Red Rose 🥀 Community</div>
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <RoleBadge role={isAdmin?"admin":role}/>

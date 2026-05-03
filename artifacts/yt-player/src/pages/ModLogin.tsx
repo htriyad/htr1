@@ -49,7 +49,7 @@ export default function ModLogin() {
             Moderator Login
           </h1>
           <p style={{ color:"var(--sub)",fontSize:14,marginTop:8,margin:"8px 0 0" }}>
-            HTR Zone Community Control Panel
+            Red Rose 🥀 Community Control Panel
           </p>
         </div>
 

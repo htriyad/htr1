@@ -623,7 +623,7 @@ export default function Dashboard() {
 
         {/* ── HERO BANNER ───────────────────────────── */}
         <div className="dash-banner" style={{ margin: nextClass || visibleAnnouncements.length > 0 || challenge ? "12px 14px 0" : "14px 14px 0" }}>
-          <h3>HTR Zone 🎯</h3>
+          <h3>Red Rose 🥀</h3>
           <p style={{ fontSize:12, opacity:0.85, marginBottom:12 }}>SSC · HSC · Admission · BCS</p>
           <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
             <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/flashcards");}}>🃏 Flashcards</a>

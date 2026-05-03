@@ -74,7 +74,7 @@ function InviteModal({ room, pin, onClose }: { room: Room; pin?: string; onClose
   const [copied, setCopied] = useState(false);
   const url = getShareUrl(room.id, pin);
   const qr  = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}&bgcolor=0f172a&color=a78bfa&format=png&margin=12`;
-  const whatsapp = `https://wa.me/?text=${encodeURIComponent(`📚 Join my study room "${room.name}" on HTR Zone!\n\n🔗 ${url}`)}`;
+  const whatsapp = `https://wa.me/?text=${encodeURIComponent(`📚 Join my study room "${room.name}" on Red Rose 🥀!\n\n🔗 ${url}`)}`;
   const color = SUBJECT_COLORS[room.subject]||"#64748b";
 
   function copy() {
