@@ -4,8 +4,9 @@ import { USER_NAME_KEY } from "../App";
 import Header from "../components/Header";
 
 const ME = () => localStorage.getItem(USER_NAME_KEY) || "";
+const TOKEN = () => localStorage.getItem("rr_user_token") || "";
 const api = (p: string, o: RequestInit = {}) =>
-  fetch(p, { ...o, headers: { "Content-Type": "application/json", "x-username": ME(), ...(o.headers as any || {}) } });
+  fetch(p, { ...o, headers: { "Content-Type": "application/json", "x-username": ME(), ...(TOKEN() ? { Authorization: `Bearer ${TOKEN()}` } : {}), ...(o.headers as any || {}) } });
 
 const TYPE_META: Record<string, { icon: string; color: string; label: string }> = {
   like:         { icon: "❤️",  color: "#dc2626", label: "Likes" },
@@ -31,7 +32,7 @@ export default function Notifications() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const r = await api("/api/notifications/mine").then(x => x.json()).catch(() => []);
+    const r = await api("/api/notifications").then(x => x.json()).catch(() => []);
     const list = Array.isArray(r) ? r : [];
     setNotifs(list);
     setUnreadCount(list.filter((n: any) => !n.read).length);
@@ -41,27 +42,29 @@ export default function Notifications() {
   useEffect(() => { load(); }, [load]);
 
   async function markRead(id: string) {
-    await api(`/api/notifications/${id}/read`, { method: "PATCH" });
     setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
     setUnreadCount(c => Math.max(0, c - 1));
+    await api(`/api/notifications/${id}/read`, { method: "POST" }).catch(() => {});
+    await api(`/api/notifications/${id}/read`, { method: "PATCH" }).catch(() => {});
   }
 
   async function markAllRead() {
-    await api("/api/notifications/read-all", { method: "PATCH" });
     setNotifs(ns => ns.map(n => ({ ...n, read: true })));
     setUnreadCount(0);
+    await api("/api/notifications/read-all", { method: "POST" }).catch(() => {});
+    await api("/api/notifications/read-all", { method: "PATCH" }).catch(() => {});
   }
 
   async function deleteNotif(id: string) {
-    await api(`/api/notifications/${id}`, { method: "DELETE" });
     setNotifs(ns => ns.filter(n => n.id !== id));
+    await api(`/api/notifications/${id}`, { method: "DELETE" }).catch(() => {});
   }
 
   async function clearAll() {
     if (!confirm("Clear all notifications?")) return;
-    await api("/api/notifications/clear", { method: "DELETE" });
     setNotifs([]);
     setUnreadCount(0);
+    await api("/api/notifications/clear", { method: "DELETE" }).catch(() => {});
   }
 
   async function acceptFriend(fromUser: string, notifId: string) {
@@ -94,8 +97,9 @@ export default function Notifications() {
   // Group by day
   const grouped: Record<string, any[]> = {};
   filtered.forEach(n => {
-    const day = new Date(n.ts).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-    const key = isToday(n.ts) ? "Today" : isYesterday(n.ts) ? "Yesterday" : day;
+    const ts = n.ts || n.createdAt || new Date().toISOString();
+    const day = new Date(ts).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    const key = isToday(ts) ? "Today" : isYesterday(ts) ? "Yesterday" : day;
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(n);
   });
@@ -166,7 +170,7 @@ export default function Notifications() {
                       {n.body || n.text || n.title}
                     </div>
                     {n.contentPreview && <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>"{n.contentPreview}"</div>}
-                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{timeAgo(n.ts)}</div>
+                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{timeAgo(n.ts || n.createdAt || "")}</div>
                     {/* Friend request actions */}
                     {n.type === "friend_req" && !n.read && (
                       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>

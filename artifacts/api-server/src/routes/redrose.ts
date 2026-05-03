@@ -526,43 +526,56 @@ router.get("/videos", (req, res) => {
 router.get("/notifications", userAuth, (req, res) => {
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) || null : null;
-  const all = rd<Notification[]>("notifs.json", []);
-  const visible = all.filter(n => {
+  const all = rd<any[]>("notifs.json", []);
+  const visible = all.filter((n: any) => {
+    // New schema: toUser field (from pushNotif)
+    if (n.toUser) return n.toUser === username;
+    // Old schema: recipients array (empty = broadcast to all)
     const r = n.recipients;
     if (!r || r.length === 0) return true;
     return username ? r.includes(username) : false;
   });
-  const decorated = visible.map(n => ({
+  const decorated = visible.map((n: any) => ({
     ...n,
-    read: username ? !!(n.readBy?.includes(username)) : false,
+    read: username
+      ? (n.read === true || !!(n.readBy?.includes(username)))
+      : false,
+    createdAt: n.createdAt || n.ts || new Date().toISOString(),
+    title: n.title || (n.fromUser ? `From @${n.fromUser}` : "Notification"),
+    body: n.body || n.text || "",
   }));
-  res.json(decorated);
+  res.json(decorated.slice(0, 150));
 });
 
 router.post("/notifications/:id/read", userAuth, (req, res) => {
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) : null;
   if (!username) return res.json({ ok: true });
-  const all = rd<Notification[]>("notifs.json", []);
-  const n = all.find(x => x.id === req.params.id);
+  const all = rd<any[]>("notifs.json", []);
+  const n = all.find((x: any) => x.id === req.params.id);
   if (!n) return res.status(404).json({ error: "Not found" });
   n.readBy = n.readBy || [];
   if (!n.readBy.includes(username)) n.readBy.push(username);
+  n.read = true;
   wr("notifs.json", all);
   res.json({ ok: true });
 });
 
-router.post("/notifications/read-all", userAuth, (req, res) => {
+router.post("/notifications/read-all", userAuth, (req: any, res) => {
   const token = getUserToken(req);
   const username = token ? USER_SESSIONS.get(token) : null;
   if (!username) return res.json({ ok: true });
-  const all = rd<Notification[]>("notifs.json", []);
+  const all = rd<any[]>("notifs.json", []);
   for (const n of all) {
+    // New schema
+    if (n.toUser) { if (n.toUser === username) { n.read = true; } continue; }
+    // Old schema
     const r = n.recipients;
     const visible = !r || r.length === 0 || r.includes(username);
     if (!visible) continue;
     n.readBy = n.readBy || [];
     if (!n.readBy.includes(username)) n.readBy.push(username);
+    n.read = true;
   }
   wr("notifs.json", all);
   res.json({ ok: true });
@@ -2218,6 +2231,7 @@ router.post("/community/posts",userAuth,(req:any,res)=>{
   const posts=getPosts();
   posts.unshift(post);
   savePosts(posts.slice(0,1000));
+  if(text) notifyMentions(String(text), u);
   res.json(post);
 });
 
@@ -2252,6 +2266,7 @@ router.post("/community/posts/:id/comments",userAuth,(req:any,res)=>{
   posts[i].comments.push(comment);
   savePosts(posts);
   if(posts[i].author && posts[i].author !== u) pushNotif(posts[i].author,"comment",u,`@${u} commented: "${String(text).slice(0,80)}"`);
+  notifyMentions(String(text), u);
   res.json(comment);
 });
 
@@ -2643,7 +2658,13 @@ router.post("/groups/:id/messages",userAuth,(req:any,res)=>{
   const msgs=getGroupMsgs(req.params.id);msgs.push(msg);
   saveGroupMsgs(req.params.id,msgs);
   groups[gi].lastMsg=sticker||text||fileName||"📎";groups[gi].lastAt=msg.ts;
-  saveGroups(groups); res.json(msg);
+  saveGroups(groups);
+  // notify all other group members
+  const preview = String(sticker||text||fileName||"📎").slice(0,60);
+  groups[gi].members.filter((m:string)=>m!==me).forEach((member:string)=>{
+    pushNotif(member,"group_msg",me,`@${me} in ${groups[gi].name}: ${preview}`);
+  });
+  res.json(msg);
 });
 router.post("/groups/:id/messages/:msgId/react",userAuth,(req:any,res)=>{
   const me=getLoggedInUser(req)?.username||(req.headers["x-username"] as string)||"guest";
@@ -2945,7 +2966,11 @@ router.post("/community/stories/:id/react",userAuth,(req:any,res)=>{
   if(!stories[i].reactions)stories[i].reactions={};
   if(!stories[i].reactions[emoji])stories[i].reactions[emoji]=[];
   const idx=stories[i].reactions[emoji].indexOf(me);
-  if(idx>=0)stories[i].reactions[emoji].splice(idx,1);else stories[i].reactions[emoji].push(me);
+  if(idx>=0)stories[i].reactions[emoji].splice(idx,1);
+  else{
+    stories[i].reactions[emoji].push(me);
+    if(stories[i].author && stories[i].author!==me) pushNotif(stories[i].author,"story_react",me,`@${me} reacted ${emoji} to your story`);
+  }
   wr("community-stories.json",stories); res.json(stories[i].reactions);
 });
 router.post("/community/stories/:id/reply",userAuth,(req:any,res)=>{
@@ -3389,9 +3414,21 @@ router.get("/user/export-data", userAuth, (req: any, res) => {
    NOTIFICATIONS  (user-specific, full CRUD)
 ══════════════════════════════════════════════════════════ */
 function pushNotif(toUser: string, type: string, fromUser: string, body: string, extra?: any) {
+  if (!toUser || toUser === fromUser) return;
   const all = rd<any[]>("notifs.json", []);
   all.unshift({ id: crypto.randomUUID(), toUser, type, fromUser, body, ts: new Date().toISOString(), read: false, ...(extra || {}) });
   wr("notifs.json", all.slice(0, 2000));
+}
+
+function notifyMentions(text: string, fromUser: string) {
+  const matches = text.match(/@([a-zA-Z0-9_]+)/g) || [];
+  const mentioned = [...new Set(matches.map(m => m.slice(1).toLowerCase()))].filter(u => u !== fromUser);
+  const users = rd<any[]>("users.json", []);
+  mentioned.forEach(uname => {
+    if (users.find(u => (u.username || u.name) === uname)) {
+      pushNotif(uname, "mention", fromUser, `@${fromUser} mentioned you: "${text.slice(0, 80)}"`);
+    }
+  });
 }
 
 router.get("/notifications/mine", userAuth, (req: any, res) => {
@@ -3627,6 +3664,7 @@ router.post("/events/:id/comments", userAuth, (req: any, res) => {
   events[i].comments = events[i].comments || [];
   events[i].comments.push(comment);
   wr("events.json", events);
+  if(events[i].creator && events[i].creator!==me) pushNotif(events[i].creator,"event_comment",me,`@${me} commented on your event "${String(events[i].title).slice(0,50)}"`);
   res.json(comment);
 });
 

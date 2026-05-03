@@ -12,11 +12,47 @@ interface HeaderProps {
 
 interface Notif {
   id: string;
-  title: string;
-  body: string;
-  createdAt: string;
+  title?: string;
+  body?: string;
+  createdAt?: string;
+  ts?: string;
   read?: boolean;
   recipients?: string[];
+  toUser?: string;
+  type?: string;
+  fromUser?: string;
+}
+
+const NOTIF_ICON: Record<string, string> = {
+  like: "❤️", comment: "💬", follow: "👤", friend_req: "🤝",
+  mention: "🔔", event: "📅", event_comment: "📅", story_react: "✨",
+  story_reply: "✨", message: "💌", group_msg: "👥", group_invite: "👥",
+  system: "📢", birthday: "🎂", poll: "📊",
+};
+
+function notifIcon(n: Notif): string {
+  if (n.type && NOTIF_ICON[n.type]) return NOTIF_ICON[n.type];
+  const t = (n.title || "").toLowerCase();
+  if (t.includes("follow")) return "👤";
+  if (t.includes("comment")) return "💬";
+  if (t.includes("reacted") || t.includes("like")) return "❤️";
+  if (t.includes("message")) return "💌";
+  if (t.includes("friend")) return "🤝";
+  if (t.includes("event")) return "📅";
+  if (t.includes("story")) return "✨";
+  if (t.includes("mention")) return "🔔";
+  if (t.includes("announcement") || t.includes("welcome")) return "📢";
+  return "🔔";
+}
+
+function timeAgoShort(ts?: string): string {
+  if (!ts) return "";
+  const diff = Date.now() - new Date(ts).getTime();
+  if (diff < 60000) return "now";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d`;
+  return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 function toggleTheme() {
@@ -64,7 +100,7 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
         }
         prevUnread.current = newUnread;
       } catch {}
-    }, 18_000);
+    }, 5_000);
     return () => clearInterval(t);
   }, []);
 
@@ -169,21 +205,14 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
                 <Bell size={16} color="var(--accent)" />
                 <span style={{ fontWeight: 800, fontSize: 14, flex: 1, color: "var(--text)" }}>Notifications</span>
                 {unread > 0 && (
-                  <button
-                    onClick={markAllRead}
-                    style={{
-                      background: "none", border: "none", color: "var(--accent)",
-                      fontWeight: 700, fontSize: 12, cursor: "pointer",
-                    }}
-                  >
-                    Mark all read
+                  <button onClick={markAllRead} style={{ background: "none", border: "none", color: "var(--accent)", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>
+                    All read
                   </button>
                 )}
-                <button
-                  onClick={() => setOpen(false)}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--sub)" }}
-                  aria-label="Close"
-                >
+                <button onClick={() => { setOpen(false); navigate("/notifications"); }} style={{ background: "none", border: "none", color: "var(--sub)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+                  See all
+                </button>
+                <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--sub)" }} aria-label="Close">
                   <X size={16} />
                 </button>
               </div>
@@ -194,45 +223,47 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
                     <div style={{ fontSize: 32, marginBottom: 6 }}>🔕</div>
                     <div style={{ fontSize: 13 }}>No notifications yet</div>
                   </div>
-                ) : notifs.map(n => (
-                  <button
-                    key={n.id}
-                    onClick={() => { if (!n.read) markRead(n.id); }}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "12px 14px",
-                      background: n.read ? "transparent" : "rgba(79,142,247,0.08)",
-                      border: "none", borderBottom: "1px solid var(--border)",
-                      cursor: "pointer", color: "var(--text)",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      {!n.read && (
-                        <span style={{
-                          width: 8, height: 8, borderRadius: 999,
-                          background: "var(--accent)", flexShrink: 0,
-                        }} />
-                      )}
-                      <span style={{ fontWeight: 700, fontSize: 13.5, flex: 1 }}>
-                        {n.title}
-                      </span>
-                      {n.recipients && n.recipients.length > 0 && (
-                        <span title="Sent specifically to you" style={{
-                          fontSize: 10, background: "rgba(245,158,11,0.15)", color: "var(--gold)",
-                          padding: "1px 6px", borderRadius: 99, fontWeight: 700,
-                        }}>
-                          📬 You
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "var(--sub)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                      {n.body}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 6, opacity: 0.7 }}>
-                      {new Date(n.createdAt).toLocaleString()}
-                    </div>
-                  </button>
-                ))}
+                ) : notifs.map(n => {
+                  const icon = notifIcon(n);
+                  const ts = n.ts || n.createdAt;
+                  const mainText = n.body || n.title || "";
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => { if (!n.read) markRead(n.id); }}
+                      style={{
+                        display: "flex", alignItems: "flex-start", gap: 10,
+                        width: "100%", textAlign: "left",
+                        padding: "11px 14px",
+                        background: n.read ? "transparent" : "rgba(124,58,237,0.07)",
+                        border: "none", borderBottom: "1px solid var(--border)",
+                        cursor: "pointer", color: "var(--text)",
+                      }}
+                    >
+                      {/* Icon circle */}
+                      <div style={{
+                        width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                        background: n.read ? "var(--surface)" : "rgba(124,58,237,0.15)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 16, position: "relative",
+                      }}>
+                        {icon}
+                        {!n.read && <span style={{ position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: "50%", background: "#7c3aed", border: "2px solid var(--surface)" }} />}
+                      </div>
+                      {/* Text */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, color: "var(--text)", lineHeight: 1.45, fontWeight: n.read ? 400 : 600 }}>
+                          {mainText.slice(0, 100)}
+                        </div>
+                        {ts && (
+                          <div style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 3 }}>
+                            {timeAgoShort(ts)}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

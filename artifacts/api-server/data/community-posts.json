@@ -1,5 +1,17 @@
 [
   {
+    "id": "1c7151de-f37c-4d17-b1a3-f60ea578d5d2",
+    "author": "test_student",
+    "text": "Hey @htr great exam material!",
+    "createdAt": "2026-05-03T11:08:14.797Z",
+    "reactions": {
+      "❤️": [
+        "guest"
+      ]
+    },
+    "comments": []
+  },
+  {
     "id": "8097e914-9293-41b7-b2ea-ff408efd2b6f",
     "author": "test_student",
     "text": "Test post from signup test",

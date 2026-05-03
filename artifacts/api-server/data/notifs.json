@@ -1,5 +1,33 @@
 [
   {
+    "id": "9f025bd8-07f3-42d0-b3b8-97eb7028ce4d",
+    "title": "👤 test_student started following you",
+    "body": "",
+    "createdAt": "2026-05-03T11:08:18.053Z",
+    "recipients": [
+      "htr"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "337c70fa-f896-4fef-9c43-0169cf74b075",
+    "toUser": "test_student",
+    "type": "like",
+    "fromUser": "guest",
+    "body": "@guest reacted ❤️ to your post",
+    "ts": "2026-05-03T11:08:14.929Z",
+    "read": false
+  },
+  {
+    "id": "4fabd6e6-fbec-45b9-b7a7-364939f32e32",
+    "toUser": "htr",
+    "type": "mention",
+    "fromUser": "test_student",
+    "body": "@test_student mentioned you: \"Hey @htr great exam material!\"",
+    "ts": "2026-05-03T11:08:14.797Z",
+    "read": false
+  },
+  {
     "id": "3e713d47-7dd1-4892-a29e-497baf24ed65",
     "title": "📢 Community Announcement",
     "body": "📢 HTR Zone Community-তে সবাইকে স্বাগতম! আমাদের কিছু নিয়মকানুন মেনে চলুন:\n\n✅ পড়ালেখা সংক্রান্ত বিষয় শেয়ার করুন\n✅ একে",
