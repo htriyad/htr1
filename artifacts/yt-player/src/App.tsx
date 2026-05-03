@@ -15,6 +15,8 @@ import Leaderboard from "./pages/Leaderboard";
 import SolveSheet from "./pages/SolveSheet";
 import LiveClasses from "./pages/LiveClasses";
 import Discussion from "./pages/Discussion";
+import Flashcards from "./pages/Flashcards";
+import StudyTimer from "./pages/StudyTimer";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -191,6 +193,8 @@ export default function App() {
         <Route path="/solve-sheet"     component={SolveSheet} />
         <Route path="/live-class"      component={LiveClasses} />
         <Route path="/discussion"      component={Discussion} />
+        <Route path="/flashcards"      component={Flashcards} />
+        <Route path="/study-timer"     component={StudyTimer} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
-import { X, Menu } from "lucide-react";
+import { X, Menu, Search } from "lucide-react";
 import Header from "../components/Header";
 
 const USER_TOKEN_KEY = "rr_user_token";
@@ -20,6 +20,16 @@ interface Announcement {
   id: string; title: string; body: string;
   type: "info"|"warning"|"success"|"urgent"; pinned: boolean; createdAt: string;
 }
+interface DailyChallenge {
+  id: string; text: string;
+  options: { id: string; text: string }[];
+  correct: string; solution?: string; quizTitle: string;
+}
+interface SearchResult {
+  videos: { id:string; title:string; subjectId:string; videoId:string }[];
+  sheets: { id:string; title:string; subject:string; exam:string }[];
+  discussions: { id:string; title:string; body:string }[];
+}
 
 const SIDEBAR_ITEMS = [
   { label: "Dashboard",        icon: "⊞",  path: "/" },
@@ -27,6 +37,8 @@ const SIDEBAR_ITEMS = [
   { label: "Past Classes",     icon: "🎬", path: "/past-classes" },
   { label: "Live Class",       icon: "👨‍🏫", path: "/live-class" },
   { label: "Solve Sheet",      icon: "📋", path: "/solve-sheet" },
+  { label: "Flashcards",       icon: "🃏", path: "/flashcards" },
+  { label: "Study Timer",      icon: "⏱",  path: "/study-timer" },
   { label: "Live Exam",        icon: "📝", path: "/exams" },
   { label: "Practice Exam",    icon: "💻", path: "/exams" },
   { label: "AI Tutor",         icon: "🤖", path: "/ai-tutor" },
@@ -63,19 +75,34 @@ function formatCountdown(ms: number): string {
 }
 
 export default function Dashboard() {
-  const [sidebarOpen, setSidebarOpen]         = useState(false);
-  const [, navigate]                          = useLocation();
-  const [menu, setMenu]                       = useState<MenuItem[]>([]);
-  const [liveClasses, setLiveClasses]         = useState<LiveClass[]>([]);
-  const [announcements, setAnnouncements]     = useState<Announcement[]>([]);
-  const [dismissedIds, setDismissedIds]       = useState<string[]>([]);
-  const now = useNow();
+  const [sidebarOpen, setSidebarOpen]     = useState(false);
+  const [, navigate]                      = useLocation();
+  const [menu, setMenu]                   = useState<MenuItem[]>([]);
+  const [liveClasses, setLiveClasses]     = useState<LiveClass[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [dismissedIds, setDismissedIds]   = useState<string[]>([]);
+  const [challenge, setChallenge]         = useState<DailyChallenge|null>(null);
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [picked, setPicked]               = useState<string|null>(null);
+  const [searchQ, setSearchQ]             = useState("");
+  const [searchRes, setSearchRes]         = useState<SearchResult|null>(null);
+  const [searchOpen, setSearchOpen]       = useState(false);
+  const searchRef                         = useRef<HTMLDivElement>(null);
+  const searchTimer                       = useRef<ReturnType<typeof setTimeout>|null>(null);
+  const now                               = useNow();
+
+  // Load stored challenge state
+  useEffect(() => {
+    const today = new Date().toDateString();
+    const stored = localStorage.getItem("rr_challenge_" + today);
+    if (stored) { try { setPicked(JSON.parse(stored)); } catch {} }
+  }, []);
 
   const load = useCallback(() => {
     const h = authHdr();
     fetch("/api/dashboard-menu", { headers: h })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (Array.isArray(d) && d.length) setMenu(d.filter((x:MenuItem)=>x.path && x.path !== "/"||true)); })
+      .then(d => { if (Array.isArray(d) && d.length) setMenu(d); })
       .catch(() => {});
 
     fetch("/api/live-classes", { headers: h })
@@ -87,9 +114,44 @@ export default function Dashboard() {
       .then(r => r.ok ? r.json() : [])
       .then(d => { if (Array.isArray(d)) setAnnouncements(d); })
       .catch(() => {});
+
+    fetch("/api/daily-challenge", { headers: h })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.id) setChallenge(d); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Close search on outside click
+  useEffect(() => {
+    if (!searchOpen) return;
+    function handler(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [searchOpen]);
+
+  // Debounced search
+  function handleSearch(q: string) {
+    setSearchQ(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (q.length < 2) { setSearchRes(null); return; }
+    searchTimer.current = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`, { headers: authHdr() })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) setSearchRes(d); })
+        .catch(() => {});
+    }, 300);
+  }
+
+  function pickAnswer(optId: string) {
+    if (picked) return;
+    setPicked(optId);
+    const today = new Date().toDateString();
+    try { localStorage.setItem("rr_challenge_" + today, JSON.stringify(optId)); } catch {}
+  }
 
   // Find next upcoming / live class
   const nextClass = liveClasses
@@ -106,17 +168,23 @@ export default function Dashboard() {
   const visibleAnnouncements = announcements.filter(a => !dismissedIds.includes(a.id)).slice(0, 3);
 
   const displayMenu = menu.length > 0 ? menu : [
-    { label:"AI Tutor", icon:"🤖", bg:"#ede9fe", chevron:"#7c3aed", path:"/ai-tutor" },
-    { label:"Past Classes", icon:"🎬", bg:"#fff3e0", chevron:"#e65100", path:"/past-classes" },
-    { label:"Live Class", icon:"👨‍🏫", bg:"#e8f5e9", chevron:"#e53935", path:"/live-class" },
-    { label:"Live Exam", icon:"📝", bg:"#e3f2fd", chevron:"#2e7d32", path:"/exams" },
+    { label:"AI Tutor",      icon:"🤖", bg:"#ede9fe", chevron:"#7c3aed", path:"/ai-tutor" },
+    { label:"Past Classes",  icon:"🎬", bg:"#fff3e0", chevron:"#e65100", path:"/past-classes" },
+    { label:"Live Class",    icon:"👨‍🏫", bg:"#e8f5e9", chevron:"#e53935", path:"/live-class" },
+    { label:"Flashcards",    icon:"🃏", bg:"#ede9fe", chevron:"#7c3aed", path:"/flashcards" },
+    { label:"Study Timer",   icon:"⏱",  bg:"#fef3c7", chevron:"#d97706", path:"/study-timer" },
+    { label:"Live Exam",     icon:"📝", bg:"#e3f2fd", chevron:"#2e7d32", path:"/exams" },
     { label:"Practice Exam", icon:"💻", bg:"#fff3e0", chevron:"#2e7d32", path:"/exams" },
-    { label:"Solve Sheet", icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/solve-sheet" },
-    { label:"Q&A Service", icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/ask" },
-    { label:"Discussion", icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/discussion" },
-    { label:"My Progress", icon:"🏆", bg:"#fef3c7", chevron:"#d97706", path:"/profile" },
-    { label:"Leaderboard", icon:"🥇", bg:"#fee2e2", chevron:"#dc2626", path:"/leaderboard" },
+    { label:"Solve Sheet",   icon:"📋", bg:"#f3e5f5", chevron:"#7b2fa5", path:"/solve-sheet" },
+    { label:"Q&A Service",   icon:"💬", bg:"#e0f7fa", chevron:"#2e7d32", path:"/ask" },
+    { label:"Discussion",    icon:"👥", bg:"#e8f5e9", chevron:"#2e7d32", path:"/discussion" },
+    { label:"My Progress",   icon:"🏆", bg:"#fef3c7", chevron:"#d97706", path:"/profile" },
+    { label:"Leaderboard",   icon:"🥇", bg:"#fee2e2", chevron:"#dc2626", path:"/leaderboard" },
   ];
+
+  const totalSearchResults = searchRes
+    ? searchRes.videos.length + searchRes.sheets.length + searchRes.discussions.length
+    : 0;
 
   return (
     <div style={{ background:"var(--bg)", minHeight:"100svh" }}>
@@ -150,7 +218,70 @@ export default function Dashboard() {
       <div className="page">
         <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Announcements */}
+        {/* ── GLOBAL SEARCH BAR ─────────────────────── */}
+        <div style={{ padding:"10px 14px 0" }} ref={searchRef}>
+          <div className="dash-search-wrap">
+            <Search size={16} className="dash-search-icon" color="#888" />
+            <input
+              className="dash-search-input"
+              placeholder="Search videos, sheets, discussions..."
+              value={searchQ}
+              onChange={e => handleSearch(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
+            />
+            {searchQ && (
+              <button className="dash-search-clear" onClick={() => { setSearchQ(""); setSearchRes(null); }}>✕</button>
+            )}
+          </div>
+
+          {/* Search results dropdown */}
+          {searchOpen && searchRes && totalSearchResults > 0 && (
+            <div className="dash-search-results">
+              {searchRes.videos.length > 0 && (
+                <div className="dash-search-group">
+                  <div className="dash-search-group-title">🎬 Videos</div>
+                  {searchRes.videos.map(v => (
+                    <button key={v.id} className="dash-search-item" onClick={() => { navigate(`/watch/${v.id}`); setSearchOpen(false); setSearchQ(""); }}>
+                      <span className="dash-search-item-icon">🎬</span>
+                      <span>{v.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchRes.sheets.length > 0 && (
+                <div className="dash-search-group">
+                  <div className="dash-search-group-title">📋 Solve Sheets</div>
+                  {searchRes.sheets.map(s => (
+                    <button key={s.id} className="dash-search-item" onClick={() => { navigate("/solve-sheet"); setSearchOpen(false); setSearchQ(""); }}>
+                      <span className="dash-search-item-icon">📋</span>
+                      <span>{s.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchRes.discussions.length > 0 && (
+                <div className="dash-search-group">
+                  <div className="dash-search-group-title">💬 Discussions</div>
+                  {searchRes.discussions.map(d => (
+                    <button key={d.id} className="dash-search-item" onClick={() => { navigate("/discussion"); setSearchOpen(false); setSearchQ(""); }}>
+                      <span className="dash-search-item-icon">💬</span>
+                      <span>{d.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {searchOpen && searchQ.length >= 2 && searchRes && totalSearchResults === 0 && (
+            <div className="dash-search-results">
+              <div style={{ padding:"20px", textAlign:"center", color:"var(--sub)", fontSize:13 }}>
+                No results for "{searchQ}"
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── ANNOUNCEMENTS ─────────────────────────── */}
         {visibleAnnouncements.map(ann => {
           const c = ANNOUNCE_COLORS[ann.type] || ANNOUNCE_COLORS.info;
           return (
@@ -168,17 +299,16 @@ export default function Dashboard() {
           );
         })}
 
-        {/* Live class widget */}
+        {/* ── LIVE CLASS WIDGET ─────────────────────── */}
         {nextClass && (
           <div style={{ margin:"12px 14px 0", borderRadius:16, overflow:"hidden", boxShadow:"0 4px 16px rgba(0,0,0,0.12)" }}>
-            {/* Thumbnail */}
             <div style={{ position:"relative" }}>
               <img src={`https://img.youtube.com/vi/${nextClass.youtubeId}/hqdefault.jpg`} alt={nextClass.title}
                 style={{ width:"100%", aspectRatio:"16/6", objectFit:"cover", display:"block" }} />
               <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.75))" }} />
-              <div style={{ position:"absolute", top:10, left:10, display:"flex", gap:6 }}>
+              <div style={{ position:"absolute", top:10, left:10 }}>
                 {nextClass.isLive
-                  ? <span style={{ padding:"4px 10px", borderRadius:20, background:"#dc2626", color:"#fff", fontSize:11, fontWeight:800 }}>🔴 LIVE NOW</span>
+                  ? <span className="live-badge-pulse">🔴 LIVE NOW</span>
                   : <span style={{ padding:"4px 10px", borderRadius:20, background:"rgba(0,0,0,0.6)", color:"#fff", fontSize:11, fontWeight:700 }}>📅 Upcoming</span>
                 }
               </div>
@@ -187,12 +317,9 @@ export default function Dashboard() {
                 <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)" }}>{nextClass.subject} {nextClass.teacherName && `· ${nextClass.teacherName}`}</div>
               </div>
             </div>
-            {/* Countdown / join row */}
             <div style={{ background: nextClass.isLive ? "#dc2626" : "var(--purple)", padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)" }}>
-                  {nextClass.isLive ? "Class is live!" : "Starting in"}
-                </div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)" }}>{nextClass.isLive ? "Class is live!" : "Starting in"}</div>
                 <div style={{ fontSize:20, fontWeight:900, color:"#fff", fontFamily:"monospace", lineHeight:1.2 }}>
                   {formatCountdown(nextClass.start - now)}
                 </div>
@@ -205,32 +332,84 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Purple download banner */}
-        <div className="dash-banner" style={{ margin: nextClass || visibleAnnouncements.length > 0 ? "12px 14px 0" : undefined }}>
-          <h3>Download App</h3>
-          <a className="dash-download-btn" href="#" onClick={(e) => e.preventDefault()}>
-            <span>Download Now</span>
-            <span>🤖</span>
-          </a>
+        {/* ── DAILY MCQ CHALLENGE ───────────────────── */}
+        {challenge && (
+          <div className="dash-challenge-card">
+            <div className="dash-challenge-header">
+              <span className="dash-challenge-badge">⚡ Daily Challenge</span>
+              <span className="dash-challenge-from">{challenge.quizTitle}</span>
+            </div>
+            <p className="dash-challenge-q">{challenge.text}</p>
+
+            {!challengeOpen && !picked && (
+              <button className="dash-challenge-open-btn" onClick={() => setChallengeOpen(true)}>
+                Answer Today's Question →
+              </button>
+            )}
+
+            {(challengeOpen || picked) && (
+              <div className="dash-challenge-options">
+                {challenge.options.map(opt => {
+                  const isCorrect = opt.id === challenge.correct;
+                  const isPicked  = opt.id === picked;
+                  let style: React.CSSProperties = {};
+                  if (picked) {
+                    if (isCorrect)      style = { background:"#dcfce7", border:"2px solid #16a34a", color:"#166534" };
+                    else if (isPicked)  style = { background:"#fee2e2", border:"2px solid #dc2626", color:"#991b1b" };
+                    else                style = { opacity:0.5 };
+                  }
+                  return (
+                    <button key={opt.id} className="dash-challenge-opt" style={style} onClick={() => pickAnswer(opt.id)} disabled={!!picked}>
+                      {picked && isCorrect && <span>✅ </span>}
+                      {picked && isPicked && !isCorrect && <span>❌ </span>}
+                      {opt.text}
+                    </button>
+                  );
+                })}
+                {picked && challenge.solution && (
+                  <div className="dash-challenge-solution">
+                    <strong>💡 Solution:</strong> {challenge.solution}
+                  </div>
+                )}
+                {picked && (
+                  <div style={{ textAlign:"center", fontSize:13, color:"var(--sub)", marginTop:8 }}>
+                    {picked === challenge.correct ? "🎉 Correct! Come back tomorrow for a new challenge." : "📖 Keep studying! Try again tomorrow."}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── HERO BANNER ───────────────────────────── */}
+        <div className="dash-banner" style={{ margin: nextClass || visibleAnnouncements.length > 0 || challenge ? "12px 14px 0" : "14px 14px 0" }}>
+          <h3>🌹 RedRose Online Care</h3>
+          <p style={{ fontSize:12, opacity:0.85, marginBottom:12 }}>SSC · HSC · Admission · BCS</p>
+          <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/flashcards");}}>🃏 Flashcards</a>
+            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/study-timer");}}>⏱ Study Timer</a>
+          </div>
         </div>
 
-        {/* Quick access strips */}
-        <div style={{ display:"flex", gap:8, margin:"14px 14px 0", overflowX:"auto", paddingBottom:4 }}>
+        {/* ── QUICK ACCESS STRIP ───────────────────── */}
+        <div className="dash-quick-strip">
           {[
-            { icon:"📋", label:"Solve Sheets", path:"/solve-sheet", bg:"#f3e5f5", color:"#7b2fa5" },
-            { icon:"👨‍🏫", label:"Live Class",  path:"/live-class",  bg:"#e8f5e9", color:"#2e7d32" },
+            { icon:"🃏", label:"Flashcards", path:"/flashcards", bg:"#ede9fe", color:"#7c3aed" },
+            { icon:"⏱",  label:"Timer",       path:"/study-timer", bg:"#fef3c7", color:"#d97706" },
+            { icon:"📋", label:"Sheets",       path:"/solve-sheet", bg:"#f3e5f5", color:"#7b2fa5" },
+            { icon:"👨‍🏫", label:"Live",         path:"/live-class",  bg:"#e8f5e9", color:"#2e7d32" },
             { icon:"💬", label:"Q&A",          path:"/ask",          bg:"#e0f7fa", color:"#0097a7" },
-            { icon:"👥", label:"Discuss",      path:"/discussion",   bg:"#ede9fe", color:"#7c3aed" },
+            { icon:"👥", label:"Discuss",      path:"/discussion",   bg:"#fee2e2", color:"#dc2626" },
           ].map(q => (
-            <button key={q.label} onClick={() => navigate(q.path)}
-              style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"10px 14px", borderRadius:14, background:q.bg, border:"none", cursor:"pointer" }}>
+            <button key={q.label} onClick={() => navigate(q.path)} className="dash-quick-item"
+              style={{ background:q.bg }}>
               <span style={{ fontSize:22 }}>{q.icon}</span>
-              <span style={{ fontSize:11, fontWeight:700, color:q.color, whiteSpace:"nowrap" }}>{q.label}</span>
+              <span style={{ fontSize:10, fontWeight:700, color:q.color, whiteSpace:"nowrap" }}>{q.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Menu items */}
+        {/* ── MENU ITEMS ───────────────────────────── */}
         <div className="dash-menu">
           {displayMenu.map((item) => (
             <button key={item.id || item.label} className="dash-menu-item"
@@ -245,23 +424,21 @@ export default function Dashboard() {
         </div>
 
         {/* Footer nav bar */}
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"var(--surface)", borderTop:"1px solid var(--border)", display:"flex", justifyContent:"space-around", padding:"8px 0 max(8px, env(safe-area-inset-bottom))", zIndex:100, boxShadow:"0 -2px 12px rgba(0,0,0,0.08)" }}>
+        <div className="dash-bottom-nav">
           {[
-            { icon:"🏠", label:"Home",    path:"/" },
-            { icon:"📋", label:"Sheets",  path:"/solve-sheet" },
-            { icon:"👨‍🏫", label:"Live",    path:"/live-class" },
-            { icon:"💬", label:"Q&A",     path:"/ask" },
-            { icon:"👤", label:"Profile", path:"/profile" },
+            { icon:"🏠", label:"Home",      path:"/" },
+            { icon:"🃏", label:"Cards",     path:"/flashcards" },
+            { icon:"👨‍🏫", label:"Live",      path:"/live-class" },
+            { icon:"💬", label:"Q&A",       path:"/ask" },
+            { icon:"👤", label:"Profile",   path:"/profile" },
           ].map(item => (
-            <button key={item.label} onClick={() => navigate(item.path)}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, background:"none", border:"none", cursor:"pointer", padding:"4px 8px" }}>
+            <button key={item.label} onClick={() => navigate(item.path)} className="dash-bottom-nav-item">
               <span style={{ fontSize:20 }}>{item.icon}</span>
-              <span style={{ fontSize:10, color:"var(--sub)", fontWeight:600 }}>{item.label}</span>
+              <span style={{ fontSize:10, fontWeight:600 }}>{item.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Bottom padding for nav bar */}
         <div style={{ height:72 }} />
       </div>
     </div>

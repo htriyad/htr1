@@ -27,6 +27,12 @@ pnpm workspace monorepo using TypeScript. Educational platform for Bangladeshi s
 - **Universal Access Flag**: Admin can toggle universalAccess per user (stored in users.json)
 - **Name Sync**: POST /admin/msgs/:id/approve-ip approves the IP AND syncs the student's full name from the access request
 
+### Revolutionary Study Tools (NEW)
+- **Flashcard System** (`/flashcards`): Anki/Quizlet-style spaced repetition. Admin creates decks+cards (front/back/hint). Students study with 3D flip animation, Easy/Hard/Skip buttons, progress tracked in localStorage, completion screen with mastery %. Admin manages via Flashcards tab in `/admin`
+- **Pomodoro Study Timer** (`/study-timer`): Circular SVG ring countdown, 25/5/15 min modes, 4-session cycles, session dots, Bangla+English motivational quotes, audio ding, stats saved in localStorage
+- **Daily MCQ Challenge**: Dashboard widget shows one quiz question per day (date-seeded from quiz bank). Students pick answer inline, see ✅/❌ feedback + solution. State persisted per day in localStorage
+- **Global Smart Search**: Search bar on dashboard searches videos, solve sheets, discussions via `/api/search?q=`. Debounced 300ms, live dropdown results grouped by type, navigate directly to results
+
 ### Content
 - **Sequential Playlist**: VideoPage auto-advances, side playlist panel, prev/next navigation
 - **Playlist Import**: POST /admin/playlist/fetch-import auto-saves all videos to DB in one step. POST /admin/playlist/fetch → POST /admin/videos/bulk for two-step workflow

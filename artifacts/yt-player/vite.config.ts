@@ -82,7 +82,7 @@ function apiPlugin() {
         const m = req.method?.toUpperCase() || "GET";
 
         // ── Pass-through to API server proxy for modern routes ─────────
-        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu"];
+        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu","/api/flashcard-decks","/api/daily-challenge","/api/search"];
         if (PROXIED.some(prefix => p === prefix || p.startsWith(prefix+"/")||p.startsWith(prefix+"?"))) return next();
 
         // ── GET /api/check-ip ──────────────────────────────────────────
@@ -232,7 +232,10 @@ export default defineConfig({
       '/api/live-classes':  { target: 'http://localhost:8080', changeOrigin: true },
       '/api/announcements': { target: 'http://localhost:8080', changeOrigin: true },
       '/api/discussions':   { target: 'http://localhost:8080', changeOrigin: true },
-      '/api/dashboard-menu':{ target: 'http://localhost:8080', changeOrigin: true },
+      '/api/dashboard-menu':    { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/flashcard-decks':   { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/daily-challenge':   { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/search':            { target: 'http://localhost:8080', changeOrigin: true },
     },
     fs:{ strict:true, deny:["**/.*"] },
   },

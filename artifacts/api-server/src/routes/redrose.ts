@@ -1144,6 +1144,96 @@ router.delete("/doubts/:id", adminAuth, (req, res) => {
 });
 
 /* ══════════════════════════════════════════════════════════
+   FLASHCARD DECKS + CARDS
+══════════════════════════════════════════════════════════ */
+interface FlashCard { id:string; deckId:string; front:string; back:string; hint?:string; order:number; }
+interface FlashDeck { id:string; name:string; subject:string; description:string; createdAt:string; }
+if (!fs.existsSync(path.join(DATA_DIR,"flashdecks.json")))  wr("flashdecks.json",[]);
+if (!fs.existsSync(path.join(DATA_DIR,"flashcards.json")))  wr("flashcards.json",[]);
+
+function deckWithCount(deck: FlashDeck, cards: FlashCard[]) {
+  return { ...deck, cardCount: cards.filter(c=>c.deckId===deck.id).length };
+}
+
+router.get("/flashcard-decks", userAuth, (_req,res) => {
+  const decks = rd<FlashDeck[]>("flashdecks.json",[]);
+  const cards = rd<FlashCard[]>("flashcards.json",[]);
+  res.json(decks.map(d=>deckWithCount(d,cards)));
+});
+router.get("/flashcard-decks/:id/cards", userAuth, (req,res) => {
+  const cards = rd<FlashCard[]>("flashcards.json",[]).filter(c=>c.deckId===req.params.id);
+  res.json(cards.sort((a,b)=>a.order-b.order));
+});
+router.get("/admin/flashcard-decks", adminAuth, (_req,res) => {
+  const decks = rd<FlashDeck[]>("flashdecks.json",[]);
+  const cards = rd<FlashCard[]>("flashcards.json",[]);
+  res.json(decks.map(d=>deckWithCount(d,cards)));
+});
+router.post("/admin/flashcard-decks", adminAuth, (req,res) => {
+  const {name,subject,description}=req.body||{};
+  if(!name) return res.status(400).json({error:"name required"});
+  const decks=rd<FlashDeck[]>("flashdecks.json",[]);
+  const deck:FlashDeck={id:crypto.randomUUID(),name:String(name).trim(),subject:String(subject||"").trim(),description:String(description||"").trim(),createdAt:new Date().toISOString()};
+  decks.push(deck); wr("flashdecks.json",decks); res.json(deckWithCount(deck,rd<FlashCard[]>("flashcards.json",[])));
+});
+router.put("/admin/flashcard-decks/:id", adminAuth, (req,res) => {
+  const decks=rd<FlashDeck[]>("flashdecks.json",[]); const i=decks.findIndex(d=>d.id===req.params.id);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  decks[i]={...decks[i],...req.body,id:decks[i].id}; wr("flashdecks.json",decks);
+  res.json(deckWithCount(decks[i],rd<FlashCard[]>("flashcards.json",[])));
+});
+router.delete("/admin/flashcard-decks/:id", adminAuth, (req,res) => {
+  wr("flashdecks.json",rd<FlashDeck[]>("flashdecks.json",[]).filter(d=>d.id!==req.params.id));
+  wr("flashcards.json",rd<FlashCard[]>("flashcards.json",[]).filter(c=>c.deckId!==req.params.id));
+  res.json({ok:true});
+});
+router.get("/admin/flashcard-decks/:id/cards", adminAuth, (req,res) => {
+  res.json(rd<FlashCard[]>("flashcards.json",[]).filter(c=>c.deckId===req.params.id).sort((a,b)=>a.order-b.order));
+});
+router.post("/admin/flashcard-decks/:id/cards", adminAuth, (req,res) => {
+  const {front,back,hint}=req.body||{};
+  if(!front||!back) return res.status(400).json({error:"front and back required"});
+  const cards=rd<FlashCard[]>("flashcards.json",[]);
+  const deckCards=cards.filter(c=>c.deckId===req.params.id);
+  const card:FlashCard={id:crypto.randomUUID(),deckId:req.params.id,front:String(front).trim(),back:String(back).trim(),hint:hint||undefined,order:deckCards.length};
+  cards.push(card); wr("flashcards.json",cards); res.json(card);
+});
+router.put("/admin/flashcard-decks/:deckId/cards/:cardId", adminAuth, (req,res) => {
+  const cards=rd<FlashCard[]>("flashcards.json",[]); const i=cards.findIndex(c=>c.id===req.params.cardId);
+  if(i<0) return res.status(404).json({error:"Not found"});
+  cards[i]={...cards[i],...req.body,id:cards[i].id,deckId:cards[i].deckId}; wr("flashcards.json",cards); res.json(cards[i]);
+});
+router.delete("/admin/flashcard-decks/:deckId/cards/:cardId", adminAuth, (req,res) => {
+  wr("flashcards.json",rd<FlashCard[]>("flashcards.json",[]).filter(c=>c.id!==req.params.cardId)); res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   DAILY CHALLENGE — one quiz question per day
+══════════════════════════════════════════════════════════ */
+router.get("/daily-challenge", userAuth, (_req,res) => {
+  const quizzes = rd<Quiz[]>("quizzes.json",[]);
+  const allQ: (QuizQuestion & {quizTitle:string})[] = [];
+  quizzes.filter(q=>q.published).forEach(q=>q.questions.forEach(qq=>allQ.push({...qq,quizTitle:q.title})));
+  if (!allQ.length) return res.json(null);
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,"");
+  const seed  = parseInt(today) % allQ.length;
+  res.json(allQ[seed]);
+});
+
+/* ══════════════════════════════════════════════════════════
+   SEARCH — fulltext across videos, solve sheets, discussions
+══════════════════════════════════════════════════════════ */
+router.get("/search", userAuth, (req,res) => {
+  const q = String(req.query.q||"").toLowerCase().trim();
+  if (!q || q.length < 2) return res.json({ videos:[], sheets:[], discussions:[] });
+  const videos   = rd<Video[]>("vids.json",[]).filter(v=>v.title.toLowerCase().includes(q)||v.desc.toLowerCase().includes(q)).slice(0,6);
+  const sheets   = rd<SolveSheet[]>("solve-sheets.json",[]).filter(s=>s.title.toLowerCase().includes(q)||s.subject.toLowerCase().includes(q)).slice(0,6);
+  const discAll  = rd<DiscussionPost[]>("discussions.json",[]);
+  const discussions = discAll.filter(d=>d.title.toLowerCase().includes(q)||d.body.toLowerCase().includes(q)).slice(0,6);
+  res.json({ videos, sheets, discussions });
+});
+
+/* ══════════════════════════════════════════════════════════
    SOLVE SHEETS
 ══════════════════════════════════════════════════════════ */
 interface SolveSheet {

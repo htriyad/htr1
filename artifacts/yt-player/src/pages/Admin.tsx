@@ -6,25 +6,26 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss";
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards";
 const TABS: { id:Tab; icon:string; label:string }[] = [
-  { id:"overview",  icon:"📊", label:"Overview"      },
-  { id:"users",     icon:"👤", label:"Users"         },
-  { id:"ips",       icon:"🌐", label:"IP Access"     },
-  { id:"inbox",     icon:"📨", label:"Inbox"         },
-  { id:"subjects",  icon:"📚", label:"Subjects"      },
-  { id:"videos",    icon:"🎬", label:"Videos"        },
-  { id:"quizzes",   icon:"📝", label:"Quizzes"       },
-  { id:"notifs",    icon:"🔔", label:"Notify"        },
-  { id:"solve",     icon:"📋", label:"Solve Sheet"   },
-  { id:"live",      icon:"👨‍🏫", label:"Live Class"    },
-  { id:"announce",  icon:"📢", label:"Announcements" },
-  { id:"discuss",   icon:"💬", label:"Discussions"   },
-  { id:"menu",      icon:"⊞",  label:"Dashboard Menu"},
-  { id:"doubts",    icon:"❓", label:"Doubts"        },
-  { id:"micro",     icon:"⚡", label:"Micro Feed"    },
-  { id:"market",    icon:"🏪", label:"Marketplace"   },
-  { id:"db",        icon:"🗄️", label:"Database"      },
+  { id:"overview",   icon:"📊", label:"Overview"      },
+  { id:"users",      icon:"👤", label:"Users"         },
+  { id:"ips",        icon:"🌐", label:"IP Access"     },
+  { id:"inbox",      icon:"📨", label:"Inbox"         },
+  { id:"subjects",   icon:"📚", label:"Subjects"      },
+  { id:"videos",     icon:"🎬", label:"Videos"        },
+  { id:"quizzes",    icon:"📝", label:"Quizzes"       },
+  { id:"notifs",     icon:"🔔", label:"Notify"        },
+  { id:"solve",      icon:"📋", label:"Solve Sheet"   },
+  { id:"live",       icon:"👨‍🏫", label:"Live Class"    },
+  { id:"announce",   icon:"📢", label:"Announcements" },
+  { id:"discuss",    icon:"💬", label:"Discussions"   },
+  { id:"flashcards", icon:"🃏", label:"Flashcards"    },
+  { id:"menu",       icon:"⊞",  label:"Dashboard Menu"},
+  { id:"doubts",     icon:"❓", label:"Doubts"        },
+  { id:"micro",      icon:"⚡", label:"Micro Feed"    },
+  { id:"market",     icon:"🏪", label:"Marketplace"   },
+  { id:"db",         icon:"🗄️", label:"Database"      },
 ];
 
 /* ── entry point ──────────────────────────────────────────── */
@@ -108,8 +109,9 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="solve"     && <SolveSheetTab />}
           {tab==="live"      && <LiveClassTab />}
           {tab==="announce"  && <AnnouncementsTab />}
-          {tab==="discuss"   && <DiscussionsTab />}
-          {tab==="db"        && <DatabaseTab />}
+          {tab==="discuss"    && <DiscussionsTab />}
+          {tab==="flashcards" && <FlashcardsTab />}
+          {tab==="db"         && <DatabaseTab />}
         </main>
       </div>
     </div>
@@ -2358,7 +2360,7 @@ function Field({label,children}:{label:string;children:React.ReactNode}){
 function Feedback({msg,style}:{msg:string;style?:React.CSSProperties}){
   const ok=msg.startsWith("✅");
   // Linkify any http/https URLs so users can click straight through
-  const parts:(string|JSX.Element)[]=[];
+  const parts:(string|React.ReactElement)[]=[];
   const re=/(https?:\/\/[^\s)]+)/g;
   let last=0,m:RegExpExecArray|null,i=0;
   while((m=re.exec(msg))){
@@ -2369,6 +2371,166 @@ function Feedback({msg,style}:{msg:string;style?:React.CSSProperties}){
   if(last<msg.length) parts.push(msg.slice(last));
   return <div style={{padding:"8px 12px",borderRadius:8,background:ok?"#d4edda":"#fff3cd",border:`1px solid ${ok?"#c3e6cb":"#ffc107"}`,fontSize:13,color:ok?"#155724":"#856404",whiteSpace:"pre-wrap",wordBreak:"break-word",...style}}>{parts.length?parts:msg}</div>;
 }
+/* ══════════════════════════════════════════════════════════
+   FLASHCARDS TAB
+══════════════════════════════════════════════════════════ */
+interface AdminDeck { id:string; name:string; subject:string; description:string; cardCount:number; createdAt:string; }
+interface AdminCard { id:string; deckId:string; front:string; back:string; hint?:string; order:number; }
+function FlashcardsTab() {
+  const [decks, setDecks]       = useState<AdminDeck[]>([]);
+  const [selDeck, setSelDeck]   = useState<AdminDeck|null>(null);
+  const [cards, setCards]       = useState<AdminCard[]>([]);
+  const [deckForm, setDeckForm] = useState({ name:"", subject:"", description:"" });
+  const [cardForm, setCardForm] = useState({ front:"", back:"", hint:"" });
+  const [editDeckId, setEditDeckId] = useState<string|null>(null);
+  const [editCardId, setEditCardId] = useState<string|null>(null);
+  const [msg, setMsg]           = useState("");
+  const [showDeckForm, setShowDeckForm] = useState(false);
+
+  const loadDecks = useCallback(() =>
+    api("/api/admin/flashcard-decks").then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setDecks(d); }), []);
+
+  const loadCards = useCallback((deckId:string) =>
+    api(`/api/admin/flashcard-decks/${deckId}/cards`).then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setCards(d); }), []);
+
+  useEffect(() => { loadDecks(); }, [loadDecks]);
+  useEffect(() => { if(selDeck) loadCards(selDeck.id); }, [selDeck, loadCards]);
+
+  function flash(m:string) { setMsg(m); setTimeout(()=>setMsg(""),3000); }
+
+  async function saveDeck(e:React.FormEvent) {
+    e.preventDefault();
+    const method = editDeckId?"PUT":"POST";
+    const url    = editDeckId?`/api/admin/flashcard-decks/${editDeckId}`:"/api/admin/flashcard-decks";
+    const r      = await api(url, {method, body:JSON.stringify(deckForm)});
+    if(r.ok){ await loadDecks(); setDeckForm({name:"",subject:"",description:""}); setEditDeckId(null); setShowDeckForm(false); flash(editDeckId?"Deck updated!":"Deck created!"); }
+    else { const d=await r.json(); flash("Error: "+(d.error||r.status)); }
+  }
+
+  async function deleteDeck(id:string) {
+    if(!confirm("Delete this deck and all its cards?")) return;
+    await api(`/api/admin/flashcard-decks/${id}`,{method:"DELETE"}); await loadDecks();
+    if(selDeck?.id===id) { setSelDeck(null); setCards([]); }
+    flash("Deck deleted.");
+  }
+
+  async function saveCard(e:React.FormEvent) {
+    e.preventDefault();
+    if(!selDeck) return;
+    const method = editCardId?"PUT":"POST";
+    const url    = editCardId?`/api/admin/flashcard-decks/${selDeck.id}/cards/${editCardId}`:`/api/admin/flashcard-decks/${selDeck.id}/cards`;
+    const r      = await api(url, {method, body:JSON.stringify(cardForm)});
+    if(r.ok){ await loadCards(selDeck.id); setCardForm({front:"",back:"",hint:""}); setEditCardId(null); flash(editCardId?"Card updated!":"Card added!"); }
+    else { const d=await r.json(); flash("Error: "+(d.error||r.status)); }
+  }
+
+  async function deleteCard(cardId:string) {
+    if(!selDeck) return;
+    await api(`/api/admin/flashcard-decks/${selDeck.id}/cards/${cardId}`,{method:"DELETE"});
+    await loadCards(selDeck.id); flash("Card deleted.");
+  }
+
+  return (
+    <div>
+      <h2 style={{marginBottom:18,fontFamily:"Lato,sans-serif",fontSize:20}}>🃏 Flashcard Decks</h2>
+      {msg && <Feedback msg={msg} style={{marginBottom:12}} />}
+
+      {/* Deck list */}
+      {!selDeck && (
+        <div>
+          <div style={{display:"flex",gap:10,marginBottom:16}}>
+            <button onClick={()=>{setShowDeckForm(f=>!f);setEditDeckId(null);setDeckForm({name:"",subject:"",description:""});}} style={btnStyle("#7c3aed")}>
+              {showDeckForm?"Cancel":"+ New Deck"}
+            </button>
+          </div>
+
+          {showDeckForm && (
+            <form onSubmit={saveDeck} style={{background:"var(--surface)",borderRadius:14,padding:18,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}}>
+              <h3 style={{marginBottom:14,fontSize:15}}>{editDeckId?"Edit Deck":"Create New Deck"}</h3>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <input style={inp} placeholder="Deck Name *" value={deckForm.name} onChange={e=>setDeckForm(f=>({...f,name:e.target.value}))} required />
+                <input style={inp} placeholder="Subject (e.g. Physics, Math)" value={deckForm.subject} onChange={e=>setDeckForm(f=>({...f,subject:e.target.value}))} />
+                <textarea style={{...inp,resize:"vertical",minHeight:60}} placeholder="Description" value={deckForm.description} onChange={e=>setDeckForm(f=>({...f,description:e.target.value}))} />
+                <button type="submit" style={btnStyle("#7c3aed")}>{editDeckId?"Update Deck":"Create Deck"}</button>
+              </div>
+            </form>
+          )}
+
+          {decks.length===0 && <Empty icon="🃏" text="No flashcard decks yet. Create one above." />}
+          {decks.map(d=>(
+            <div key={d.id} style={{...listItem,display:"flex",alignItems:"center",gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:15,color:"var(--purple)"}}>{d.name}</div>
+                {d.subject && <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>📚 {d.subject}</div>}
+                <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{d.cardCount} cards · Created {new Date(d.createdAt).toLocaleDateString()}</div>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button style={smBtn("#2563eb")} onClick={()=>{setSelDeck(d);}}>Manage Cards</button>
+                <button style={smBtn("#6b7280")} onClick={()=>{setEditDeckId(d.id);setDeckForm({name:d.name,subject:d.subject,description:d.description});setShowDeckForm(true);}}>Edit</button>
+                <button style={smBtn("#dc2626")} onClick={()=>deleteDeck(d.id)}>Del</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Cards view */}
+      {selDeck && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
+            <button onClick={()=>{setSelDeck(null);setCards([]);setEditCardId(null);}} style={btnStyle("#6b7280")}>← Back to Decks</button>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:800,fontSize:17,color:"var(--purple)"}}>{selDeck.name}</div>
+              <div style={{fontSize:12,color:"var(--sub)"}}>{cards.length} cards</div>
+            </div>
+          </div>
+
+          {/* Card form */}
+          <form onSubmit={saveCard} style={{background:"var(--surface)",borderRadius:14,padding:18,marginBottom:18,boxShadow:"0 2px 10px rgba(0,0,0,0.07)"}}>
+            <h3 style={{marginBottom:14,fontSize:15}}>{editCardId?"Edit Card":"Add New Card"}</h3>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <textarea style={{...inp,resize:"vertical",minHeight:70}} placeholder="Front (Question) *" value={cardForm.front} onChange={e=>setCardForm(f=>({...f,front:e.target.value}))} required />
+              <textarea style={{...inp,resize:"vertical",minHeight:70}} placeholder="Back (Answer) *" value={cardForm.back} onChange={e=>setCardForm(f=>({...f,back:e.target.value}))} required />
+              <input style={inp} placeholder="Hint (optional)" value={cardForm.hint} onChange={e=>setCardForm(f=>({...f,hint:e.target.value}))} />
+              <div style={{display:"flex",gap:8}}>
+                <button type="submit" style={btnStyle("#7c3aed")}>{editCardId?"Update Card":"Add Card"}</button>
+                {editCardId && <button type="button" style={btnStyle("#6b7280")} onClick={()=>{setEditCardId(null);setCardForm({front:"",back:"",hint:""});}}>Cancel</button>}
+              </div>
+            </div>
+          </form>
+
+          {/* Card list */}
+          {cards.length===0 && <Empty icon="🃏" text="No cards in this deck yet." />}
+          {cards.map((c,i)=>(
+            <div key={c.id} style={{...listItem}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                <div style={{minWidth:28,height:28,borderRadius:8,background:"var(--purple)",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>
+                  {i+1}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{marginBottom:6}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",textTransform:"uppercase",marginBottom:2}}>Front</div>
+                    <div style={{fontSize:14,color:"var(--text)",lineHeight:1.5}}>{c.front}</div>
+                  </div>
+                  <div style={{padding:"8px 10px",background:"var(--bg)",borderRadius:8,borderLeft:"3px solid var(--green)"}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"var(--sub)",textTransform:"uppercase",marginBottom:2}}>Back</div>
+                    <div style={{fontSize:14,color:"var(--text)",lineHeight:1.5}}>{c.back}</div>
+                  </div>
+                  {c.hint && <div style={{marginTop:6,fontSize:12,color:"var(--gold)"}}>💡 {c.hint}</div>}
+                </div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  <button style={smBtn("#6b7280")} onClick={()=>{setEditCardId(c.id);setCardForm({front:c.front,back:c.back,hint:c.hint||""});}}>Edit</button>
+                  <button style={smBtn("#dc2626")} onClick={()=>deleteCard(c.id)}>Del</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Empty({icon,text}:{icon:string;text:string}){
   return <div style={{textAlign:"center",padding:"36px 0",color:"var(--sub)"}}><div style={{fontSize:36}}>{icon}</div><p style={{marginTop:10,fontSize:14}}>{text}</p></div>;
 }
