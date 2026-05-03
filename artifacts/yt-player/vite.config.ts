@@ -82,7 +82,7 @@ function apiPlugin() {
         const m = req.method?.toUpperCase() || "GET";
 
         // ── Pass-through to API server proxy for modern routes ─────────
-        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu","/api/flashcard-decks","/api/daily-challenge","/api/search"];
+        const PROXIED = ["/api/ai","/api/validate-token","/api/security","/api/user","/api/subjects","/api/doubts","/api/notifications","/api/gamification","/api/solve-sheets","/api/live-classes","/api/announcements","/api/discussions","/api/dashboard-menu","/api/flashcard-decks","/api/daily-challenge","/api/search","/api/exam-dates","/api/past-papers","/api/formulas","/api/vocabulary","/api/study-log","/api/topic-votes","/api/platform-settings"];
         if (PROXIED.some(prefix => p === prefix || p.startsWith(prefix+"/")||p.startsWith(prefix+"?"))) return next();
 
         // ── GET /api/check-ip ──────────────────────────────────────────
@@ -236,6 +236,14 @@ export default defineConfig({
       '/api/flashcard-decks':   { target: 'http://localhost:8080', changeOrigin: true },
       '/api/daily-challenge':   { target: 'http://localhost:8080', changeOrigin: true },
       '/api/search':            { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/exam-dates':        { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/past-papers':       { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/formulas':          { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/vocabulary':        { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/study-log':         { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/topic-votes':       { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/platform-settings': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api/notifications':     { target: 'http://localhost:8080', changeOrigin: true },
     },
     fs:{ strict:true, deny:["**/.*"] },
   },

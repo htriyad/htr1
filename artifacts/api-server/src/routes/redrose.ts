@@ -1418,4 +1418,149 @@ router.delete("/admin/db/file/:name", adminAuth, (req, res) => {
   catch(err:any){res.status(500).json({error:err.message});}
 });
 
+/* ══════════════════════════════════════════════════════════
+   EXAM DATES
+══════════════════════════════════════════════════════════ */
+router.get("/exam-dates", (_req, res) => {
+  res.json(rj<any[]>("exam-dates.json",[]));
+});
+router.post("/admin/exam-dates", adminAuth, (req, res) => {
+  const b = req.body as any;
+  const list = rj<any[]>("exam-dates.json",[]);
+  const entry = { id:uid(), title:String(b.title||"").trim(), exam:String(b.exam||"").trim(), date:String(b.date||"").trim(), color:String(b.color||"#dc2626").trim(), createdAt:new Date().toISOString() };
+  list.push(entry);
+  wj("exam-dates.json", list);
+  res.json(entry);
+});
+router.delete("/admin/exam-dates/:id", adminAuth, (req, res) => {
+  const list = rj<any[]>("exam-dates.json",[]);
+  wj("exam-dates.json", list.filter(x=>x.id!==req.params.id));
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   PAST PAPERS
+══════════════════════════════════════════════════════════ */
+router.get("/past-papers", (_req, res) => {
+  res.json(rj<any[]>("past-papers.json",[]));
+});
+router.post("/admin/past-papers", adminAuth, (req, res) => {
+  const b = req.body as any;
+  const list = rj<any[]>("past-papers.json",[]);
+  const entry = { id:uid(), title:String(b.title||"").trim(), exam:String(b.exam||"").trim(), subject:String(b.subject||"").trim(), year:String(b.year||"").trim(), imageUrls:Array.isArray(b.imageUrls)?b.imageUrls:[], pdfUrl:String(b.pdfUrl||"").trim()||undefined, createdAt:new Date().toISOString() };
+  list.unshift(entry);
+  wj("past-papers.json", list);
+  res.json(entry);
+});
+router.delete("/admin/past-papers/:id", adminAuth, (req, res) => {
+  const list = rj<any[]>("past-papers.json",[]);
+  wj("past-papers.json", list.filter(x=>x.id!==req.params.id));
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   FORMULA LIBRARY
+══════════════════════════════════════════════════════════ */
+router.get("/formulas", (_req, res) => {
+  res.json(rj<any[]>("formulas.json",[]));
+});
+router.post("/admin/formulas", adminAuth, (req, res) => {
+  const b = req.body as any;
+  const list = rj<any[]>("formulas.json",[]);
+  const entry = { id:uid(), subject:String(b.subject||"").trim(), category:String(b.category||"General").trim(), title:String(b.title||"").trim(), latex:String(b.latex||"").trim(), description:String(b.description||"").trim()||undefined, createdAt:new Date().toISOString() };
+  list.push(entry);
+  wj("formulas.json", list);
+  res.json(entry);
+});
+router.put("/admin/formulas/:id", adminAuth, (req, res) => {
+  const b = req.body as any;
+  const list = rj<any[]>("formulas.json",[]);
+  const i = list.findIndex(x=>x.id===req.params.id);
+  if (i<0) return res.status(404).json({error:"Not found"});
+  list[i] = { ...list[i], subject:String(b.subject||list[i].subject), category:String(b.category||list[i].category), title:String(b.title||list[i].title), latex:String(b.latex||list[i].latex), description:String(b.description||""), updatedAt:new Date().toISOString() };
+  wj("formulas.json", list);
+  res.json(list[i]);
+});
+router.delete("/admin/formulas/:id", adminAuth, (req, res) => {
+  const list = rj<any[]>("formulas.json",[]);
+  wj("formulas.json", list.filter(x=>x.id!==req.params.id));
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   VOCABULARY BUILDER
+══════════════════════════════════════════════════════════ */
+router.get("/vocabulary", (_req, res) => {
+  res.json(rj<any[]>("vocabulary.json",[]));
+});
+router.post("/admin/vocabulary", adminAuth, (req, res) => {
+  const b = req.body as any;
+  const list = rj<any[]>("vocabulary.json",[]);
+  const entry = { id:uid(), word:String(b.word||"").trim(), meaning:String(b.meaning||"").trim(), bangla:String(b.bangla||"").trim(), example:String(b.example||"").trim(), subject:String(b.subject||"General").trim(), difficulty:String(b.difficulty||"medium"), createdAt:new Date().toISOString() };
+  list.push(entry);
+  wj("vocabulary.json", list);
+  res.json(entry);
+});
+router.delete("/admin/vocabulary/:id", adminAuth, (req, res) => {
+  wj("vocabulary.json", rj<any[]>("vocabulary.json",[]).filter(x=>x.id!==req.params.id));
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   STUDY LOGS  (server-side analytics)
+══════════════════════════════════════════════════════════ */
+router.post("/study-log", userAuth, (req: any, res) => {
+  const b = req.body as any;
+  const username = req.username as string;
+  const today = new Date().toISOString().slice(0,10);
+  const logs = rj<any[]>("study-logs.json",[]);
+  logs.push({ username, date:today, mins:Number(b.mins||0), type:String(b.type||"general"), ts:new Date().toISOString() });
+  wj("study-logs.json", logs.slice(-10000));
+  res.json({ok:true});
+});
+router.get("/admin/study-logs", adminAuth, (req, res) => {
+  const logs = rj<any[]>("study-logs.json",[]);
+  const { username, date } = req.query as any;
+  let filtered = logs;
+  if (username) filtered = filtered.filter(l=>l.username===username);
+  if (date) filtered = filtered.filter(l=>l.date===date);
+  res.json(filtered.slice(-500));
+});
+
+/* ══════════════════════════════════════════════════════════
+   TOPIC VOTE / REQUEST
+══════════════════════════════════════════════════════════ */
+router.get("/topic-votes", userAuth, (req, res) => {
+  res.json(rj<any[]>("topic-votes.json",[]));
+});
+router.post("/topic-votes", userAuth, (req: any, res) => {
+  const b = req.body as any;
+  const username = req.username as string;
+  const list = rj<any[]>("topic-votes.json",[]);
+  const topic = String(b.topic||"").trim().slice(0,200);
+  if (!topic) return res.status(400).json({error:"Topic required"});
+  const existing = list.find(x=>x.topic.toLowerCase()===topic.toLowerCase());
+  if (existing) {
+    if (!existing.voters.includes(username)) { existing.votes++; existing.voters.push(username); }
+  } else {
+    list.unshift({ id:uid(), topic, votes:1, voters:[username], createdAt:new Date().toISOString() });
+  }
+  wj("topic-votes.json", list);
+  res.json({ok:true});
+});
+
+/* ══════════════════════════════════════════════════════════
+   PLATFORM SETTINGS (site-wide config)
+══════════════════════════════════════════════════════════ */
+router.get("/platform-settings", (_req, res) => {
+  res.json(rj<any>("platform-settings.json",{ siteName:"RedRose Online Care", tagline:"SSC · HSC · Admission · BCS", primaryColor:"#dc2626", enableLeaderboard:true, enableDiscussions:true, maintenanceMode:false }));
+});
+router.put("/admin/platform-settings", adminAuth, (req, res) => {
+  const existing = rj<any>("platform-settings.json",{});
+  const updated = { ...existing, ...req.body as any, updatedAt:new Date().toISOString() };
+  wj("platform-settings.json", updated);
+  res.json(updated);
+});
+
 export default router;
+

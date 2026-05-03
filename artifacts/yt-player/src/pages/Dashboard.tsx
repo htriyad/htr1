@@ -39,12 +39,16 @@ const SIDEBAR_ITEMS = [
   { label: "Solve Sheet",      icon: "📋", path: "/solve-sheet" },
   { label: "Flashcards",       icon: "🃏", path: "/flashcards" },
   { label: "Study Timer",      icon: "⏱",  path: "/study-timer" },
+  { label: "Study Analytics",  icon: "📊", path: "/analytics" },
+  { label: "Study Planner",    icon: "📅", path: "/planner" },
+  { label: "Notes",            icon: "📝", path: "/notes" },
+  { label: "Formulas",         icon: "∑",  path: "/formulas" },
+  { label: "Tools",            icon: "🔢", path: "/tools" },
+  { label: "Past Papers",      icon: "📄", path: "/papers" },
   { label: "Live Exam",        icon: "📝", path: "/exams" },
-  { label: "Practice Exam",    icon: "💻", path: "/exams" },
   { label: "AI Tutor",         icon: "🤖", path: "/ai-tutor" },
   { label: "Q&A Service",      icon: "💬", path: "/ask" },
   { label: "Discussion Group", icon: "👥", path: "/discussion" },
-  { label: "My Progress",      icon: "📊", path: "/profile" },
   { label: "Leaderboard",      icon: "🥇", path: "/leaderboard" },
 ];
 
@@ -387,19 +391,23 @@ export default function Dashboard() {
           <p style={{ fontSize:12, opacity:0.85, marginBottom:12 }}>SSC · HSC · Admission · BCS</p>
           <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
             <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/flashcards");}}>🃏 Flashcards</a>
-            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/study-timer");}}>⏱ Study Timer</a>
+            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/study-timer");}}>⏱ Timer</a>
+            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/analytics");}}>📊 Analytics</a>
+            <a className="dash-download-btn" href="#" onClick={e=>{e.preventDefault();navigate("/tools");}}>🔢 Tools</a>
           </div>
         </div>
 
         {/* ── QUICK ACCESS STRIP ───────────────────── */}
         <div className="dash-quick-strip">
           {[
-            { icon:"🃏", label:"Flashcards", path:"/flashcards", bg:"#ede9fe", color:"#7c3aed" },
-            { icon:"⏱",  label:"Timer",       path:"/study-timer", bg:"#fef3c7", color:"#d97706" },
-            { icon:"📋", label:"Sheets",       path:"/solve-sheet", bg:"#f3e5f5", color:"#7b2fa5" },
-            { icon:"👨‍🏫", label:"Live",         path:"/live-class",  bg:"#e8f5e9", color:"#2e7d32" },
-            { icon:"💬", label:"Q&A",          path:"/ask",          bg:"#e0f7fa", color:"#0097a7" },
-            { icon:"👥", label:"Discuss",      path:"/discussion",   bg:"#fee2e2", color:"#dc2626" },
+            { icon:"🃏", label:"Flashcards", path:"/flashcards",  bg:"#ede9fe", color:"#7c3aed" },
+            { icon:"⏱",  label:"Timer",      path:"/study-timer", bg:"#fef3c7", color:"#d97706" },
+            { icon:"📊", label:"Analytics",  path:"/analytics",   bg:"#dbeafe", color:"#2563eb" },
+            { icon:"📅", label:"Planner",    path:"/planner",     bg:"#dcfce7", color:"#16a34a" },
+            { icon:"∑",  label:"Formulas",   path:"/formulas",    bg:"#fce7f3", color:"#db2777" },
+            { icon:"🔢", label:"Tools",      path:"/tools",       bg:"#f3e5f5", color:"#7b2fa5" },
+            { icon:"📄", label:"Papers",     path:"/papers",      bg:"#e0f7fa", color:"#0097a7" },
+            { icon:"📝", label:"Notes",      path:"/notes",       bg:"#fff7ed", color:"#ea580c" },
           ].map(q => (
             <button key={q.label} onClick={() => navigate(q.path)} className="dash-quick-item"
               style={{ background:q.bg }}>

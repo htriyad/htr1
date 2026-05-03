@@ -6,7 +6,7 @@ const TOKEN = () => sessionStorage.getItem("rr_admin_token") || "";
 const api = (path: string, opts: RequestInit = {}) =>
   fetch(path, { ...opts, headers: { "Content-Type":"application/json", Authorization:`Bearer ${TOKEN()}`, ...(opts.headers as any||{}) } });
 
-type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards";
+type Tab = "overview"|"users"|"ips"|"inbox"|"subjects"|"videos"|"quizzes"|"notifs"|"doubts"|"micro"|"market"|"menu"|"db"|"solve"|"live"|"announce"|"discuss"|"flashcards"|"exams"|"papers"|"formulas"|"vocab"|"settings";
 const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"overview",   icon:"📊", label:"Overview"      },
   { id:"users",      icon:"👤", label:"Users"         },
@@ -21,10 +21,15 @@ const TABS: { id:Tab; icon:string; label:string }[] = [
   { id:"announce",   icon:"📢", label:"Announcements" },
   { id:"discuss",    icon:"💬", label:"Discussions"   },
   { id:"flashcards", icon:"🃏", label:"Flashcards"    },
+  { id:"exams",      icon:"⏰", label:"Exam Dates"    },
+  { id:"papers",     icon:"📄", label:"Past Papers"   },
+  { id:"formulas",   icon:"∑",  label:"Formulas"      },
+  { id:"vocab",      icon:"📖", label:"Vocabulary"    },
   { id:"menu",       icon:"⊞",  label:"Dashboard Menu"},
   { id:"doubts",     icon:"❓", label:"Doubts"        },
   { id:"micro",      icon:"⚡", label:"Micro Feed"    },
   { id:"market",     icon:"🏪", label:"Marketplace"   },
+  { id:"settings",   icon:"⚙️", label:"Settings"      },
   { id:"db",         icon:"🗄️", label:"Database"      },
 ];
 
@@ -112,6 +117,11 @@ function AdminPanel({ onLogout }:{ onLogout:()=>void }) {
           {tab==="discuss"    && <DiscussionsTab />}
           {tab==="flashcards" && <FlashcardsTab />}
           {tab==="db"         && <DatabaseTab />}
+          {tab==="exams"      && <ExamDatesTab />}
+          {tab==="papers"     && <PapersTab />}
+          {tab==="formulas"   && <FormulasTab />}
+          {tab==="vocab"      && <VocabTab />}
+          {tab==="settings"   && <SettingsTab />}
         </main>
       </div>
     </div>
@@ -2527,6 +2537,293 @@ function FlashcardsTab() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ══ Exam Dates ═════════════════════════════════════════════ */
+function ExamDatesTab(){
+  const [list,setList]=useState<any[]>([]);
+  const [form,setForm]=useState({title:"",exam:"SSC",date:"",color:"#dc2626"});
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/exam-dates",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function add(){
+    if(!form.title||!form.date){setMsg("❌ Title and date required");return;}
+    const r=await api("/api/admin/exam-dates",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Exam date added!");setForm({title:"",exam:"SSC",date:"",color:"#dc2626"});load();}
+  }
+  async function del(id:string){
+    if(!confirm("Delete?"))return;
+    await api(`/api/admin/exam-dates/${id}`,{method:"DELETE"});
+    load();
+  }
+  const EXAMS=["SSC","HSC","Admission","BCS","JSC","Other"];
+  return(
+    <div>
+      <SectionTitle>⏰ Exam Dates</SectionTitle>
+      <InfoBox>Set upcoming exam dates. Students see countdowns on the Study Planner page.</InfoBox>
+      <Card title="➕ Add Exam Date">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="Title"><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. SSC 2026 Mathematics" style={inp}/></Field>
+          <Field label="Exam Type"><select value={form.exam} onChange={e=>setForm({...form,exam:e.target.value})} style={inp}>{EXAMS.map(e=><option key={e}>{e}</option>)}</select></Field>
+          <Field label="Date & Time"><input type="datetime-local" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={inp}/></Field>
+          <Field label="Color"><input type="color" value={form.color} onChange={e=>setForm({...form,color:e.target.value})} style={{...inp,width:60,padding:4,height:36}}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} style={btnStyle("var(--purple)")}>Add Exam Date</button>
+        </div>
+      </Card>
+      {list.length===0&&<Empty icon="⏰" text="No exam dates set"/>}
+      {list.map(e=>{
+        const ms=new Date(e.date).getTime()-Date.now();
+        const days=Math.max(0,Math.floor(ms/86400000));
+        return(
+          <div key={e.id} style={{...listItem,borderLeft:`4px solid ${e.color||"#dc2626"}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontWeight:700,color:"var(--text)"}}>{e.title}</div>
+                <div style={{fontSize:12,color:"var(--sub)",marginTop:2}}>{e.exam} · {new Date(e.date).toLocaleString()}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:20,fontWeight:900,color:e.color||"#dc2626",fontFamily:"monospace"}}>{days}d</div>
+                <button onClick={()=>del(e.id)} style={smBtn("#dc2626")}>Delete</button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══ Past Papers ════════════════════════════════════════════ */
+function PapersTab(){
+  const [list,setList]=useState<any[]>([]);
+  const [form,setForm]=useState({title:"",exam:"SSC",subject:"Mathematics",year:String(new Date().getFullYear()),pdfUrl:"",imageUrl:""});
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/past-papers",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function add(){
+    if(!form.title){setMsg("❌ Title required");return;}
+    const imageUrls=form.imageUrl.trim()?form.imageUrl.split("\n").map(s=>s.trim()).filter(Boolean):[];
+    const r=await api("/api/admin/past-papers",{method:"POST",body:JSON.stringify({...form,imageUrls,pdfUrl:form.pdfUrl.trim()||undefined})});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Paper added!");setForm({title:"",exam:"SSC",subject:"Mathematics",year:String(new Date().getFullYear()),pdfUrl:"",imageUrl:""});load();}
+  }
+  async function del(id:string){
+    if(!confirm("Delete?"))return;
+    await api(`/api/admin/past-papers/${id}`,{method:"DELETE"});
+    load();
+  }
+  const EXAMS=["SSC","HSC","Admission","BCS","JSC","Other"];
+  const SUBJECTS=["Mathematics","Physics","Chemistry","Biology","English","Bangla","ICT","History","Geography","Economy","Other"];
+  return(
+    <div>
+      <SectionTitle>📄 Past Papers</SectionTitle>
+      <InfoBox>Add past exam papers. Students can view/download from the Past Papers page. Add image URLs (one per line) for scanned pages, or a PDF link.</InfoBox>
+      <Card title="➕ Add Past Paper">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Field label="Title"><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. SSC 2024 Mathematics (Dhaka Board)" style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            <Field label="Exam"><select value={form.exam} onChange={e=>setForm({...form,exam:e.target.value})} style={inp}>{EXAMS.map(e=><option key={e}>{e}</option>)}</select></Field>
+            <Field label="Subject"><select value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} style={inp}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></Field>
+            <Field label="Year"><input value={form.year} onChange={e=>setForm({...form,year:e.target.value})} placeholder="2024" style={inp}/></Field>
+          </div>
+          <Field label="PDF URL (optional)"><input value={form.pdfUrl} onChange={e=>setForm({...form,pdfUrl:e.target.value})} placeholder="https://..." style={inp}/></Field>
+          <Field label="Image URLs (one per line — scanned pages)"><textarea value={form.imageUrl} onChange={e=>setForm({...form,imageUrl:e.target.value})} rows={3} placeholder={"https://image1.jpg\nhttps://image2.jpg"} style={{...inp,resize:"vertical"}}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} style={btnStyle("var(--purple)")}>Add Paper</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>All Papers ({list.length})</SectionTitle>
+      {list.length===0&&<Empty icon="📄" text="No past papers yet"/>}
+      {list.map(p=>(
+        <div key={p.id} style={listItem}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:"var(--text)",marginBottom:4}}>{p.title}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[p.exam,p.subject,p.year].map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",background:"rgba(124,58,237,0.1)",color:"var(--purple)",borderRadius:20,fontWeight:700}}>{t}</span>)}
+                {p.imageUrls?.length>0&&<span style={{fontSize:11,color:"var(--sub)"}}>{p.imageUrls.length} page{p.imageUrls.length!==1?"s":""}</span>}
+                {p.pdfUrl&&<span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>PDF ✓</span>}
+              </div>
+            </div>
+            <button onClick={()=>del(p.id)} style={smBtn("#dc2626")}>Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ Formulas ════════════════════════════════════════════════ */
+function FormulasTab(){
+  const [list,setList]=useState<any[]>([]);
+  const [form,setForm]=useState({subject:"Physics",category:"Mechanics",title:"",latex:"",description:""});
+  const [search,setSearch]=useState("");
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/formulas",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function add(){
+    if(!form.title||!form.latex){setMsg("❌ Title and formula required");return;}
+    const r=await api("/api/admin/formulas",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Formula added!");setForm({...form,title:"",latex:"",description:""});load();}
+  }
+  async function del(id:string){
+    if(!confirm("Delete?"))return;
+    await api(`/api/admin/formulas/${id}`,{method:"DELETE"});
+    load();
+  }
+  const SUBJECTS=["Physics","Chemistry","Biology","Mathematics","ICT","Other"];
+  const filtered=list.filter(f=>!search||f.title?.toLowerCase().includes(search.toLowerCase())||f.subject?.toLowerCase().includes(search.toLowerCase()));
+  return(
+    <div>
+      <SectionTitle>∑ Formula Library</SectionTitle>
+      <InfoBox>Add formulas with LaTeX notation. Use $...$ for inline and $$...$$ for block math. Students can search and bookmark formulas.</InfoBox>
+      <Card title="➕ Add Formula">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Subject"><select value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} style={inp}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></Field>
+            <Field label="Category"><input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="e.g. Mechanics" style={inp}/></Field>
+          </div>
+          <Field label="Formula Title"><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Newton's Second Law" style={inp}/></Field>
+          <Field label="LaTeX / Formula"><input value={form.latex} onChange={e=>setForm({...form,latex:e.target.value})} placeholder="e.g. F = ma or $F = ma$" style={inp}/></Field>
+          <Field label="Description (optional)"><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} rows={2} placeholder="Short explanation..." style={{...inp,resize:"vertical"}}/></Field>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} style={btnStyle("var(--purple)")}>Add Formula</button>
+        </div>
+      </Card>
+      <div style={{margin:"16px 0 10px",display:"flex",gap:8,alignItems:"center"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search formulas..." style={{...inp,flex:1}}/>
+        <span style={{fontSize:12,color:"var(--sub)",flexShrink:0}}>{filtered.length} formulas</span>
+      </div>
+      {filtered.length===0&&<Empty icon="∑" text="No formulas yet"/>}
+      {filtered.map(f=>(
+        <div key={f.id} style={listItem}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:"var(--text)"}}>{f.title}</div>
+              <div style={{fontFamily:"monospace",fontSize:13,color:"var(--purple)",margin:"4px 0",wordBreak:"break-all"}}>{f.latex}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
+                <span style={{fontSize:11,padding:"2px 8px",background:"rgba(124,58,237,0.1)",color:"var(--purple)",borderRadius:20,fontWeight:700}}>{f.subject}</span>
+                {f.category&&<span style={{fontSize:11,color:"var(--sub)"}}>{f.category}</span>}
+              </div>
+              {f.description&&<div style={{fontSize:12,color:"var(--sub)",marginTop:4}}>{f.description}</div>}
+            </div>
+            <button onClick={()=>del(f.id)} style={smBtn("#dc2626")}>Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══ Vocabulary ══════════════════════════════════════════════ */
+function VocabTab(){
+  const [list,setList]=useState<any[]>([]);
+  const [form,setForm]=useState({word:"",meaning:"",bangla:"",example:"",subject:"English",difficulty:"medium"});
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/vocabulary",{method:"GET"}).then(r=>r.json()).then(d=>{if(Array.isArray(d))setList(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function add(){
+    if(!form.word||!form.meaning){setMsg("❌ Word and meaning required");return;}
+    const r=await api("/api/admin/vocabulary",{method:"POST",body:JSON.stringify(form)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error);
+    else{setMsg("✅ Word added!");setForm({...form,word:"",meaning:"",bangla:"",example:""});load();}
+  }
+  async function del(id:string){
+    await api(`/api/admin/vocabulary/${id}`,{method:"DELETE"});
+    load();
+  }
+  const SUBJECTS=["English","Science","History","Bangla","General"];
+  const DIFFS=["easy","medium","hard"];
+  return(
+    <div>
+      <SectionTitle>📖 Vocabulary Builder</SectionTitle>
+      <InfoBox>Add English/subject vocabulary words. Students can practice and quiz themselves.</InfoBox>
+      <Card title="➕ Add Word">
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Word"><input value={form.word} onChange={e=>setForm({...form,word:e.target.value})} placeholder="e.g. Photosynthesis" style={inp}/></Field>
+            <Field label="Bangla"><input value={form.bangla} onChange={e=>setForm({...form,bangla:e.target.value})} placeholder="সালোকসংশ্লেষণ" style={inp}/></Field>
+          </div>
+          <Field label="Meaning"><textarea value={form.meaning} onChange={e=>setForm({...form,meaning:e.target.value})} rows={2} placeholder="Definition..." style={{...inp,resize:"vertical"}}/></Field>
+          <Field label="Example Sentence"><input value={form.example} onChange={e=>setForm({...form,example:e.target.value})} placeholder="Plants use photosynthesis to..." style={inp}/></Field>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Field label="Subject"><select value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} style={inp}>{SUBJECTS.map(s=><option key={s}>{s}</option>)}</select></Field>
+            <Field label="Difficulty"><select value={form.difficulty} onChange={e=>setForm({...form,difficulty:e.target.value})} style={inp}>{DIFFS.map(d=><option key={d}>{d}</option>)}</select></Field>
+          </div>
+          {msg&&<Feedback msg={msg}/>}
+          <button onClick={add} style={btnStyle("var(--purple)")}>Add Word</button>
+        </div>
+      </Card>
+      <SectionTitle style={{marginTop:24}}>All Words ({list.length})</SectionTitle>
+      {list.length===0&&<Empty icon="📖" text="No vocabulary words yet"/>}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {list.map(w=>(
+          <div key={w.id} style={{...listItem,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4}}>
+                <span style={{fontWeight:800,color:"var(--purple)",fontSize:15}}>{w.word}</span>
+                {w.bangla&&<span style={{fontSize:13,color:"var(--sub)"}}>({w.bangla})</span>}
+                <span style={{fontSize:10,padding:"2px 8px",background:w.difficulty==="hard"?"#fee2e2":w.difficulty==="medium"?"#fef3c7":"#dcfce7",borderRadius:20,fontWeight:700,color:w.difficulty==="hard"?"#991b1b":w.difficulty==="medium"?"#92400e":"#166534"}}>{w.difficulty}</span>
+              </div>
+              <div style={{fontSize:12,color:"var(--text)",lineHeight:1.5}}>{w.meaning}</div>
+              {w.example&&<div style={{fontSize:11,color:"var(--sub)",fontStyle:"italic",marginTop:4}}>"{w.example}"</div>}
+            </div>
+            <button onClick={()=>del(w.id)} style={smBtn("#dc2626")}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══ Platform Settings ══════════════════════════════════════ */
+function SettingsTab(){
+  const [settings,setSettings]=useState<any>({siteName:"RedRose Online Care",tagline:"SSC · HSC · Admission · BCS",primaryColor:"#dc2626",enableLeaderboard:true,enableDiscussions:true,maintenanceMode:false});
+  const [msg,setMsg]=useState("");
+  const load=useCallback(()=>api("/api/admin/platform-settings",{method:"GET"}).then(r=>r.json()).then(d=>{if(d&&!d.error)setSettings(d);}),[]);
+  useEffect(()=>{load();},[load]);
+  async function save(){
+    const r=await api("/api/admin/platform-settings",{method:"PUT",body:JSON.stringify(settings)});
+    const d=await r.json();
+    if(d.error)setMsg("❌ "+d.error); else setMsg("✅ Settings saved!");
+  }
+  return(
+    <div>
+      <SectionTitle>⚙️ Platform Settings</SectionTitle>
+      <InfoBox>Configure site-wide settings for RedRose Online Care.</InfoBox>
+      <Card title="General">
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Field label="Site Name"><input value={settings.siteName} onChange={e=>setSettings({...settings,siteName:e.target.value})} style={inp}/></Field>
+          <Field label="Tagline"><input value={settings.tagline} onChange={e=>setSettings({...settings,tagline:e.target.value})} style={inp}/></Field>
+          <Field label="Primary Color"><div style={{display:"flex",gap:10,alignItems:"center"}}><input type="color" value={settings.primaryColor} onChange={e=>setSettings({...settings,primaryColor:e.target.value})} style={{width:50,height:36,padding:2,border:"1px solid var(--border)",borderRadius:8,cursor:"pointer"}}/><span style={{fontSize:13,color:"var(--sub)"}}>{settings.primaryColor}</span></div></Field>
+        </div>
+      </Card>
+      <Card title="Feature Toggles" style={{marginTop:16}}>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {[
+            {key:"enableLeaderboard",label:"🏆 Leaderboard"},
+            {key:"enableDiscussions",label:"💬 Discussions"},
+            {key:"maintenanceMode",label:"🔧 Maintenance Mode (blocks all students)"},
+          ].map(({key,label})=>(
+            <label key={key} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"10px 12px",borderRadius:10,background:"var(--bg)",border:"1px solid var(--border)"}}>
+              <input type="checkbox" checked={!!settings[key]} onChange={e=>setSettings({...settings,[key]:e.target.checked})} style={{width:18,height:18,accentColor:"var(--purple)"}}/>
+              <span style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{label}</span>
+              <span style={{marginLeft:"auto",fontSize:11,color:settings[key]?"#16a34a":"#dc2626",fontWeight:700}}>{settings[key]?"ON":"OFF"}</span>
+            </label>
+          ))}
+        </div>
+      </Card>
+      {msg&&<div style={{margin:"12px 0"}}><Feedback msg={msg}/></div>}
+      <button onClick={save} style={{...btnStyle("var(--purple)"),marginTop:12}}>💾 Save Settings</button>
     </div>
   );
 }

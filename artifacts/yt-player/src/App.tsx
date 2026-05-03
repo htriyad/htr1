@@ -17,6 +17,13 @@ import LiveClasses from "./pages/LiveClasses";
 import Discussion from "./pages/Discussion";
 import Flashcards from "./pages/Flashcards";
 import StudyTimer from "./pages/StudyTimer";
+import Analytics from "./pages/Analytics";
+import Tools from "./pages/Tools";
+import Formulas from "./pages/Formulas";
+import Planner from "./pages/Planner";
+import Papers from "./pages/Papers";
+import Notes from "./pages/Notes";
+import FloatingMusic from "./components/FloatingMusic";
 import "./index.css";
 
 const savedTheme = localStorage.getItem("rr_theme");
@@ -195,9 +202,16 @@ export default function App() {
         <Route path="/discussion"      component={Discussion} />
         <Route path="/flashcards"      component={Flashcards} />
         <Route path="/study-timer"     component={StudyTimer} />
+        <Route path="/analytics"       component={Analytics} />
+        <Route path="/tools"           component={Tools} />
+        <Route path="/formulas"        component={Formulas} />
+        <Route path="/planner"         component={Planner} />
+        <Route path="/papers"          component={Papers} />
+        <Route path="/notes"           component={Notes} />
         <Route path="/admin"           component={Admin} />
         <Route><Dashboard /></Route>
       </Switch>
+      <FloatingMusic />
     </>
   );
 }
