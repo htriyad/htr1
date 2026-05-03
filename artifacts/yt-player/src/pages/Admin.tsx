@@ -1662,6 +1662,8 @@ function useAdminVoice() {
 function DoubtReplyPanel({d,token,onDone}:{d:any;token:string;onDone:()=>void}){
   const [text,setText]=useState("");
   const [saving,setSaving]=useState(false);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiErr,setAiErr]=useState("");
   const voice=useAdminVoice();
   async function submit(){
     if(!text.trim()&&!voice.audioData)return;
@@ -1669,9 +1671,26 @@ function DoubtReplyPanel({d,token,onDone}:{d:any;token:string;onDone:()=>void}){
     await fetch(`/api/doubts/${d.id}/reply`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({text:text||undefined,audioData:voice.audioData||undefined})});
     setSaving(false); onDone();
   }
+  async function aiSuggest(){
+    setAiLoading(true); setAiErr("");
+    try {
+      const r=await fetch(`/api/doubts/${d.id}/ai-answer`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}});
+      const j=await r.json();
+      if(j.answer) setText(j.answer);
+      else setAiErr(j.error||"AI failed");
+    } catch { setAiErr("Network error"); }
+    finally { setAiLoading(false); }
+  }
   return(
     <div style={{borderTop:"1px solid var(--border)",paddingTop:12,marginTop:8}}>
-      <div style={{fontWeight:700,fontSize:12,color:"var(--purple)",marginBottom:8}}>SEND REPLY</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:12,color:"var(--purple)"}}>SEND REPLY</div>
+        <button onClick={aiSuggest} disabled={aiLoading}
+          style={{padding:"4px 12px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"#fff",fontWeight:700,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+          {aiLoading?"⏳ Generating…":"🤖 AI Suggest Answer"}
+        </button>
+      </div>
+      {aiErr&&<div style={{fontSize:11,color:"#dc2626",marginBottom:6}}>{aiErr}</div>}
       <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Type reply (Bangla or English)…" rows={3}
         style={{width:"100%",borderRadius:10,border:"1.5px solid var(--border)",background:"var(--bg)",color:"var(--text)",padding:"8px 10px",fontSize:13,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
       <div style={{marginTop:8,marginBottom:10}}>
@@ -1712,7 +1731,11 @@ function DoubtsTab() {
   const load=useCallback(()=>{
     api("/api/doubts").then(r=>r.json()).then(d=>{if(Array.isArray(d))setDoubts(d);});
   },[]);
-  useEffect(()=>{load();},[load]);
+  useEffect(()=>{
+    load();
+    const t=setInterval(load,30_000);
+    return ()=>clearInterval(t);
+  },[load]);
 
   const shown=doubts.filter(d=>filter==="all"||d.status===filter);
   const open=doubts.filter(d=>d.status==="open").length;

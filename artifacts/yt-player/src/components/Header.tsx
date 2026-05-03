@@ -47,9 +47,23 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
     } catch {}
   }
 
+  const prevUnread = useRef(0);
   useEffect(() => {
     load();
-    const t = setInterval(load, 25_000); // poll every 25s
+    const t = setInterval(async () => {
+      try {
+        const r = await fetch("/api/notifications", { headers: authHeaders() });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!Array.isArray(d)) return;
+        setNotifs(d);
+        const newUnread = d.filter((n: Notif) => !n.read).length;
+        if (newUnread > prevUnread.current && prevUnread.current >= 0) {
+          if ("vibrate" in navigator) navigator.vibrate(80);
+        }
+        prevUnread.current = newUnread;
+      } catch {}
+    }, 18_000);
     return () => clearInterval(t);
   }, []);
 
@@ -225,7 +239,7 @@ export default function Header({ showBack, backTo = "/", onBack, onMenuClick, ti
           )}
         </div>
 
-        <div className="uu-avatar">R</div>
+        <div className="uu-avatar">{(localStorage.getItem("rr_username")||"R")[0].toUpperCase()}</div>
       </div>
     </header>
   );

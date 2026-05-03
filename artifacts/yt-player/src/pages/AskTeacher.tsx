@@ -93,12 +93,16 @@ interface DoubtQ {
 }
 
 function HumanTeacher() {
-  const [view, setView]       = useState<"list"|"ask">("list");
-  const [doubts, setDoubts]   = useState<DoubtQ[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg]         = useState("");
-  const [question, setQuestion] = useState("");
+  const [view, setView]           = useState<"list"|"ask">("list");
+  const [doubts, setDoubts]       = useState<DoubtQ[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [sending, setSending]     = useState(false);
+  const [msg, setMsg]             = useState("");
+  const [question, setQuestion]   = useState("");
+  const [toast, setToast]         = useState("");
+  const [aiAns, setAiAns]         = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const prevAnswered              = useRef(-1);
   const voice  = useVoiceRecorder();
   const image  = useImagePicker();
 
@@ -106,11 +110,39 @@ function HumanTeacher() {
     setLoading(true);
     try {
       const r = await fetch("/api/doubts/my", { headers: authHdr() });
-      if (r.ok) setDoubts(await r.json());
+      if (r.ok) {
+        const data: DoubtQ[] = await r.json();
+        setDoubts(data);
+        const answeredNow = data.filter(d => d.status === "answered").length;
+        if (prevAnswered.current >= 0 && answeredNow > prevAnswered.current) {
+          setToast("👨‍🏫 Your teacher answered your question!");
+          setTimeout(() => setToast(""), 5000);
+        }
+        prevAnswered.current = answeredNow;
+      }
     } catch {} finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 20_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function getAiAnswer() {
+    if (!question.trim()) { setMsg("Type your question first to get an AI answer."); return; }
+    setAiLoading(true); setAiAns("");
+    try {
+      const r = await fetch("/api/doubts/ai-instant", {
+        method: "POST", headers: authHdr(),
+        body: JSON.stringify({ question }),
+      });
+      const d = await r.json();
+      if (d.answer) setAiAns(d.answer);
+      else setMsg(d.error || "AI failed. Try again.");
+    } catch { setMsg("Network error. Try again."); }
+    finally { setAiLoading(false); }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -145,6 +177,15 @@ function HumanTeacher() {
 
   return (
     <div style={{ padding:"16px 14px", maxWidth:580, margin:"0 auto", paddingBottom:80 }}>
+      {/* Toast notification */}
+      {toast && (
+        <div style={{ position:"fixed", top:70, left:"50%", transform:"translateX(-50%)", zIndex:9999,
+          background:"linear-gradient(135deg,#166534,#16a34a)", color:"#fff", padding:"12px 20px",
+          borderRadius:14, boxShadow:"0 8px 24px rgba(0,0,0,0.2)", fontWeight:700, fontSize:14,
+          animation:"slideDown .3s ease", display:"flex", alignItems:"center", gap:8, whiteSpace:"nowrap" }}>
+          🔔 {toast}
+        </div>
+      )}
       {/* Stats */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:18 }}>
         <div style={{ background:"var(--surface)", borderRadius:14, padding:"14px 16px", textAlign:"center", boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
@@ -182,12 +223,32 @@ function HumanTeacher() {
             <div style={{ fontWeight:700, color:"var(--purple)", marginBottom:12, fontSize:15 }}>✍️ Type Your Question</div>
             <textarea
               value={question}
-              onChange={e => setQuestion(e.target.value)}
+              onChange={e => { setQuestion(e.target.value); setAiAns(""); }}
               placeholder="Write your question here (Bangla or English)…"
               rows={4}
               style={{ width:"100%", borderRadius:10, border:"1.5px solid var(--border)", background:"var(--bg)",
                 color:"var(--text)", padding:"10px 12px", fontSize:14, resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
             />
+
+            {/* AI instant answer */}
+            <div style={{ marginTop:10 }}>
+              <button type="button" onClick={getAiAnswer} disabled={aiLoading || !question.trim()}
+                style={{ padding:"8px 18px", borderRadius:10, border:"none",
+                  background: aiLoading ? "#a78bfa" : "linear-gradient(135deg,#7c3aed,#a855f7)",
+                  color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                {aiLoading ? "⏳ Getting AI answer…" : "⚡ Get Instant AI Answer"}
+              </button>
+              {aiAns && (
+                <div style={{ marginTop:10, background:"linear-gradient(135deg,#f0fdf4,#dcfce7)", border:"1.5px solid #bbf7d0",
+                  borderRadius:12, padding:"12px 14px" }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:"#166534", marginBottom:6 }}>🤖 AI INSTANT ANSWER</div>
+                  <div style={{ fontSize:13, color:"#14532d", lineHeight:1.8, whiteSpace:"pre-wrap" }}>{aiAns}</div>
+                  <div style={{ fontSize:11, color:"#15803d", marginTop:8, fontStyle:"italic" }}>
+                    Still want a human teacher's perspective? Send the question below.
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Voice recorder */}
             <div style={{ marginTop:12 }}>
@@ -371,8 +432,7 @@ export default function AskTeacher() {
 
   return (
     <div style={{ minHeight:"100svh", background:"var(--bg)" }}>
-      <Header showBack={view==="human"} onBack={() => setView("hub")} backTo="/"
-        {...(view === "hub" ? { showBack: false } : {})} />
+      <Header showBack={view==="human"} onBack={() => setView("hub")} backTo="/" />
 
       {view === "hub" && (
         <div style={{ padding:"24px 16px", maxWidth:480, margin:"0 auto" }}>

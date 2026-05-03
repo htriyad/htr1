@@ -20,6 +20,34 @@ function wr(file: string, data: unknown) {
   fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
 }
 
+/* ── Gemini AI helper ───────────────────────────────────── */
+const GEMINI_KEY   = process.env.GOOGLE_API_KEY || "";
+const GEMINI_MODEL = process.env.GEMINI_MODEL   || "gemini-2.5-flash";
+const GEMINI_BASE  = "https://generativelanguage.googleapis.com/v1beta";
+async function gemini(prompt: string, system: string, maxTokens = 600): Promise<string> {
+  if (!GEMINI_KEY) throw new Error("GOOGLE_API_KEY not set");
+  const models = [GEMINI_MODEL, "gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash"];
+  for (const m of models) {
+    try {
+      const r = await fetch(`${GEMINI_BASE}/models/${m}:generateContent?key=${GEMINI_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens }
+        })
+      });
+      if (r.ok) {
+        const d: any = await r.json();
+        return d?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
+      }
+      if (r.status !== 429 && r.status !== 503) break;
+    } catch {}
+  }
+  throw new Error("AI unavailable");
+}
+
 /* ── Types ─────────────────────────────────────────────── */
 interface IpEntry   { approvedAt: string; note?: string; name?: string; banned?: boolean }
 interface IpMap     { [ip: string]: IpEntry }
@@ -1099,6 +1127,10 @@ router.post("/doubts", userAuth, (req, res) => {
   };
   doubts.unshift(item);
   wr("doubts.json", doubts.slice(0, 500));
+  /* notify admins of new question */
+  const notifs0 = rd<Notification[]>("notifs.json", []);
+  notifs0.unshift({ id: crypto.randomUUID(), title: "❓ New Student Question", body: `${item.fullName} asked: ${(item.question || "Voice question").slice(0, 90)}`, createdAt: new Date().toISOString(), recipients: ["htr"], readBy: [] });
+  wr("notifs.json", notifs0.slice(0, 300));
   res.json({ ok: true, id: item.id });
 });
 
@@ -1125,6 +1157,14 @@ router.patch("/doubts/:id/reply", adminAuth, (req, res) => {
   };
   doubts[i].status = "answered";
   wr("doubts.json", doubts);
+  /* notify the student that their question was answered */
+  const studentUser = doubts[i].username;
+  if (studentUser) {
+    const notifs1 = rd<Notification[]>("notifs.json", []);
+    const preview = text ? String(text).slice(0, 90) : "Check the Q&A page for your answer.";
+    notifs1.unshift({ id: crypto.randomUUID(), title: "👨‍🏫 Teacher answered your question!", body: preview, createdAt: new Date().toISOString(), recipients: [studentUser], readBy: [] });
+    wr("notifs.json", notifs1.slice(0, 300));
+  }
   res.json({ ok: true });
 });
 
@@ -1141,6 +1181,35 @@ router.patch("/doubts/:id/reopen", adminAuth, (req, res) => {
 router.delete("/doubts/:id", adminAuth, (req, res) => {
   wr("doubts.json", rd<DoubtQuestion[]>("doubts.json", []).filter(d => d.id !== req.params.id));
   res.json({ ok: true });
+});
+
+/* AI-generated answer for a doubt — admin side */
+router.post("/doubts/:id/ai-answer", adminAuth, async (req: any, res) => {
+  const doubts = rd<DoubtQuestion[]>("doubts.json", []);
+  const d = doubts.find(x => x.id === req.params.id);
+  if (!d) return res.status(404).json({ error: "Not found" });
+  try {
+    const answer = await gemini(
+      d.question || "A student asked a voice question about an academic topic.",
+      "You are a helpful Bangladeshi academic teacher for SSC/HSC/BCS/Admission students. Answer the student's question clearly and accurately. Write in clear English with Bangla terms where helpful. Give a direct answer with key points. Keep it under 200 words.",
+      500
+    );
+    res.json({ answer });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+/* AI instant answer — student side (no admin required) */
+router.post("/doubts/ai-instant", userAuth, async (req: any, res) => {
+  const { question } = req.body || {};
+  if (!question?.trim()) return res.status(400).json({ error: "question required" });
+  try {
+    const answer = await gemini(
+      String(question).slice(0, 2000),
+      "You are a brilliant, friendly Bangladeshi academic tutor for SSC/HSC/BCS/Admission students. Answer the question directly, clearly and helpfully. Include key facts, formulas, or explanations as needed. Write in clear English; use Bangla terms where natural. Be concise but complete — max 200 words.",
+      500
+    );
+    res.json({ answer });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 /* ══════════════════════════════════════════════════════════
