@@ -422,17 +422,8 @@ input, button, select, textarea, label {
   aspect-ratio: unset !important;
 }
 .ytp-aspect-wrap iframe {
-  position: absolute;
-  top: 0; left: 0;
-  /* Scale the iframe to 20% — YouTube's branding bars (~56px top, ~60px
-     bottom) shrink to ~11-12px, making them trivial to cover with our
-     thin overlay divs. The iframe is inflated 5× first so it still fills
-     the container exactly after scale(0.2). */
-  width: 500%;
-  height: 500%;
-  transform: scale(0.2);
-  transform-origin: top left;
-  border: none;
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; border: none;
   /* Block ALL pointer events on the YT iframe so the user can NEVER
      trigger YouTube's native gestures (double-tap seek overlay, title
      tooltip, share menu, etc). All input is handled by .ytp-overlay. */
@@ -443,13 +434,11 @@ input, button, select, textarea, label {
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  /* YouTube top branding is ~56px at 100% zoom. At our 20% iframe scale it
-     renders as ~11px. 18px gives a safe margin to keep it fully hidden. */
-  height: 18px;
+  height: 60px;
   background: #000;
   z-index: 1001;
   display: flex; align-items: center;
-  padding: 0 8px; gap: 6px;
+  padding: 0 10px; gap: 8px;
   pointer-events: none;
   transition: opacity 220ms ease-out;
 }
@@ -467,9 +456,7 @@ input, button, select, textarea, label {
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  /* YouTube bottom controls are ~60px at 100% zoom. At 20% iframe scale
-     they render as ~12px. 18px is a safe cover with margin. */
-  height: 18px; background: #000;
+  height: 48px; background: #000;
   z-index: 1001; pointer-events: none;
   transition: opacity 250ms ease-out;
 }

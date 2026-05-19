@@ -96,7 +96,7 @@
     "fullName": "bdvdb",
     "message": "",
     "timestamp": "2026-05-19T15:12:49.165Z",
-    "status": "pending",
+    "status": "noted",
     "type": "access-request",
     "deviceInfo": {
       "os": "Android",
