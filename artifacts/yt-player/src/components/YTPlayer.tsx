@@ -50,8 +50,8 @@ declare namespace YT {
 interface Props { videoId: string; title?: string; onEnded?: () => void; }
 
 const SEEK_SECS        = 10;
-const HIDE_DELAY       = 3500;
-const TOP_BAR_HIDE_MS  = 2000;
+const HIDE_DELAY       = 4500;
+const TOP_BAR_HIDE_MS  = 2500;
 const FIRST_PLAY_MS    = 4000;
 const TAP_GAP          = 380;
 
@@ -444,22 +444,16 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
         <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
       </div>
 
-      {/* TOP BAR — covers YouTube branding at top.
-          Visible whenever YT might show its own overlay: not started, paused, buffering,
-          or whenever our own controls are visible. */}
-      <div
-        ref={topBarRef}
-        className="ytp-top-bar"
-        style={{ opacity: (showTop || showCtrl || buffering || !started || !playing) ? 1 : 0 }}
-      >
-        <span className="ytp-video-title">{title}</span>
-      </div>
+      {/* TOP BAR — permanently covers YouTube branding at the top edge.
+          Must ALWAYS be opacity 1 — going transparent even for one frame
+          lets YouTube's title/logo flash through. The controls bar (below)
+          handles the user-facing show/hide animation separately. */}
+      <div ref={topBarRef} className="ytp-top-bar" />
 
-      {/* BOTTOM COVER — covers YouTube logo + share button. Same visibility rule. */}
-      <div
-        className="ytp-bottom-cover"
-        style={{ opacity: (showCtrl || buffering || !started || !playing) ? 1 : 0 }}
-      />
+      {/* BOTTOM COVER — permanently covers YouTube's bottom chrome.
+          Must also always be opaque for the same reason. The controls bar
+          sits on top of this when visible, hiding it naturally. */}
+      <div className="ytp-bottom-cover" />
 
       {/* MAIN OVERLAY — z-index 999, intercepts ALL clicks (Udvash technique) */}
       <div className="ytp-overlay">

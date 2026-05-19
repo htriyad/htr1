@@ -422,11 +422,12 @@ input, button, select, textarea, label {
   aspect-ratio: unset !important;
 }
 /* ── ZOOM LAYER — wraps the YT iframe only.
-   Inflated to 500%×500% then scaled back to 20% so it visually fills the
-   container exactly. YouTube renders its UI in the large (5×) canvas, so
-   branding bars (~56px) appear as only ~11px after the scale — our 16px
-   overlay covers completely hide them. The iframe itself keeps YouTube's
-   own inline styles (100%×100% of this layer), so the API never fights us. */
+   Mobile: 500%×500% + scale(0.2)  → YT branding ~56px → ~11px visually.
+   Desktop: 400%×400% + scale(0.25) → YT branding ~56px → ~14px visually.
+   Both still covered by the 16px top/bottom bars.
+   The iframe itself keeps YouTube's inline 100%×100% of this layer, so
+   the API never fights our transform. All overlays live OUTSIDE this layer
+   and render at full size — only the YT chrome shrinks, not our UI. */
 .ytp-zoom-layer {
   position: absolute;
   top: 0; left: 0;
@@ -434,6 +435,13 @@ input, button, select, textarea, label {
   height: 500%;
   transform: scale(0.2);
   transform-origin: top left;
+}
+@media (min-width: 768px) {
+  .ytp-zoom-layer {
+    width: 400%;
+    height: 400%;
+    transform: scale(0.25);
+  }
 }
 
 .ytp-aspect-wrap iframe {
@@ -445,37 +453,31 @@ input, button, select, textarea, label {
   pointer-events: none !important;
 }
 
-/* ── TOP BAR ── */
+/* ── TOP BAR — permanent branding cover, always opacity 1 ── */
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  /* YT top branding ~56px at 100% → ~11px at scale(0.2). 16px covers it. */
+  /* YT top branding ~56px at 100%:
+       mobile  scale(0.2)  → ~11px  → 16px cover gives 5px safety margin
+       desktop scale(0.25) → ~14px  → 16px cover gives 2px safety margin */
   height: 16px;
   background: #000;
-  z-index: 1001;
-  display: flex; align-items: center;
-  padding: 0 8px; gap: 6px;
+  z-index: 1002;
   pointer-events: none;
-  transition: opacity 220ms ease-out;
-}
-/* Set by JS the instant a seek begins — no fade, paints same frame. */
-.ytp-top-bar.instant-show {
-  transition: none !important;
-  opacity: 1 !important;
-}
-.ytp-top-bar .ytp-video-title {
-  color: #fff; font-size: 13px; font-weight: 600;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+  /* No opacity transition — this bar must NEVER fade. It is a permanent
+     black cover over YouTube's branding, not a UI element. */
 }
 
-/* ── BOTTOM BLACK COVER ── */
+/* ── BOTTOM BLACK COVER — permanent branding cover, always opacity 1 ── */
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  /* YT bottom controls ~60px at 100% → ~12px at scale(0.2). 16px covers it. */
-  height: 16px; background: #000;
-  z-index: 1001; pointer-events: none;
-  transition: opacity 250ms ease-out;
+  /* YT bottom chrome ~60px at 100% → ~12-15px at our zoom scale. 16px safe. */
+  height: 16px;
+  background: #000;
+  z-index: 1002;
+  pointer-events: none;
+  /* No opacity transition — same as top bar. */
 }
 
 /* ── MAIN OVERLAY (z-index 999 like Udvash) ── */
@@ -538,9 +540,9 @@ input, button, select, textarea, label {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   background: #000;
-  z-index: 1001;
+  z-index: 1003;
   padding: 0 4px 4px;
-  transition: opacity 150ms ease;
+  transition: opacity 600ms ease-in-out;
 }
 .ytp-controls.hidden { opacity: 0; pointer-events: none; }
 
