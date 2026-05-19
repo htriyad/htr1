@@ -6,7 +6,14 @@
     "bgColor": "linear-gradient(135deg,#6366f1,#818cf8)",
     "createdAt": "2026-05-03T09:59:02.063Z",
     "expiresAt": "2026-05-04T09:59:02.063Z",
-    "views": []
+    "views": [
+      "guest"
+    ],
+    "reactions": {
+      "😂": [
+        "guest"
+      ]
+    }
   },
   {
     "id": "fc82383b-a819-4dec-9373-20df4d91cfc1",
@@ -26,6 +33,16 @@
     "bgColor": "linear-gradient(135deg,#10b981,#34d399)",
     "createdAt": "2026-05-03T09:59:01.797Z",
     "expiresAt": "2026-05-04T09:59:01.797Z",
-    "views": []
+    "views": [
+      "guest"
+    ],
+    "reactions": {
+      "😮": [
+        "guest"
+      ],
+      "😂": [
+        "guest"
+      ]
+    }
   }
 ]

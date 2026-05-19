@@ -1,5 +1,13 @@
 [
   {
+    "id": "a9754e30-8f77-4a41-902c-ca298a254ba1",
+    "author": "guest",
+    "text": "bbb",
+    "createdAt": "2026-05-04T03:10:07.920Z",
+    "reactions": {},
+    "comments": []
+  },
+  {
     "id": "1c7151de-f37c-4d17-b1a3-f60ea578d5d2",
     "author": "test_student",
     "text": "Hey @htr great exam material!",
@@ -10,7 +18,22 @@
         "test_user2"
       ]
     },
-    "comments": []
+    "comments": [
+      {
+        "id": "6cc8953d-63b3-49e8-bf5d-e0e3f14b4aa7",
+        "author": "guest",
+        "text": "yes",
+        "createdAt": "2026-05-03T14:49:44.206Z",
+        "reactions": {}
+      },
+      {
+        "id": "d006a2d5-1eed-4c4f-9239-762778e955d9",
+        "author": "guest",
+        "text": "hi",
+        "createdAt": "2026-05-03T14:49:50.426Z",
+        "reactions": {}
+      }
+    ]
   },
   {
     "id": "8097e914-9293-41b7-b2ea-ff408efd2b6f",
@@ -101,6 +124,14 @@
     "subject": "Physics",
     "createdAt": "2026-05-03T09:58:30.579Z",
     "reactions": {},
-    "comments": []
+    "comments": [
+      {
+        "id": "e9c902b8-2d0c-4645-a786-58bdcb75c3ab",
+        "author": "guest",
+        "text": "hahah",
+        "createdAt": "2026-05-03T14:45:13.680Z",
+        "reactions": {}
+      }
+    ]
   }
 ]

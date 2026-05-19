@@ -1,0 +1,19 @@
+[
+  {
+    "id": "3de2be33-1a45-4a83-9343-88d77ae25ee4",
+    "threadId": "eadeed3a-87fa-46b9-88ea-0a6b468fdab8",
+    "author": "guest",
+    "text": "hi",
+    "ts": "2026-05-03T14:50:30.604Z",
+    "readBy": [
+      "guest"
+    ]
+  },
+  {
+    "id": "dddef849-bb5b-4d6b-af7a-608ec3ed7f1c",
+    "threadId": "eadeed3a-87fa-46b9-88ea-0a6b468fdab8",
+    "author": "guest",
+    "text": "hiiii",
+    "ts": "2026-05-03T14:53:57.957Z"
+  }
+]

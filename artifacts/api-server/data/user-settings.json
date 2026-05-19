@@ -1,0 +1,29 @@
+{
+  "guest": {
+    "displayName": "",
+    "bio": "",
+    "email": "",
+    "birthday": "",
+    "isPrivate": true,
+    "postAudience": "public",
+    "storyAudience": "friends",
+    "whoCanMessage": "everyone",
+    "showLastSeen": true,
+    "showReadReceipts": true,
+    "showTyping": true,
+    "showOnline": true,
+    "loginAlerts": true,
+    "twoFA": true,
+    "disappearMessages": "off",
+    "notifyLikes": true,
+    "notifyComments": true,
+    "notifyFollows": true,
+    "notifyMessages": true,
+    "notifyEvents": true,
+    "theme": "dark",
+    "fontSize": "medium",
+    "language": "bn",
+    "username": "guest",
+    "updatedAt": "2026-05-03T15:02:30.664Z"
+  }
+}

@@ -3,5 +3,20 @@
     "follower": "test_student",
     "following": "htr",
     "createdAt": "2026-05-03T11:08:18.052Z"
+  },
+  {
+    "follower": "guest",
+    "following": "htr",
+    "createdAt": "2026-05-03T14:52:04.277Z"
+  },
+  {
+    "follower": "guest",
+    "following": "test_student",
+    "createdAt": "2026-05-03T14:52:05.832Z"
+  },
+  {
+    "follower": "guest",
+    "following": "test_user2",
+    "createdAt": "2026-05-03T14:52:06.134Z"
   }
 ]

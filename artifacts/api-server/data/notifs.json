@@ -1,5 +1,154 @@
 [
   {
+    "id": "534e7c2b-ac81-4480-ad72-37df20e14c7b",
+    "toUser": "hi",
+    "type": "message",
+    "fromUser": "guest",
+    "body": "guest: hiiii",
+    "ts": "2026-05-03T14:53:57.957Z",
+    "read": false
+  },
+  {
+    "id": "d4bce084-5f69-4d3a-b0f1-1170e2d29a3f",
+    "title": "👤 guest started following you",
+    "body": "",
+    "createdAt": "2026-05-03T14:52:06.134Z",
+    "recipients": [
+      "test_user2"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "7c04c43d-610f-4ec0-939c-4fdb54c55689",
+    "title": "👤 guest started following you",
+    "body": "",
+    "createdAt": "2026-05-03T14:52:05.832Z",
+    "recipients": [
+      "test_student"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "7a426c2b-1799-4a14-a23c-8e75df4c64b1",
+    "title": "👤 guest started following you",
+    "body": "",
+    "createdAt": "2026-05-03T14:52:04.277Z",
+    "recipients": [
+      "htr"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "fb78e251-d1a4-49d8-86ca-ccf9c11db39c",
+    "title": "👤 guest started following you",
+    "body": "",
+    "createdAt": "2026-05-03T14:52:02.964Z",
+    "recipients": [
+      "htr"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "6ee3d949-7670-4369-bd44-67ea1d3d4c99",
+    "toUser": "Arif_BCS",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😂 to your story",
+    "ts": "2026-05-03T14:51:32.919Z",
+    "read": false
+  },
+  {
+    "id": "7938d545-bfb6-4881-9f20-7abb862fed18",
+    "toUser": "Arif_BCS",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😂 to your story",
+    "ts": "2026-05-03T14:51:32.593Z",
+    "read": false
+  },
+  {
+    "id": "52962e48-d505-4b51-a86c-3570a1cd7391",
+    "toUser": "Arif_BCS",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😂 to your story",
+    "ts": "2026-05-03T14:51:31.739Z",
+    "read": false
+  },
+  {
+    "id": "17cbdd6c-32ed-4033-a041-3d5d4d46c06a",
+    "toUser": "hi",
+    "type": "message",
+    "fromUser": "guest",
+    "body": "guest: hi",
+    "ts": "2026-05-03T14:50:30.604Z",
+    "read": false
+  },
+  {
+    "id": "8c7bd507-a3bd-4031-b572-18e05aa5f6cd",
+    "toUser": "test_student",
+    "type": "comment",
+    "fromUser": "guest",
+    "body": "@guest commented: \"hi\"",
+    "ts": "2026-05-03T14:49:50.426Z",
+    "read": false
+  },
+  {
+    "id": "e128daa1-af96-42e3-8cb2-e8ffeaba3c0a",
+    "toUser": "test_student",
+    "type": "comment",
+    "fromUser": "guest",
+    "body": "@guest commented: \"yes\"",
+    "ts": "2026-05-03T14:49:44.206Z",
+    "read": false
+  },
+  {
+    "id": "b42c7012-855d-4a5e-8591-649e38a47fa1",
+    "toUser": "Rahim_SSC25",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😂 to your story",
+    "ts": "2026-05-03T14:48:25.698Z",
+    "read": false
+  },
+  {
+    "id": "4e277b84-dd37-44a2-be3f-d5021491e946",
+    "toUser": "Rahim_SSC25",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😂 to your story",
+    "ts": "2026-05-03T14:48:25.617Z",
+    "read": false
+  },
+  {
+    "id": "114d10ea-be76-4435-88cd-32387b48ea95",
+    "toUser": "Rahim_SSC25",
+    "type": "story_react",
+    "fromUser": "guest",
+    "body": "@guest reacted 😮 to your story",
+    "ts": "2026-05-03T14:48:24.271Z",
+    "read": false
+  },
+  {
+    "id": "3f5fab8a-9192-4899-8d45-6d4081ffd3ed",
+    "title": "👤 guest started following you",
+    "body": "",
+    "createdAt": "2026-05-03T14:46:57.680Z",
+    "recipients": [
+      "htr"
+    ],
+    "readBy": []
+  },
+  {
+    "id": "067f42f1-3c2b-41c8-9c2c-569a3fff8274",
+    "toUser": "Rahim_SSC25",
+    "type": "comment",
+    "fromUser": "guest",
+    "body": "@guest commented: \"hahah\"",
+    "ts": "2026-05-03T14:45:13.681Z",
+    "read": false
+  },
+  {
     "id": "1a242054-c61b-40b7-8a15-1e83646938b7",
     "toUser": "test_student",
     "type": "like",
@@ -91,6 +240,10 @@
     "id": "2130a1b8-94e8-45b7-9af8-4bb4081e6a02",
     "title": "htr",
     "body": "vsgsg",
-    "createdAt": "2026-04-21T13:15:49.750Z"
+    "createdAt": "2026-04-21T13:15:49.750Z",
+    "read": true,
+    "readBy": [
+      ""
+    ]
   }
 ]

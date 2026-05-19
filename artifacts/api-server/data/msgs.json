@@ -80,5 +80,14 @@
     "status": "pending",
     "type": "security-alert",
     "alertType": "devtools"
+  },
+  {
+    "id": "c7a68cca-32f8-4ac4-9861-d188b925e95f",
+    "ip": "103.77.16.76",
+    "message": "🛠️ DevTools Opened\nDetails: {\"outerWidth\":412,\"innerWidth\":228,\"outerHeight\":915,\"innerHeight\":72}",
+    "timestamp": "2026-05-19T10:45:22.782Z",
+    "status": "pending",
+    "type": "security-alert",
+    "alertType": "devtools"
   }
 ]

@@ -11,5 +11,41 @@
       "guest"
     ],
     "deletedFor": []
+  },
+  {
+    "id": "73c709c0-f27b-4548-a4aa-dd9cdaacc1ee",
+    "groupId": "3b883982-684b-47b5-8f54-15030352b1a7",
+    "author": "guest",
+    "text": "jji",
+    "reactions": {},
+    "deletedFor": [],
+    "readBy": [
+      "guest"
+    ],
+    "ts": "2026-05-03T14:54:08.317Z"
+  },
+  {
+    "id": "11824ad5-feb2-42a3-aabd-8159a7db9cad",
+    "groupId": "3b883982-684b-47b5-8f54-15030352b1a7",
+    "author": "guest",
+    "sticker": "✌️",
+    "reactions": {},
+    "deletedFor": [],
+    "readBy": [
+      "guest"
+    ],
+    "ts": "2026-05-03T14:54:11.042Z"
+  },
+  {
+    "id": "62545dff-c819-4f60-ae1b-f7904a58ff5e",
+    "groupId": "3b883982-684b-47b5-8f54-15030352b1a7",
+    "author": "guest",
+    "sticker": "🎉",
+    "reactions": {},
+    "deletedFor": [],
+    "readBy": [
+      "guest"
+    ],
+    "ts": "2026-05-03T14:54:14.828Z"
   }
 ]
