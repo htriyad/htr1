@@ -421,6 +421,21 @@ input, button, select, textarea, label {
   height: 100vh !important;
   aspect-ratio: unset !important;
 }
+/* ── ZOOM LAYER — wraps the YT iframe only.
+   Inflated to 500%×500% then scaled back to 20% so it visually fills the
+   container exactly. YouTube renders its UI in the large (5×) canvas, so
+   branding bars (~56px) appear as only ~11px after the scale — our 16px
+   overlay covers completely hide them. The iframe itself keeps YouTube's
+   own inline styles (100%×100% of this layer), so the API never fights us. */
+.ytp-zoom-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 500%;
+  height: 500%;
+  transform: scale(0.2);
+  transform-origin: top left;
+}
+
 .ytp-aspect-wrap iframe {
   position: absolute; inset: 0;
   width: 100%; height: 100%; border: none;
@@ -434,11 +449,12 @@ input, button, select, textarea, label {
 .ytp-top-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 60px;
+  /* YT top branding ~56px at 100% → ~11px at scale(0.2). 16px covers it. */
+  height: 16px;
   background: #000;
   z-index: 1001;
   display: flex; align-items: center;
-  padding: 0 10px; gap: 8px;
+  padding: 0 8px; gap: 6px;
   pointer-events: none;
   transition: opacity 220ms ease-out;
 }
@@ -456,7 +472,8 @@ input, button, select, textarea, label {
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 48px; background: #000;
+  /* YT bottom controls ~60px at 100% → ~12px at scale(0.2). 16px covers it. */
+  height: 16px; background: #000;
   z-index: 1001; pointer-events: none;
   transition: opacity 250ms ease-out;
 }

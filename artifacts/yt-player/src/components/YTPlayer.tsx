@@ -436,8 +436,13 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
       className="ytp-aspect-wrap"
       onClick={speedOpen || qualityOpen || ccOpen ? () => { setSpeedOpen(false); setQualityOpen(false); setCcOpen(false); } : undefined}
     >
-      {/* YouTube iframe target */}
-      <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      {/* YouTube iframe target — wrapped in zoom layer so YouTube's inline
+          styles on the iframe don't fight our transform. The wrapper scales
+          to 20% visually, shrinking YT branding to ~11px while the video
+          still fills the container perfectly. */}
+      <div className="ytp-zoom-layer">
+        <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      </div>
 
       {/* TOP BAR — covers YouTube branding at top.
           Visible whenever YT might show its own overlay: not started, paused, buffering,
