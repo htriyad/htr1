@@ -89,5 +89,21 @@
     "status": "pending",
     "type": "security-alert",
     "alertType": "devtools"
+  },
+  {
+    "id": "aa35b553-c214-4f4f-94d9-ad0ff240d256",
+    "ip": "103.77.16.79",
+    "fullName": "bdvdb",
+    "message": "",
+    "timestamp": "2026-05-19T15:12:49.165Z",
+    "status": "pending",
+    "type": "access-request",
+    "deviceInfo": {
+      "os": "Android",
+      "browser": "Chrome",
+      "deviceType": "Mobile",
+      "connectionType": "4G Mobile Data",
+      "isMobileData": true
+    }
   }
 ]
