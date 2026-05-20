@@ -398,103 +398,6 @@ input, button, select, textarea, label {
 .vp-nav-btn:hover { background: var(--purple); color: #fff; border-color: var(--purple); }
 .vp-nav-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ═══════════════════════════════════════════════════════════
-   DESKTOP TWO-COLUMN LAYOUT (≥900px)
-   Mobile: everything stacks normally (unchanged).
-   Desktop: player+tabs on left (65%), sidebar on right (35%).
-═══════════════════════════════════════════════════════════ */
-
-/* Mobile defaults — right-col items visible inline, sidebar hidden */
-.vp-desktop-layout   { display: block; }
-.vp-right-col        { display: none; }
-.vp-playlist-sidebar { display: none !important; }
-.vp-mobile-spacer    { height: 40px; }
-
-@media (min-width: 900px) {
-  /* Break the video page out of the 540px page constraint */
-  .vp-page .page { max-width: 100%; }
-
-  /* Two-column flex row */
-  .vp-desktop-layout {
-    display: flex;
-    align-items: flex-start;
-    max-width: 1280px;
-    margin: 0 auto;
-  }
-
-  /* Left column: player + source tabs */
-  .vp-left-col {
-    flex: 0 0 65%;
-    width: 65%;
-    min-width: 0;
-  }
-
-  /* Player: always use 16:9 on desktop (not the fixed 62vh) */
-  .vp-left-col .ytp-aspect-wrap {
-    height: auto !important;
-    min-height: unset !important;
-    aspect-ratio: 16 / 9 !important;
-  }
-
-  /* Right column: sticky sidebar */
-  .vp-right-col {
-    display: block;
-    flex: 1;
-    min-width: 0;
-    border-left: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    max-height: 100vh;
-    overflow-y: auto;
-    background: var(--surface);
-  }
-
-  /* Sidebar playlist always visible, no height cap */
-  .vp-playlist-sidebar             { display: block !important; }
-  .vp-right-col .vp-playlist-list  { max-height: none; }
-
-  /* Hide mobile-only elements on desktop */
-  .vp-playlist-toggle-btn  { display: none !important; }
-  .vp-playlist-mobile-only { display: none !important; }
-  .vp-nav-mobile-only      { display: none !important; }
-  .vp-info-mobile-only     { display: none !important; }
-  .vp-mobile-spacer        { display: none; }
-
-  /* Show desktop-only elements */
-  .vp-info-desktop-only { display: block; }
-  .vp-nav-desktop-only  { display: flex; }
-
-  /* Info card inside sidebar: tighter margins */
-  .vp-right-col .vp-info-card {
-    margin: 14px 14px 0;
-    border-radius: 10px;
-  }
-
-  /* Nav row inside sidebar */
-  .vp-right-col .vp-nav-row {
-    border-top: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  /* Playlist panel in sidebar: no bottom border rounding */
-  .vp-right-col .vp-playlist-panel {
-    border-bottom: none;
-    border-top: 1px solid var(--border);
-    margin-top: 12px;
-  }
-
-  .vp-right-col .vp-playlist-header {
-    font-size: 12px;
-    padding: 8px 12px;
-  }
-}
-
-/* Make sure desktop-only items are hidden on mobile */
-@media (max-width: 899px) {
-  .vp-info-desktop-only { display: none !important; }
-  .vp-nav-desktop-only  { display: none !important; }
-}
-
 /* ═══════════════════════════════════════════
    VIDEO PLAYER SHELL — 16:9 ratio
 ═══════════════════════════════════════════ */
@@ -512,20 +415,6 @@ input, button, select, textarea, label {
     min-height: 340px;
   }
 }
-/* Mobile portrait: compact player — 16:9 maintained but capped at 190px tall.
-   At 390px wide phone: 190px height → 338px width → subtle black strips on sides,
-   exactly like YouTube's native mobile player feeling.
-   width:auto lets browser recalculate width from aspect-ratio+max-height instead
-   of being forced to 100% (which would break the ratio with max-height active).  */
-@media (max-width: 899px) and (orientation: portrait) {
-  .ytp-aspect-wrap {
-    width: auto !important;
-    max-width: 100% !important;
-    max-height: 190px !important;
-    margin: 0 auto !important;
-  }
-}
-
 .ytp-aspect-wrap:fullscreen,
 .ytp-aspect-wrap:-webkit-full-screen {
   width: 100vw !important;
