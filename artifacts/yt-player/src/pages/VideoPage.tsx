@@ -76,14 +76,17 @@ export default function VideoPage() {
 
   return (
     <div className="vp-page">
+      {/* Header — inside page constraint so it stays aligned */}
       <div className="page" style={{ padding: 0 }}>
         <Header showBack backTo={backTo} title={title} />
+      </div>
 
-        {/* Player */}
-        <div style={{ background: "#000", position: "relative" }}>
-          <YTPlayer videoId={videoId} title={title} onEnded={handleEnded} />
-        </div>
+      {/* Player — FULL WIDTH, outside .page so it breaks free of 540px cap */}
+      <div className="vp-player-wrap">
+        <YTPlayer videoId={videoId} title={title} onEnded={handleEnded} />
+      </div>
 
+      <div className="page" style={{ padding: 0 }}>
         {/* Source tabs + playlist toggle */}
         <div className="vp-source-tabs">
           <button className={`vp-source-tab ${activeSource === 1 ? "active" : ""}`} onClick={() => setActiveSource(1)}>Source-1</button>

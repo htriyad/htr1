@@ -291,6 +291,24 @@ input, button, select, textarea, label {
    VIDEO PAGE
 ═══════════════════════════════════════════ */
 .vp-page { background: var(--bg); min-height: 100svh; }
+
+/* Full-width player wrapper — breaks out of .page's 540px max-width */
+.vp-player-wrap {
+  width: 100%;
+  background: #000;
+  position: relative;
+}
+
+/* Desktop layout: video fills full width at 16:9 */
+@media (min-width: 768px) {
+  .vp-player-wrap .ytp-aspect-wrap {
+    aspect-ratio: 16 / 9 !important;
+    height: auto !important;
+    min-height: unset !important;
+    width: 100% !important;
+  }
+}
+
 .vp-source-tabs {
   display: flex;
   background: #fff;
