@@ -590,14 +590,14 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
           {/* Play / Pause */}
           <button className="ytp-btn" onClick={() => { togglePlay(); handleInteraction(); }}>
             {playing
-              ? <svg width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg>
-              : <svg width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+              ? <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg>
+              : <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
             }
           </button>
 
           {/* Skip backward — hidden portrait, shown landscape/fullscreen via CSS */}
           <button className="ytp-btn ytp-skip-btn" onClick={() => { seek(-SEEK_SECS); setLeftFlash(true); setTimeout(() => setLeftFlash(false), 700); }}>
-            <svg width="22" height="22" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
+            <svg width="18" height="18" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
               <path strokeLinecap="round" d="M9.57 15.41l2.6 8.64 8.64-2.61M26.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" />
               <rect x="32.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
               <path d="M12.14 23.94a21.91 21.91 0 11-.91 13.25" strokeLinecap="round" />
@@ -606,7 +606,7 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
 
           {/* Skip forward — hidden portrait, shown landscape/fullscreen via CSS */}
           <button className="ytp-btn ytp-skip-btn" onClick={() => { seek(SEEK_SECS); setRightFlash(true); setTimeout(() => setRightFlash(false), 700); }}>
-            <svg width="22" height="22" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
+            <svg width="18" height="18" viewBox="0 0 55 55" stroke="#cacbd2" strokeWidth="3" fill="none">
               <path d="M23.93 41.41V23a.09.09 0 00-.16-.07s-2.58 3.69-4.17 4.78" strokeLinecap="round" />
               <rect x="29.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
               <path strokeLinecap="round" d="M54.43 15.41l-2.6 8.64-8.64-2.61M51.86 23.94a21.91 21.91 0 10.91 13.25" />
@@ -616,7 +616,7 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
           {/* Volume */}
           <div className="ytp-vol-wrap">
             <button className="ytp-btn" onClick={() => { toggleMute(); handleInteraction(); }}>
-              <svg width="22" height="22" viewBox="0 0 24 24">
+              <svg width="18" height="18" viewBox="0 0 24 24">
                 <path fill="currentColor" d={volPath} />
               </svg>
             </button>
@@ -651,10 +651,10 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
             <button className="ytp-btn ytp-cc-btn"
                     onClick={(e) => { e.stopPropagation(); setCcOpen(o => !o); setSpeedOpen(false); setQualityOpen(false); refreshTracksAndQualities(); handleInteraction(); }}
                     aria-label="Captions" style={{position:"relative"}}>
-              <svg width="22" height="22" viewBox="0 0 24 24">
+              <svg width="18" height="18" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M19,4H5A2,2 0 0,0 3,6V18A2,2 0 0,0 5,20H19A2,2 0 0,0 21,18V6A2,2 0 0,0 19,4M11,11H9.5V10.5H7.5V13.5H9.5V13H11V14A1,1 0 0,1 10,15H7A1,1 0 0,1 6,14V10A1,1 0 0,1 7,9H10A1,1 0 0,1 11,10M18,11H16.5V10.5H14.5V13.5H16.5V13H18V14A1,1 0 0,1 17,15H14A1,1 0 0,1 13,14V10A1,1 0 0,1 14,9H17A1,1 0 0,1 18,10V11Z"/>
               </svg>
-              {ccOn && <span style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:18,height:2,background:"#4FA621",borderRadius:1}}/>}
+              {ccOn && <span style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:14,height:2,background:"#4FA621",borderRadius:1}}/>}
             </button>
           </div>
 
@@ -672,7 +672,7 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
               <button className="ytp-btn ytp-speed-btn"
                 onClick={(e) => { e.stopPropagation(); setQualityOpen((o) => !o); setSpeedOpen(false); handleInteraction(); }}
                 aria-label="Quality">
-                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
+                <svg width="17" height="17" viewBox="0 0 24 24"><path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
               </button>
             </div>
           )}
@@ -696,8 +696,8 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
           {/* Fullscreen */}
           <button className="ytp-btn" onClick={toggleFS}>
             {isFS
-              ? <svg width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
-              : <svg width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              ? <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+              : <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
             }
           </button>
 
