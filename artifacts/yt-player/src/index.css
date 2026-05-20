@@ -422,25 +422,25 @@ input, button, select, textarea, label {
   aspect-ratio: unset !important;
 }
 /* ── ZOOM LAYER — wraps the YT iframe only.
-   Mobile: 500%×500% + scale(0.2)  → YT branding ~56px → ~11px visually.
-   Desktop: 400%×400% + scale(0.25) → YT branding ~56px → ~14px visually.
-   Both still covered by the 16px top/bottom bars.
+   Mobile: 667%×667% + scale(0.15)  → YT branding ~56px → ~8.4px visually.
+   Desktop: 500%×500% + scale(0.2)  → YT branding ~56px → ~11px visually.
+   Both comfortably covered by the 11px top/bottom bars.
    The iframe itself keeps YouTube's inline 100%×100% of this layer, so
    the API never fights our transform. All overlays live OUTSIDE this layer
    and render at full size — only the YT chrome shrinks, not our UI. */
 .ytp-zoom-layer {
   position: absolute;
   top: 0; left: 0;
-  width: 500%;
-  height: 500%;
-  transform: scale(0.2);
+  width: 667%;
+  height: 667%;
+  transform: scale(0.15);
   transform-origin: top left;
 }
 @media (min-width: 768px) {
   .ytp-zoom-layer {
-    width: 400%;
-    height: 400%;
-    transform: scale(0.25);
+    width: 500%;
+    height: 500%;
+    transform: scale(0.2);
   }
 }
 
@@ -458,9 +458,9 @@ input, button, select, textarea, label {
   position: absolute;
   top: 0; left: 0; right: 0;
   /* YT top branding ~56px at 100%:
-       mobile  scale(0.2)  → ~11px  → 12px cover gives 1px safety margin
-       desktop scale(0.25) → ~14px  → 16px still used on desktop (see below) */
-  height: 10px;
+       mobile  scale(0.15) → ~8.4px → 11px cover gives 2.6px safety margin
+       desktop scale(0.2)  → ~11px  → 11px cover exactly covers it */
+  height: 11px;
   background: #000;
   z-index: 1002;
   pointer-events: none;
@@ -472,8 +472,8 @@ input, button, select, textarea, label {
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  /* YT bottom chrome ~60px at 100% → ~12-15px at our zoom scale. 10px slim. */
-  height: 10px;
+  /* YT bottom chrome ~60px at 100% → ~9-11px at our zoom scale. 11px covers it. */
+  height: 11px;
   background: #000;
   z-index: 1002;
   pointer-events: none;

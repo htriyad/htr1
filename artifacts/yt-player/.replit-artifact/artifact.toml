@@ -12,7 +12,7 @@ version = "1.0.0"
 [[services]]
 name = "web"
 paths = [ "/" ]
-localPort = 21849
+localPort = 21850
 
 [services.development]
 run = "pnpm --filter @workspace/yt-player run dev"
@@ -27,5 +27,5 @@ from = "/*"
 to = "/index.html"
 
 [services.env]
-PORT = "21849"
+PORT = "21850"
 BASE_PATH = "/"
