@@ -458,9 +458,9 @@ input, button, select, textarea, label {
   position: absolute;
   top: 0; left: 0; right: 0;
   /* YT top branding ~56px at 100%:
-       mobile  scale(0.2)  → ~11px  → 16px cover gives 5px safety margin
-       desktop scale(0.25) → ~14px  → 16px cover gives 2px safety margin */
-  height: 16px;
+       mobile  scale(0.2)  → ~11px  → 12px cover gives 1px safety margin
+       desktop scale(0.25) → ~14px  → 16px still used on desktop (see below) */
+  height: 12px;
   background: #000;
   z-index: 1002;
   pointer-events: none;
@@ -472,8 +472,8 @@ input, button, select, textarea, label {
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  /* YT bottom chrome ~60px at 100% → ~12-15px at our zoom scale. 16px safe. */
-  height: 16px;
+  /* YT bottom chrome ~60px at 100% → ~12-15px at our zoom scale. 12px trim. */
+  height: 12px;
   background: #000;
   z-index: 1002;
   pointer-events: none;
