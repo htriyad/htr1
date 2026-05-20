@@ -55,9 +55,17 @@ function LoginScreen({ onLogin }: { onLogin:(t:string)=>void }) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [err,setErr]=useState(""); const [loading,setLoad]=useState(false);
   const [showPass,setShowPass]=useState(false);
   async function submit(e:React.FormEvent){ e.preventDefault(); setLoad(true); setErr("");
-    const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
-    const d=await r.json(); setLoad(false);
-    if(d.token) onLogin(d.token); else setErr(d.error||"Login failed");
+    try {
+      const r=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
+      const text=await r.text();
+      let d:any={};
+      try { d=JSON.parse(text); } catch { setErr("Server error — could not reach API. Is the API server running?"); setLoad(false); return; }
+      setLoad(false);
+      if(d.token) onLogin(d.token); else setErr(d.error||"Login failed");
+    } catch(err) {
+      setLoad(false);
+      setErr("Network error — could not connect to server");
+    }
   }
   return (
     <div style={{minHeight:"100svh",background:"linear-gradient(135deg,#04091a 0%,#081428 55%,#0c1e40 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:24,fontFamily:"Inter,'Roboto','Noto Sans Bengali',sans-serif"}}>
