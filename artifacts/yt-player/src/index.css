@@ -421,6 +421,28 @@ input, button, select, textarea, label {
   height: 100vh !important;
   aspect-ratio: unset !important;
 }
+/* ── ZOOM LAYER — wraps the YT iframe only.
+   Mobile: 500%×500% + scale(0.2)  → YT branding ~56px → ~11px visually.
+   Desktop: 400%×400% + scale(0.25) → YT branding ~56px → ~14px visually.
+   Both still covered by the 16px top/bottom bars.
+   The iframe itself keeps YouTube's inline 100%×100% of this layer, so
+   the API never fights our transform. All overlays live OUTSIDE this layer
+   and render at full size — only the YT chrome shrinks, not our UI. */
+.ytp-zoom-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 500%;
+  height: 500%;
+  transform: scale(0.2);
+  transform-origin: top left;
+}
+@media (min-width: 768px) {
+  .ytp-zoom-layer {
+    width: 400%;
+    height: 400%;
+    transform: scale(0.25);
+  }
+}
 
 .ytp-aspect-wrap iframe {
   position: absolute; inset: 0;
@@ -436,8 +458,9 @@ input, button, select, textarea, label {
   position: absolute;
   top: 0; left: 0; right: 0;
   /* YT top branding ~56px at 100%:
-       scale(0.15) → ~8.4px  → 12px cover gives 3.6px safety margin */
-  height: 12px;
+       mobile  scale(0.2)  → ~11px  → 16px cover gives 5px safety margin
+       desktop scale(0.25) → ~14px  → 16px cover gives 2px safety margin */
+  height: 16px;
   background: #000;
   z-index: 1002;
   pointer-events: none;
@@ -449,8 +472,8 @@ input, button, select, textarea, label {
 .ytp-bottom-cover {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  /* YT bottom chrome ~60px at 100% → ~9px at scale(0.15). 12px safe. */
-  height: 12px;
+  /* YT bottom chrome ~60px at 100% → ~12-15px at our zoom scale. 16px safe. */
+  height: 16px;
   background: #000;
   z-index: 1002;
   pointer-events: none;
@@ -518,7 +541,7 @@ input, button, select, textarea, label {
   bottom: 0; left: 0; right: 0;
   background: #000;
   z-index: 1003;
-  padding: 0 4px 2px;
+  padding: 0 4px 4px;
   transition: opacity 600ms ease-in-out;
 }
 .ytp-controls.hidden { opacity: 0; pointer-events: none; }
@@ -526,10 +549,10 @@ input, button, select, textarea, label {
 /* Progress bar row — big touch target so finger can grab it easily */
 .ytp-prog-row {
   position: relative;
-  height: 22px; padding: 0 2px; cursor: pointer;
+  height: 28px; padding: 0 2px; cursor: pointer;
   touch-action: none; user-select: none;
 }
-@media (orientation: landscape) { .ytp-prog-row { height: 26px; } }
+@media (orientation: landscape) { .ytp-prog-row { height: 32px; } }
 
 .ytp-prog-track {
   position: absolute; left: 2px; right: 2px; top: 50%;
@@ -576,13 +599,13 @@ input, button, select, textarea, label {
 
 /* Buttons row */
 .ytp-btn-row {
-  display: flex; align-items: center; gap: 0; height: 32px;
+  display: flex; align-items: center; gap: 0; height: 38px;
 }
 .ytp-btn {
   background: none; border: none; color: #fff;
-  cursor: pointer; padding: 1px 4px;
+  cursor: pointer; padding: 2px 5px;
   display: flex; align-items: center; justify-content: center;
-  min-width: 24px; min-height: 28px; opacity: 0.9; flex-shrink: 0;
+  min-width: 28px; min-height: 32px; opacity: 0.9; flex-shrink: 0;
   transition: opacity 100ms;
 }
 .ytp-btn:hover { opacity: 1; }

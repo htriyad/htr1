@@ -54,10 +54,6 @@ const HIDE_DELAY       = 4500;
 const TOP_BAR_HIDE_MS  = 2500;
 const FIRST_PLAY_MS    = 4000;
 const TAP_GAP          = 380;
-/* Scale the YT iframe to 15% — branding bars (~56px) become ~8px.
-   Applied via JS with !important so YouTube's own inline styles can't fight it.
-   Covers (12px top + 12px bottom) hide those 8px with a safe margin.          */
-const ZOOM_SCALE       = 0.15;
 
 const fmt = (t: number) => {
   const s = Math.floor(t % 60);
@@ -153,42 +149,6 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
     };
   }, []);
 
-  /* ── IFRAME ZOOM — applied via JS so YouTube's inline styles can't win ──
-     CSS-based zoom layers (width:500%, transform:scale) fail because:
-     1. YouTube sizes the iframe using clientWidth/clientHeight (visual px),
-        so the iframe stays container-sized inside a 500% layout div.
-     2. Large CSS percentage overflows escape overflow:hidden and break the
-        page layout (dashboard gets extra side margins).
-     JS with setProperty(...,'important') overrides both problems.           */
-  function applyIframeZoom() {
-    const container = containerRef.current;
-    const iframe    = playerDivRef.current?.querySelector<HTMLIFrameElement>("iframe");
-    if (!iframe || !container) return;
-    const W = container.clientWidth;
-    const H = container.clientHeight;
-    if (!W || !H) return;
-    const inv = 1 / ZOOM_SCALE;
-    iframe.style.setProperty("position",         "absolute",                   "important");
-    iframe.style.setProperty("top",              "0",                          "important");
-    iframe.style.setProperty("left",             "0",                          "important");
-    iframe.style.setProperty("width",            `${Math.round(W * inv)}px`,   "important");
-    iframe.style.setProperty("height",           `${Math.round(H * inv)}px`,   "important");
-    iframe.style.setProperty("transform",        `scale(${ZOOM_SCALE})`,       "important");
-    iframe.style.setProperty("transform-origin", "top left",                   "important");
-    iframe.style.setProperty("border",           "none",                       "important");
-    iframe.style.setProperty("pointer-events",   "none",                       "important");
-  }
-
-  /* Reapply whenever the container resizes (orientation change, desktop resize,
-     fullscreen enter/exit). */
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => applyIframeZoom());
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
-
   /* ── LOAD YOUTUBE API ─────────────────────────────────────────────────── */
   useEffect(() => {
     isFirstPlay.current = true;
@@ -237,7 +197,7 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
              the <iframe> element so the browser respects inline playback.
              Removes allowfullscreen to block browser-level fullscreen.
           ─────────────────────────────────────────────────── */
-          const iframe = playerDivRef.current?.querySelector<HTMLIFrameElement>("iframe");
+          const iframe = playerDivRef.current?.querySelector("iframe");
           if (iframe) {
             iframe.id = "yt-player-iframe";
             iframe.setAttribute("playsinline", "1");
@@ -248,10 +208,6 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
               "allow",
               allow.replace(/;?\s*fullscreen[^;]*/gi, "").replace(/^;\s*/, "")
             );
-            /* Apply zoom immediately after YouTube creates the iframe so branding
-               is never visible even on the very first frame. ResizeObserver handles
-               subsequent container size changes (orientation, resize, fullscreen). */
-            applyIframeZoom();
           }
           const p = e.target;
           setDuration(p.getDuration());
@@ -480,9 +436,13 @@ export default function YTPlayer({ videoId, title = "", onEnded }: Props) {
       className="ytp-aspect-wrap"
       onClick={speedOpen || qualityOpen || ccOpen ? () => { setSpeedOpen(false); setQualityOpen(false); setCcOpen(false); } : undefined}
     >
-      {/* YouTube iframe target — zoom applied via JS in onReady (see applyIframeZoom).
-          No CSS zoom wrapper needed; JS !important overrides YouTube's inline styles. */}
-      <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      {/* YouTube iframe target — wrapped in zoom layer so YouTube's inline
+          styles on the iframe don't fight our transform. The wrapper scales
+          to 20% visually, shrinking YT branding to ~11px while the video
+          still fills the container perfectly. */}
+      <div className="ytp-zoom-layer">
+        <div ref={playerDivRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+      </div>
 
       {/* TOP BAR — permanently covers YouTube branding at the top edge.
           Must ALWAYS be opacity 1 — going transparent even for one frame
