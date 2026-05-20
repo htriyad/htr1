@@ -512,6 +512,20 @@ input, button, select, textarea, label {
     min-height: 340px;
   }
 }
+/* Mobile portrait: compact player — 16:9 maintained but capped at 190px tall.
+   At 390px wide phone: 190px height → 338px width → subtle black strips on sides,
+   exactly like YouTube's native mobile player feeling.
+   width:auto lets browser recalculate width from aspect-ratio+max-height instead
+   of being forced to 100% (which would break the ratio with max-height active).  */
+@media (max-width: 899px) and (orientation: portrait) {
+  .ytp-aspect-wrap {
+    width: auto !important;
+    max-width: 100% !important;
+    max-height: 190px !important;
+    margin: 0 auto !important;
+  }
+}
+
 .ytp-aspect-wrap:fullscreen,
 .ytp-aspect-wrap:-webkit-full-screen {
   width: 100vw !important;
